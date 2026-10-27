@@ -1,11 +1,12 @@
 name: "Cloudflared Pro"
-description: "Cloudflare Tunnel cho Home Assistant OS trên Raspberry Pi 5 - Tự động cập nhật từ Cloudflare chính thức"
-version: "2026.10.4"
-slug: "cloudflared_custom"
+description: "Use a Cloudflare Tunnel to remotely connect to Home Assistant without opening any ports"
+version: "2026.10.0"
+slug: "cloudflared_pro"
+url: "https://github.com/boystyle2010/ha-addons"
 init: false
 arch:
   - aarch64
-host_network: true
+apparmor: true
 startup: services
 boot: auto
 map:
@@ -20,7 +21,7 @@ options:
   ha_Edge_IP_Version: "auto"
   external_hostname: ""
   additional_hosts: []
-  catch_all_service: "http://localhost:8123"
+  catch_all_service: "http://homeassistant:8123"
   custom_flags: []
 schema:
   tunnel_token: "password?"
@@ -38,4 +39,3 @@ schema:
   catch_all_service: "str?"
   custom_flags:
     - "str"
-
