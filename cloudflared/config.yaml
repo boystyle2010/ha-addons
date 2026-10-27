@@ -27,7 +27,7 @@ schema:
   tunnel_token: "password?"
   protocol: "list(auto|quic|http2)"
   log_level: "list(debug|info|warn|error|fatal)"
-  metrics_port: "port?"
+  metrics_port: "int(0,65535)?"
   post_quantum: "bool"
   ha_Edge_IP_Version: "list(auto|4|6)"
   external_hostname: "str?"
