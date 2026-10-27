@@ -19,64 +19,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Icons, Logo, README & DOCS
+      - name: Download Official Assets (Logo, Icon, README, DOCS)
         run: |
-          # 1. Tự động tải Icon và Logo Cloudflare sắc nét nếu chưa có
-          if [ ! -f cloudflared/icon.png ]; then
-            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
-          fi
-          if [ ! -f cloudflared/logo.png ]; then
-            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
-          fi
-
-          # 2. Tạo file README.md hiển thị ngoài màn hình chính của Add-on
-          cat << 'EOF' > cloudflared/README.md
-          # Cloudflare Pro (Raspberry Pi 5 Edition)
-
-          ![Supports aarch64 Architecture][aarch64-shield]
-          ![Cloudflare Zero Trust][cf-shield]
-
-          Add-on **Cloudflare Tunnel (cloudflared)** chuyên biệt tối ưu hóa cho phần cứng **64-bit (`aarch64`) của Raspberry Pi 5** chạy Home Assistant OS.
-
-          ## ✨ Tính năng nổi bật
-
-          - 🚀 **Native ARM64 Binary:** Tải và chạy trực tiếp mã nguồn `cloudflared-linux-arm64` chính gốc từ Cloudflare.
-          - 🔄 **Auto-Update Verified:** Tự động kiểm tra bản phát hành mới từ Cloudflare & Alpine Base mỗi 6 giờ (xác thực HTTP 200 trước khi báo Update lên Home Assistant).
-          - 🛡️ **Zero Trust Dashboard & Local Mode:** Hỗ trợ song song chế độ chạy bằng **Tunnel Token** (quản lý tên miền trên web Cloudflare) hoặc **Local Ingress** (khai báo Subdomain ngay trên UI của Home Assistant).
-          - 🔐 **Post-Quantum Cryptography:** Hỗ trợ bật mã hóa lượng tử bảo vệ đường truyền.
-          - 📊 **Prometheus Metrics:** Tích hợp cổng xuất dữ liệu giám sát trạng thái Tunnel.
-
-          [aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
-          [cf-shield]: https://img.shields.io/badge/Cloudflare-Zero_Trust-F38020?logo=cloudflare&logoColor=white
-          EOF
-
-          # 3. Tạo file DOCS.md hiển thị trong tab Documentation
-          cat << 'EOF' > cloudflared/DOCS.md
-          # Hướng dẫn cấu hình Cloudflare Pro
-
-          ## Chế độ 1: Sử dụng Cloudflare Zero Trust Token (Khuyên dùng)
-          1. Truy cập trang quản trị [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) -> **Networks** -> **Tunnels**.
-          2. Tạo một Tunnel mới (chọn loại **Cloudflared**) hoặc chọn Tunnel hiện có -> bấm **Configure**.
-          3. Copy chuỗi **Token** (bắt đầu bằng `eyJ...`).
-          4. Mở tab **Configuration** của Add-on này -> dán vào ô **Cloudflare Tunnel Token** -> bấm **Save** và khởi động Add-on.
-          5. Trong mục **Public Hostname** trên web Cloudflare, trỏ tên miền của bạn về `http://localhost:8123`.
-
-          ## Chế độ 2: Sử dụng Local Mode (Khai báo trực tiếp trên UI)
-          - Để trống ô **Tunnel Token**.
-          - Đặt file chứng thực `credentials.json` vào thư mục `/share/cloudflared/credentials.json`.
-          - Nhập tên miền chính vào ô **External Hostname** và thêm các dịch vụ khác vào mục **Additional Hosts**.
-
-          ## Lưu ý cho Home Assistant (`configuration.yaml`)
-          Đừng quên thêm cấu hình `trusted_proxies` vào file `/config/configuration.yaml` của Home Assistant để cho phép kết nối qua Reverse Proxy:
-          ```yaml
-          http:
-            use_x_forwarded_for: true
-            trusted_proxies:
-              - 172.30.33.0/24
-              - 127.0.0.1
-              - ::1
-          ```
-          EOF
+          curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
+          curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
+          curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o cloudflared/DOCS.md
+          printf "# Home Assistant App: Cloudflared Pro\n\n![Release][release-shield] ![Project Stage][stage-shield]\n![Supports aarch64][arch-shield] ![Cloudflare Zero Trust][cf-shield]\n\nConnect remotely to your Home Assistant instance without opening any ports using Cloudflared (Native ARM64 for Raspberry Pi 5).\n\n## About\n\nCloudflared Pro connects your Home Assistant Instance via a secure tunnel to a domain or subdomain at Cloudflare. Doing that, you can expose your Home Assistant to the Internet without opening ports in your router. Additionally, you can utilize Cloudflare Zero Trust platform to further secure your Home Assistant connection.\n\n**To use this app, you have to own a domain name (e.g. example.com) that is using Cloudflare for its DNS entries.**\n\n## Key Features\n- **Auto-Verified Updates:** Automatically tracks official \`cloudflare/cloudflared\` releases and Home Assistant Alpine Base images.\n- **Full UI Configuration:** Supports Zero Trust Tunnel Token, Local Ingress routing, Post-Quantum encryption, and Prometheus Metrics.\n\n## Disclaimer\n\nPlease make sure to be compliant with the [Cloudflare Self-Serve Subscription Agreement](https://www.cloudflare.com/terms/) when using this app.\n\n[release-shield]: https://img.shields.io/github/v/release/cloudflare/cloudflared?label=cloudflared&color=007ec6\n[stage-shield]: https://img.shields.io/badge/project%%20stage-production%%20ready-brightgreen.svg\n[arch-shield]: https://img.shields.io/badge/aarch64-yes-brightgreen.svg\n[cf-shield]: https://img.shields.io/badge/maintained-yes-brightgreen.svg\n" > cloudflared/README.md
 
       - name: Check & Verify Cloudflared arm64 and Alpine Base
         id: check_versions
@@ -131,14 +79,14 @@ jobs:
           elif [ "$NEW_ALPINE" != "$CUR_ALPINE" ]; then
             FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
           else
-            FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
+            FINAL_VERSION="$NEW_CF"
           fi
 
           sed -i "s|aarch64-base:.*\"|aarch64-base:${NEW_ALPINE}\"|" cloudflared/build.yaml
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
-          BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Cập nhật bảo mật định kỳ."')
-          printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Chi tiết bản phát hành từ Cloudflare (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
+          BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine update."')
+          printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
