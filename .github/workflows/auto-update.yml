@@ -1,1 +1,124 @@
+name: Auto Check Cloudflared & Alpine Base (Verified)
+
+on:
+  schedule:
+    # Tự động kiểm tra mỗi 6 giờ
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check & Verify Cloudflared arm64 and Alpine Base
+        id: check_versions
+        run: |
+          # ==========================================================
+          # 1. KIỂM TRA CLOUDFLARED & XÁC THỰC FILE BINARY ARM64
+          # ==========================================================
+          CURRENT_VER_FULL=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
+          CURRENT_CF=$(echo "$CURRENT_VER_FULL" | cut -d'-' -f1)
+
+          LATEST_CF=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+
+          if [ -z "$LATEST_CF" ] || [ "$LATEST_CF" == "null" ]; then
+            echo "⚠️ Không lấy được thông tin từ GitHub API, giữ nguyên bản hiện tại: $CURRENT_CF"
+            VERIFIED_CF="$CURRENT_CF"
+          elif [ "$LATEST_CF" != "$CURRENT_CF" ]; then
+            BINARY_URL="https://github.com/cloudflare/cloudflared/releases/download/${LATEST_CF}/cloudflared-linux-arm64"
+            echo "🔍 Phát hiện tag mới v${LATEST_CF}. Đang kiểm tra link tải arm64..."
+            
+            # Kiểm tra HTTP Status Code (đi theo redirect -L, chỉ lấy header -I)
+            HTTP_STATUS=$(curl -sL -I -o /dev/null -w "%{http_code}" "$BINARY_URL")
+            
+            if [ "$HTTP_STATUS" -eq 200 ]; then
+              echo "✅ File cloudflared-linux-arm64 v${LATEST_CF} đã sẵn sàng (HTTP 200)!"
+              VERIFIED_CF="$LATEST_CF"
+            else
+              echo "⏳ Tag v${LATEST_CF} đã tạo nhưng file arm64 chưa upload xong (HTTP $HTTP_STATUS). Tạm hoãn sang chu kỳ sau!"
+              VERIFIED_CF="$CURRENT_CF"
+            fi
+          else
+            echo "✔️ Cloudflared đang ở phiên bản mới nhất: $CURRENT_CF"
+            VERIFIED_CF="$CURRENT_CF"
+          fi
+
+          # ==========================================================
+          # 2. KIỂM TRA ALPINE BASE & XÁC THỰC IMAGE TRÊN GHCR.IO
+          # ==========================================================
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9]+\.[0-9]+' cloudflared/build.yaml)
+          LATEST_ALPINE=$(curl -s https://raw.githubusercontent.com/home-assistant/docker-base/master/alpine/build.yaml | grep -oP 'amd64:\s*alpine:\K[0-9]+\.[0-9]+' | head -n 1)
+
+          if [ -z "$LATEST_ALPINE" ]; then
+            VERIFIED_ALPINE="$CURRENT_ALPINE"
+          elif [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ]; then
+            echo "🔍 Phát hiện Alpine ${LATEST_ALPINE} mới. Đang kiểm tra image ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}..."
+            
+            # Kiểm tra xem image aarch64-base của phiên bản Alpine mới đã thực sự tồn tại trên GHCR chưa
+            if docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" > /dev/null 2>&1; then
+              echo "✅ Image aarch64-base:${LATEST_ALPINE} đã sẵn sàng trên GHCR!"
+              VERIFIED_ALPINE="$LATEST_ALPINE"
+            else
+              echo "⏳ Image aarch64-base:${LATEST_ALPINE} chưa được build xong trên GHCR. Giữ nguyên ${CURRENT_ALPINE}!"
+              VERIFIED_ALPINE="$CURRENT_ALPINE"
+            fi
+          else
+            echo "✔️ Alpine Base đang ở phiên bản mới nhất: $CURRENT_ALPINE"
+            VERIFIED_ALPINE="$CURRENT_ALPINE"
+          fi
+
+          # Xuất kết quả đã xác thực sang bước tiếp theo
+          echo "verified_cf=$VERIFIED_CF" >> $GITHUB_OUTPUT
+          echo "current_cf=$CURRENT_CF" >> $GITHUB_OUTPUT
+          echo "verified_alpine=$VERIFIED_ALPINE" >> $GITHUB_OUTPUT
+          echo "current_alpine=$CURRENT_ALPINE" >> $GITHUB_OUTPUT
+
+      - name: Apply Updates & Push
+        if: >
+          (steps.check_versions.outputs.verified_cf != steps.check_versions.outputs.current_cf) ||
+          (steps.check_versions.outputs.verified_alpine != steps.check_versions.outputs.current_alpine)
+        run: |
+          NEW_CF="${{ steps.check_versions.outputs.verified_cf }}"
+          CUR_CF="${{ steps.check_versions.outputs.current_cf }}"
+          NEW_ALPINE="${{ steps.check_versions.outputs.verified_alpine }}"
+          CUR_ALPINE="${{ steps.check_versions.outputs.current_alpine }}"
+
+          # Đặt tên version mới cho config.yaml
+          if [ "$NEW_CF" != "$CUR_CF" ]; then
+            FINAL_VERSION="${NEW_CF}"
+          else
+            FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
+          fi
+
+          # 1. Cập nhật build.yaml
+          sed -i "s|aarch64-base:.*\"|aarch64-base:${NEW_ALPINE}\"|" cloudflared/build.yaml
+
+          # 2. Cập nhật config.yaml
+          sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
+
+          # 3. Cập nhật CHANGELOG.md
+          BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Cập nhật bảo mật định kỳ."')
+          cat <<EOF > cloudflared/CHANGELOG.md
+          # What's Changed in ${FINAL_VERSION}
+
+          * **Cloudflared Binary (arm64 verified):** \`${NEW_CF}\` (Trước đó: \`${CUR_CF}\`)
+          * **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\` (Trước đó: \`Alpine ${CUR_ALPINE}\`)
+
+          ---
+          ### Chi tiết bản phát hành từ Cloudflare (${NEW_CF}):
+          ${BODY}
+          EOF
+
+          # 4. Commit và Push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cloudflared/build.yaml cloudflared/config.yaml cloudflared/CHANGELOG.md
+          git commit -m "chore(cloudflared): verified update to cf v${NEW_CF} / alpine ${NEW_ALPINE}"
+          git push
 
