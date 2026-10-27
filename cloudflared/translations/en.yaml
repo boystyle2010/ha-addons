@@ -1,1 +1,32 @@
+configuration:
+  tunnel_token:
+    name: "Cloudflare Tunnel Token (Zero Trust Dashboard)"
+    description: "Dán Token lấy từ trang Cloudflare Zero Trust vào đây. Nếu dùng Token, cấu hình routing trên web Cloudflare sẽ được ưu tiên."
+  protocol:
+    name: "Giao thức kết nối (Protocol)"
+    description: "Chọn giao thức kết nối đến máy chủ Cloudflare (Khuyên dùng: auto hoặc quic)."
+  log_level:
+    name: "Mức độ hiển thị Log (Log Level)"
+    description: "Chi tiết thông tin xuất ra trong tab Log của Add-on."
+  metrics_port:
+    name: "Cổng Metrics (Prometheus)"
+    description: "Cổng nội bộ để xuất dữ liệu theo dõi trạng thái Tunnel (Để 0 nếu muốn tắt)."
+  post_quantum:
+    name: "Mã hóa Post-Quantum (Bảo mật lượng tử)"
+    description: "Bật thuật toán mã hóa chống máy tính lượng tử cho kết nối Tunnel."
+  ha_Edge_IP_Version:
+    name: "Phiên bản IP kết nối (Edge IP Version)"
+    description: "Chọn IPv4, IPv6 hoặc Auto khi kết nối tới Cloudflare Edge."
+  external_hostname:
+    name: "[Local Mode] Tên miền chính cho Home Assistant"
+    description: "Chỉ dùng nếu KHÔNG nhập Tunnel Token bên trên và tự quản lý file credential JSON trong /share/cloudflared/."
+  additional_hosts:
+    name: "[Local Mode] Danh sách Subdomain phụ (Additional Hosts)"
+    description: "Khai báo thêm các dịch vụ nội bộ khác (VD: Scrypted, Portainer, Z-Wave...) nếu dùng chế độ Local Config."
+  catch_all_service:
+    name: "[Local Mode] Dịch vụ mặc định (Catch-All Service)"
+    description: "Đích đến mặc định khi không khớp tên miền nào (VD: http://localhost:8123 hoặc http_status:404)."
+  custom_flags:
+    name: "Tham số dòng lệnh nâng cao (Custom CLI Flags)"
+    description: "Thêm bất kỳ cờ lệnh nâng cao nào của cloudflared (VD: --grace-period 30s)."
 
