@@ -1,17 +1,25 @@
-# Cloudflare Pro (Raspberry Pi 5 Edition)
+# Home Assistant App: Cloudflared Pro
 
-![Supports aarch64 Architecture][aarch64-shield]
-![Cloudflare Zero Trust][cf-shield]
+![Release][release-shield] ![Project Stage][stage-shield]
+![Supports aarch64][arch-shield] ![Cloudflare Zero Trust][cf-shield]
 
-Add-on **Cloudflare Tunnel (cloudflared)** chuyên biệt tối ưu hóa cho phần cứng **64-bit (`aarch64`) của Raspberry Pi 5** chạy Home Assistant OS.
+Connect remotely to your Home Assistant instance without opening any ports using Cloudflared (Native ARM64 for Raspberry Pi 5).
 
-## ✨ Tính năng nổi bật
+## About
 
-- 🚀 **Native ARM64 Binary:** Tải và chạy trực tiếp mã nguồn `cloudflared-linux-arm64` chính gốc từ Cloudflare.
-- 🔄 **Auto-Update Verified:** Tự động kiểm tra bản phát hành mới từ Cloudflare & Alpine Base mỗi 6 giờ (xác thực HTTP 200 trước khi báo Update lên Home Assistant).
-- 🛡️ **Zero Trust Dashboard & Local Mode:** Hỗ trợ song song chế độ chạy bằng **Tunnel Token** (quản lý tên miền trên web Cloudflare) hoặc **Local Ingress** (khai báo Subdomain ngay trên UI của Home Assistant).
-- 🔐 **Post-Quantum Cryptography:** Hỗ trợ bật mã hóa lượng tử bảo vệ đường truyền.
-- 📊 **Prometheus Metrics:** Tích hợp cổng xuất dữ liệu giám sát trạng thái Tunnel.
+Cloudflared Pro connects your Home Assistant Instance via a secure tunnel to a domain or subdomain at Cloudflare. Doing that, you can expose your Home Assistant to the Internet without opening ports in your router. Additionally, you can utilize Cloudflare Zero Trust platform to further secure your Home Assistant connection.
 
-[aarch64-shield]: https://img.shields.io/badge/aarch64-yes-green.svg
-[cf-shield]: https://img.shields.io/badge/Cloudflare-Zero_Trust-F38020?logo=cloudflare&logoColor=white
+**To use this app, you have to own a domain name (e.g. example.com) that is using Cloudflare for its DNS entries.**
+
+## Key Features
+- **Auto-Verified Updates:** Automatically tracks official `cloudflare/cloudflared` releases and Home Assistant Alpine Base images.
+- **Full UI Configuration:** Supports Zero Trust Tunnel Token, Local Ingress routing, Post-Quantum encryption, and Prometheus Metrics.
+
+## Disclaimer
+
+Please make sure to be compliant with the [Cloudflare Self-Serve Subscription Agreement](https://www.cloudflare.com/terms/) when using this app.
+
+[release-shield]: https://img.shields.io/github/v/release/cloudflare/cloudflared?label=cloudflared&color=007ec6
+[stage-shield]: https://img.shields.io/badge/project%20stage-production%20ready-brightgreen.svg
+[arch-shield]: https://img.shields.io/badge/aarch64-yes-brightgreen.svg
+[cf-shield]: https://img.shields.io/badge/maintained-yes-brightgreen.svg

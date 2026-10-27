@@ -4,7 +4,7 @@
 * **Home Assistant Alpine Base:** `Alpine 3.20`
 
 ---
-### Chi tiết bản phát hành từ Cloudflare (2026.10.4):
+### Cloudflare Release Notes (2026.10.4):
  
 ### SHA256 Checksums:
 ```
