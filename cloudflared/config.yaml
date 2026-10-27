@@ -1,1 +1,41 @@
+name: "Cloudflared Pro"
+description: "Cloudflare Tunnel cho Home Assistant OS trên Raspberry Pi 5 - Tự động cập nhật từ Cloudflare chính thức"
+version: "2026.10.4"
+slug: "cloudflared_custom"
+init: false
+arch:
+  - aarch64
+host_network: true
+startup: services
+boot: auto
+map:
+  - ssl:ro
+  - share:rw
+options:
+  tunnel_token: ""
+  protocol: "auto"
+  log_level: "info"
+  metrics_port: 0
+  post_quantum: false
+  ha_Edge_IP_Version: "auto"
+  external_hostname: ""
+  additional_hosts: []
+  catch_all_service: "http://localhost:8123"
+  custom_flags: []
+schema:
+  tunnel_token: "password?"
+  protocol: "list(auto|quic|http2)"
+  log_level: "list(debug|info|warn|error|fatal)"
+  metrics_port: "port?"
+  post_quantum: "bool"
+  ha_Edge_IP_Version: "list(auto|4|6)"
+  external_hostname: "str?"
+  additional_hosts:
+    - hostname: "str"
+      service: "str"
+      no_tls_verify: "bool?"
+      http_host_header: "str?"
+  catch_all_service: "str?"
+  custom_flags:
+    - "str"
 
