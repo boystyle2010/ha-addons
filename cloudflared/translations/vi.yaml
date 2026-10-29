@@ -1,1 +1,38 @@
+configuration:
+  tunnel_token:
+    name: "Cloudflare Tunnel Token (Zero Trust Dashboard)"
+    description: "Dán Token lấy từ trang Cloudflare Zero Trust. Nếu dùng Token, cấu hình tên miền trên web Cloudflare sẽ được ưu tiên."
+  protocol:
+    name: "Giao thức kết nối (Protocol)"
+    description: "Giao thức kết nối đến máy chủ Cloudflare (Khuyên dùng: auto hoặc http2 để ổn định nhất)."
+  ha_Edge_IP_Version:
+    name: "Phiên bản IP kết nối (Edge IP Version)"
+    description: "Chọn Auto, IPv4 hoặc IPv6 khi kết nối tới máy chủ biên Cloudflare Edge."
+  post_quantum:
+    name: "Mã hóa Post-Quantum (Bảo mật lượng tử)"
+    description: "Bật thuật toán mã hóa kháng máy tính lượng tử cho đường truyền Tunnel."
+  log_level:
+    name: "Mức độ hiển thị Log (Log Level)"
+    description: "Độ chi tiết của thông tin xuất ra trong tab Log của Add-on."
+  retries:
+    name: "Số lần thử kết nối lại (Retries)"
+    description: "Số lần tự động thử kết nối lại tối đa khi mạng chập chờn (Mặc định: 5)."
+  grace_period:
+    name: "Thời gian chờ đóng kết nối an toàn (Grace Period)"
+    description: "Thời gian chờ hoàn tất các truy cập đang diễn ra trước khi tắt Tunnel (VD: 30s)."
+  metrics_port:
+    name: "Cổng Metrics (Prometheus)"
+    description: "Cổng nội bộ để xuất dữ liệu theo dõi trạng thái Tunnel (Để 0 hoặc bỏ trống nếu muốn tắt)."
+  external_hostname:
+    name: "[Local Mode] Tên miền chính cho Home Assistant"
+    description: "Chỉ dùng nếu KHÔNG nhập Tunnel Token bên trên và tự quản lý file credentials.json trong /share/cloudflared/."
+  additional_hosts:
+    name: "[Local Mode] Danh sách Subdomain phụ (Additional Hosts)"
+    description: "Khai báo thêm các dịch vụ nội bộ khác (VD: Scrypted, Portainer, Z-Wave...) nếu dùng chế độ Local Mode."
+  catch_all_service:
+    name: "[Local Mode] Dịch vụ mặc định (Catch-All Service)"
+    description: "Đích đến mặc định khi không khớp tên miền nào (VD: http://homeassistant:8123 hoặc http_status:404)."
+  custom_flags:
+    name: "Tham số dòng lệnh nâng cao (Custom CLI Flags)"
+    description: "Thêm bất kỳ cờ lệnh nâng cao nào của cloudflared."
 
