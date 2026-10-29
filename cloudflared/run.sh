@@ -35,10 +35,16 @@ ARGS+=("--grace-period" "${GRACE_PERIOD}")
 
 bashio::log.info "Connection settings: Protocol=${PROTOCOL} | Edge IP=${EDGE_IP_RAW} (${EDGE_IP}) | Retries=${RETRIES}"
 
-# Cổng Metrics
+# Cổng Metrics & Healthcheck (/ready)
 if [ -n "${METRICS_PORT}" ] && [ "${METRICS_PORT}" != "0" ] && [ "${METRICS_PORT}" != "null" ]; then
     ARGS+=("--metrics" "0.0.0.0:${METRICS_PORT}")
-    bashio::log.info "Prometheus Metrics enabled on port: ${METRICS_PORT}"
+    echo "${METRICS_PORT}" > /tmp/metrics_port
+    bashio::log.info "Prometheus Metrics & Healthcheck enabled on port: ${METRICS_PORT}"
+else
+    # Mở ngầm cổng nội bộ 49999 để Docker HEALTHCHECK kiểm tra trạng thái kết nối thực tế tới Cloudflare
+    ARGS+=("--metrics" "127.0.0.1:49999")
+    echo "49999" > /tmp/metrics_port
+    bashio::log.info "Internal Healthcheck endpoint enabled on 127.0.0.1:49999/ready"
 fi
 
 # Chế độ Post-Quantum
