@@ -22,8 +22,8 @@ RUN VERSION_CLEAN=$(echo "${CLOUDFLARED_VERSION}" | cut -d'-' -f1) && \
 COPY run.sh /
 RUN chmod a+x /run.sh
 
-# Tự động kiểm tra tiến trình cloudflared mỗi 30 giây (Chống treo ngầm cho Watchdog)
+# Kiểm tra thực tế kết nối tới Cloudflare Edge qua endpoint /ready mỗi 30 giây
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD pgrep cloudflared > /dev/null || exit 1
+    CMD curl -fs "http://127.0.0.1:$(cat /tmp/metrics_port 2>/dev/null || echo 49999)/ready" > /dev/null || exit 1
 
 CMD [ "/run.sh" ]
