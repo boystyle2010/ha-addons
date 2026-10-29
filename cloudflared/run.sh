@@ -1,34 +1,50 @@
 #!/usr/bin/with-contenv bashio
 
 bashio::log.info "==================================================="
-bashio::log.info " Khởi động Cloudflared Pro Add-on (Raspberry Pi 5) "
-bashio::log.info " Phiên bản binary: $(cloudflared --version)"
+bashio::log.info " Starting Cloudflared Pro Add-on (Raspberry Pi 5)  "
+bashio::log.info " Binary version: $(cloudflared --version)"
 bashio::log.info "==================================================="
 
-# Đọc cấu hình từ UI của Home Assistant
 TOKEN=$(bashio::config 'tunnel_token')
 PROTOCOL=$(bashio::config 'protocol')
 LOG_LEVEL=$(bashio::config 'log_level')
 METRICS_PORT=$(bashio::config 'metrics_port')
-POST_QUANTUM=$(bashio::config 'post_quantum')
-EDGE_IP=$(bashio::config 'ha_Edge_IP_Version')
+EDGE_IP_RAW=$(bashio::config 'ha_Edge_IP_Version')
+RETRIES=$(bashio::config 'retries')
+GRACE_PERIOD=$(bashio::config 'grace_period')
 
-# Khởi tạo mảng tham số dòng lệnh
+# Chuyển đổi hiển thị UI (Auto / IPv4 / IPv6) sang tham số chuẩn của cloudflared (auto / 4 / 6)
+case "${EDGE_IP_RAW}" in
+    "IPv4"|"4")
+        EDGE_IP="4"
+        ;;
+    "IPv6"|"6")
+        EDGE_IP="6"
+        ;;
+    *)
+        EDGE_IP="auto"
+        ;;
+esac
+
 ARGS=("tunnel" "--no-autoupdate")
 ARGS+=("--protocol" "${PROTOCOL}")
 ARGS+=("--loglevel" "${LOG_LEVEL}")
 ARGS+=("--edge-ip-version" "${EDGE_IP}")
+ARGS+=("--retries" "${RETRIES}")
+ARGS+=("--grace-period" "${GRACE_PERIOD}")
+
+bashio::log.info "Connection settings: Protocol=${PROTOCOL} | Edge IP=${EDGE_IP_RAW} (${EDGE_IP}) | Retries=${RETRIES}"
 
 # Cổng Metrics
-if [ "${METRICS_PORT}" -ne 0 ] && [ "${METRICS_PORT}" != "null" ]; then
+if [ -n "${METRICS_PORT}" ] && [ "${METRICS_PORT}" != "0" ] && [ "${METRICS_PORT}" != "null" ]; then
     ARGS+=("--metrics" "0.0.0.0:${METRICS_PORT}")
-    bashio::log.info "Đã bật Prometheus Metrics tại cổng: ${METRICS_PORT}"
+    bashio::log.info "Prometheus Metrics enabled on port: ${METRICS_PORT}"
 fi
 
 # Chế độ Post-Quantum
 if bashio::config.true 'post_quantum'; then
     ARGS+=("--post-quantum")
-    bashio::log.info "Đã kích hoạt mã hóa Post-Quantum."
+    bashio::log.info "Post-Quantum Cryptography enabled."
 fi
 
 # Thêm các Custom Flags từ UI (nếu có)
@@ -40,27 +56,25 @@ fi
 
 # Kiểm tra chế độ chạy: Remote Token (Zero Trust) hay Local Config YAML
 if bashio::config.has_value 'tunnel_token'; then
-    bashio::log.info "Chế độ hoạt động: Remote Managed Tunnel (Zero Trust Token)"
+    bashio::log.info "Operating Mode: Remote Managed Tunnel (Zero Trust Token)"
     ARGS+=("run" "--token" "${TOKEN}")
 else
-    bashio::log.info "Chế độ hoạt động: Local Configuration (/share/cloudflared/config.yml)"
+    bashio::log.info "Operating Mode: Local Configuration (/share/cloudflared/config.yml)"
     mkdir -p /share/cloudflared
     CONFIG_FILE="/share/cloudflared/config.yml"
 
-    # Nếu người dùng khai báo hostname trên UI, tự động sinh file config.yml
     if bashio::config.has_value 'external_hostname'; then
         EXT_HOST=$(bashio::config 'external_hostname')
         CATCH_ALL=$(bashio::config 'catch_all_service')
         
-        bashio::log.info "Đang tạo file cấu hình Ingress tự động cho: ${EXT_HOST}"
+        bashio::log.info "Generating Ingress rules for: ${EXT_HOST}"
         cat <<EOF > "${CONFIG_FILE}"
 tunnel: homeassistant-local
 credentials-file: /share/cloudflared/credentials.json
 ingress:
   - hostname: "${EXT_HOST}"
-    service: http://localhost:8123
+    service: http://homeassistant:8123
 EOF
-        # Thêm các subdomain phụ từ UI
         for host in $(bashio::config 'additional_hosts|keys'); do
             H_NAME=$(bashio::config "additional_hosts[${host}].hostname")
             H_SVC=$(bashio::config "additional_hosts[${host}].service")
@@ -80,13 +94,11 @@ EOF
     fi
 
     if [ ! -f "${CONFIG_FILE}" ]; then
-        bashio::log.fatal "Không tìm thấy Tunnel Token và cũng chưa có file ${CONFIG_FILE}!"
+        bashio::log.fatal "No Tunnel Token provided and ${CONFIG_FILE} does not exist!"
         exit 1
     fi
 
     ARGS+=("--config" "${CONFIG_FILE}" "run")
 fi
 
-# Thực thi tiến trình cloudflared
 exec /usr/bin/cloudflared "${ARGS[@]}"
-
