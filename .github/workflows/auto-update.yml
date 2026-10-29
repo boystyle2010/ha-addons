@@ -52,7 +52,7 @@ jobs:
             VERIFIED_CF="$CURRENT_CF"
           fi
 
-          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9]+\.[0-9]+' cloudflared/build.yaml)
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9]+\.[0-9]+' cloudflared/Dockerfile || echo "3.21")
           LATEST_ALPINE=$(curl -s https://raw.githubusercontent.com/home-assistant/docker-base/master/alpine/build.yaml | grep -oP 'amd64:\s*alpine:\K[0-9]+\.[0-9]+' | head -n 1)
 
           if [ -z "$LATEST_ALPINE" ]; then
@@ -84,10 +84,10 @@ jobs:
           elif [ "$NEW_ALPINE" != "$CUR_ALPINE" ]; then
             FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
           else
-            FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
+            FINAL_VERSION="$NEW_CF"
           fi
 
-          sed -i "s|aarch64-base:.*\"|aarch64-base:${NEW_ALPINE}\"|" cloudflared/build.yaml
+          sed -i "s|aarch64-base:.*|aarch64-base:${NEW_ALPINE}|" cloudflared/Dockerfile
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
           if [ "$NEW_CF" != "$CUR_CF" ] || [ "$NEW_ALPINE" != "$CUR_ALPINE" ] || [ ! -f cloudflared/CHANGELOG.md ]; then
@@ -95,9 +95,6 @@ jobs:
             printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
           fi
 
-          # KỸ THUẬT CHỐNG NGỦ ĐÔNG (KEEP-ALIVE 45 NGÀY):
-          # Kiểm tra thời gian của commit cuối cùng. Nếu đã quá 45 ngày chưa có commit mới,
-          # tự động ghi nhận nhịp tim để reset bộ đếm 60 ngày của GitHub.
           LAST_COMMIT_TS=$(git log -1 --format=%ct)
           NOW_TS=$(date +%s)
           DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
@@ -108,6 +105,6 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cloudflared/ .github/workflows/
+          git add -A
           git diff --staged --quiet || git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} / keep-alive"
           git push
