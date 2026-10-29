@@ -1,32 +1,37 @@
 configuration:
   tunnel_token:
     name: "Cloudflare Tunnel Token (Zero Trust Dashboard)"
-    description: "Dán Token lấy từ trang Cloudflare Zero Trust vào đây. Nếu dùng Token, cấu hình routing trên web Cloudflare sẽ được ưu tiên."
+    description: "Paste your tunnel token from the Cloudflare Zero Trust Dashboard. When provided, remote routing rules on Cloudflare take precedence."
   protocol:
-    name: "Giao thức kết nối (Protocol)"
-    description: "Chọn giao thức kết nối đến máy chủ Cloudflare (Khuyên dùng: auto hoặc quic)."
-  log_level:
-    name: "Mức độ hiển thị Log (Log Level)"
-    description: "Chi tiết thông tin xuất ra trong tab Log của Add-on."
-  metrics_port:
-    name: "Cổng Metrics (Prometheus)"
-    description: "Cổng nội bộ để xuất dữ liệu theo dõi trạng thái Tunnel (Để 0 nếu muốn tắt)."
-  post_quantum:
-    name: "Mã hóa Post-Quantum (Bảo mật lượng tử)"
-    description: "Bật thuật toán mã hóa chống máy tính lượng tử cho kết nối Tunnel."
+    name: "Connection Protocol"
+    description: "Protocol used to connect to Cloudflare Edge servers (Recommended: auto or http2 for stability)."
   ha_Edge_IP_Version:
-    name: "Phiên bản IP kết nối (Edge IP Version)"
-    description: "Chọn IPv4, IPv6 hoặc Auto khi kết nối tới Cloudflare Edge."
+    name: "Edge IP Version"
+    description: "Specify the IP address family (Auto, IPv4, or IPv6) for connecting to Cloudflare Edge."
+  post_quantum:
+    name: "Post-Quantum Cryptography"
+    description: "Enable post-quantum hybrid key exchange for the tunnel connection."
+  log_level:
+    name: "Log Level"
+    description: "Verbosity level of the cloudflared logs."
+  retries:
+    name: "Maximum Retries"
+    description: "Maximum number of retries for establishing the connection before backing off (Default: 5)."
+  grace_period:
+    name: "Shutdown Grace Period"
+    description: "Time to wait for active requests to finish before shutting down the tunnel (e.g., 30s)."
+  metrics_port:
+    name: "Prometheus Metrics Port"
+    description: "Internal port to expose Prometheus metrics (Set to 0 or leave blank to disable)."
   external_hostname:
-    name: "[Local Mode] Tên miền chính cho Home Assistant"
-    description: "Chỉ dùng nếu KHÔNG nhập Tunnel Token bên trên và tự quản lý file credential JSON trong /share/cloudflared/."
+    name: "[Local Mode] Primary External Hostname"
+    description: "Only used if Tunnel Token is empty and you manage credentials.json locally in /share/cloudflared/."
   additional_hosts:
-    name: "[Local Mode] Danh sách Subdomain phụ (Additional Hosts)"
-    description: "Khai báo thêm các dịch vụ nội bộ khác (VD: Scrypted, Portainer, Z-Wave...) nếu dùng chế độ Local Config."
+    name: "[Local Mode] Additional Public Hostnames"
+    description: "Define extra internal services (e.g., Scrypted, Portainer, Z-Wave) when running in Local Mode."
   catch_all_service:
-    name: "[Local Mode] Dịch vụ mặc định (Catch-All Service)"
-    description: "Đích đến mặc định khi không khớp tên miền nào (VD: http://localhost:8123 hoặc http_status:404)."
+    name: "[Local Mode] Catch-All Service"
+    description: "Default fallback service when no hostname matches (e.g., http://homeassistant:8123 or http_status:404)."
   custom_flags:
-    name: "Tham số dòng lệnh nâng cao (Custom CLI Flags)"
-    description: "Thêm bất kỳ cờ lệnh nâng cao nào của cloudflared (VD: --grace-period 30s)."
-
+    name: "Custom CLI Flags"
+    description: "Additional command-line flags passed directly to cloudflared."
