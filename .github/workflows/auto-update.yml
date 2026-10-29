@@ -8,6 +8,11 @@ on:
     branches:
       - main
 
+# Chống xung đột khi sửa nhiều file liên tiếp (Tự huỷ lượt chạy cũ nếu có lượt mới)
+concurrency:
+  group: auto-update-cloudflared
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -18,6 +23,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Official Assets (Logo, Icon, DOCS)
         run: |
@@ -34,7 +41,7 @@ jobs:
       - name: Check & Verify Cloudflared arm64 and Alpine Base
         id: check_versions
         run: |
-          CURRENT_VER_FULL=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
+          CURRENT_VER_FULL=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml || echo "2026.10.5")
           CURRENT_CF=$(echo "$CURRENT_VER_FULL" | cut -d'-' -f1)
           LATEST_CF=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name' | sed 's/^v//')
 
@@ -87,7 +94,8 @@ jobs:
             FINAL_VERSION="$NEW_CF"
           fi
 
-          sed -i "s|aarch64-base:.*|aarch64-base:${NEW_ALPINE}|" cloudflared/Dockerfile
+          sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
+          [ -f cloudflared/build.yaml ] && rm -f cloudflared/build.yaml
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
           if [ "$NEW_CF" != "$CUR_CF" ] || [ "$NEW_ALPINE" != "$CUR_ALPINE" ] || [ ! -f cloudflared/CHANGELOG.md ]; then
@@ -95,7 +103,7 @@ jobs:
             printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
           fi
 
-          LAST_COMMIT_TS=$(git log -1 --format=%ct)
+          LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
           NOW_TS=$(date +%s)
           DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
 
@@ -106,5 +114,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --staged --quiet || git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} / keep-alive"
-          git push
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} / keep-alive"
+            git pull --rebase origin main
+            git push
+          fi
