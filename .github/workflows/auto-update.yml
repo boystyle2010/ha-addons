@@ -19,12 +19,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Official Assets (Logo, Icon, README, DOCS)
+      - name: Download Official Assets (Logo, Icon, DOCS)
         run: |
-          curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
-          curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
-          curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o cloudflared/DOCS.md
-          printf "# Home Assistant App: Cloudflared Pro\n\n![Release][release-shield] ![Project Stage][stage-shield]\n![Supports aarch64][arch-shield] ![Cloudflare Zero Trust][cf-shield]\n\nConnect remotely to your Home Assistant instance without opening any ports using Cloudflared (Native ARM64 for Raspberry Pi 5).\n\n## About\n\nCloudflared Pro connects your Home Assistant Instance via a secure tunnel to a domain or subdomain at Cloudflare. Doing that, you can expose your Home Assistant to the Internet without opening ports in your router. Additionally, you can utilize Cloudflare Zero Trust platform to further secure your Home Assistant connection.\n\n**To use this app, you have to own a domain name (e.g. example.com) that is using Cloudflare for its DNS entries.**\n\n## Key Features\n- **Auto-Verified Updates:** Automatically tracks official \`cloudflare/cloudflared\` releases and Home Assistant Alpine Base images.\n- **Full UI Configuration:** Supports Zero Trust Tunnel Token, Local Ingress routing, Post-Quantum encryption, and Prometheus Metrics.\n\n## Disclaimer\n\nPlease make sure to be compliant with the [Cloudflare Self-Serve Subscription Agreement](https://www.cloudflare.com/terms/) when using this app.\n\n[release-shield]: https://img.shields.io/github/v/release/cloudflare/cloudflared?label=cloudflared&color=007ec6\n[stage-shield]: https://img.shields.io/badge/project%%20stage-production%%20ready-brightgreen.svg\n[arch-shield]: https://img.shields.io/badge/aarch64-yes-brightgreen.svg\n[cf-shield]: https://img.shields.io/badge/maintained-yes-brightgreen.svg\n" > cloudflared/README.md
+          if [ ! -f cloudflared/icon.png ]; then
+            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
+          fi
+          if [ ! -f cloudflared/logo.png ]; then
+            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
+          fi
+          if [ ! -f cloudflared/DOCS.md ]; then
+            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o cloudflared/DOCS.md
+          fi
 
       - name: Check & Verify Cloudflared arm64 and Alpine Base
         id: check_versions
@@ -67,7 +72,7 @@ jobs:
           echo "verified_alpine=$VERIFIED_ALPINE" >> $GITHUB_OUTPUT
           echo "current_alpine=$CURRENT_ALPINE" >> $GITHUB_OUTPUT
 
-      - name: Apply Updates & Push
+      - name: Apply Updates & Keep-Alive Heartbeat
         run: |
           NEW_CF="${{ steps.check_versions.outputs.verified_cf }}"
           CUR_CF="${{ steps.check_versions.outputs.current_cf }}"
@@ -79,17 +84,30 @@ jobs:
           elif [ "$NEW_ALPINE" != "$CUR_ALPINE" ]; then
             FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
           else
-            FINAL_VERSION="$NEW_CF"
+            FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
           fi
 
           sed -i "s|aarch64-base:.*\"|aarch64-base:${NEW_ALPINE}\"|" cloudflared/build.yaml
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
-          BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine update."')
-          printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
+          if [ "$NEW_CF" != "$CUR_CF" ] || [ "$NEW_ALPINE" != "$CUR_ALPINE" ] || [ ! -f cloudflared/CHANGELOG.md ]; then
+            BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine security update."')
+            printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
+          fi
+
+          # KỸ THUẬT CHỐNG NGỦ ĐÔNG (KEEP-ALIVE 45 NGÀY):
+          # Kiểm tra thời gian của commit cuối cùng. Nếu đã quá 45 ngày chưa có commit mới,
+          # tự động ghi nhận nhịp tim để reset bộ đếm 60 ngày của GitHub.
+          LAST_COMMIT_TS=$(git log -1 --format=%ct)
+          NOW_TS=$(date +%s)
+          DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
+
+          if [ "$DAYS_IDLE" -ge 45 ]; then
+            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cloudflared/
-          git diff --staged --quiet || git commit -m "chore(cloudflared): update assets and version to v${FINAL_VERSION}"
+          git add cloudflared/ .github/workflows/
+          git diff --staged --quiet || git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} / keep-alive"
           git push
