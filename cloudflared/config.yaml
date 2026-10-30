@@ -1,6 +1,6 @@
 name: "Cloudflared Pro"
 description: "Use a Cloudflare Tunnel to remotely connect to Home Assistant without opening any ports"
-version: "2026.10.6"
+version: "2026.10.7"
 slug: "cloudflared_pro"
 url: "https://github.com/boystyle2010/ha-addons"
 init: false
