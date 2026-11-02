@@ -2,6 +2,11 @@ name: "Tailscale Pro"
 description: "High-stability, upstream-synced Tailscale mesh VPN & Subnet Router with full UI"
 version: "1.104.4"
 slug: "tailscale_pro"
+url: "https://github.com/boystyle2010/ha-addons/tree/main/tailscale"
+stage: stable
+startup: services
+boot: auto
+apparmor: true
 init: false
 arch:
   - aarch64
