@@ -14,6 +14,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-tailscale
+  cancel-in-progress: false
+
 jobs:
   update-tailscale:
     runs-on: ubuntu-latest
@@ -23,40 +27,100 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sync Latest Tailscale Version
-        id: check_version
+      - name: Deep Verify Upstream Release (Anti-Broken-Build)
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "1. Đang quét phiên bản mới nhất từ GitHub API của Tailscale..."
-          CURRENT_VER=$(grep -oP '^version:\s*"\K[^"]+' tailscale/config.yaml || echo "1.104.1")
-          LATEST_TAG=$(curl -s https://api.github.com/repos/tailscale/tailscale/releases/latest | jq -r '.tag_name')
-          LATEST_VER=$(echo "$LATEST_TAG" | sed 's/^v//')
+          echo "🔍 1. Đang kiểm tra bản phát hành chính thức từ Tailscale GitHub API..."
+          RELEASE_JSON=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/tailscale/tailscale/releases/latest || echo "")
 
-          if [ -z "$LATEST_VER" ] || [ "$LATEST_VER" == "null" ]; then
-            echo "Không lấy được version, giữ nguyên phiên bản cũ."
+          if [ -z "$RELEASE_JSON" ]; then
+            echo "⚠️ Không gọi được GitHub API. Bỏ qua chu kỳ này!"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "Phiên bản hiện tại trên Repo: $CURRENT_VER"
-          echo "Phiên bản mới nhất từ Tailscale: $LATEST_VER ($LATEST_TAG)"
+          IS_DRAFT=$(echo "$RELEASE_JSON" | jq -r '.draft')
+          IS_PRERELEASE=$(echo "$RELEASE_JSON" | jq -r '.prerelease')
+          LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
 
-          # Tự động thay thế phiên bản mới vào config.yaml và Dockerfile
-          sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${LATEST_TAG}|g" tailscale/Dockerfile
-          sed -i "s|^version:.*|version: \"${LATEST_VER}\"|g" tailscale/config.yaml
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ] || [ "$IS_DRAFT" == "true" ] || [ "$IS_PRERELEASE" == "true" ]; then
+            echo "⚠️ Bản phát hành chưa hợp lệ hoặc đang ở trạng thái nháp/thử nghiệm. Bỏ qua!"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
-          echo "new_ver=$LATEST_VER" >> $GITHUB_OUTPUT
+          CLEAN_VER="${LATEST_TAG#v}"
+          CURRENT_VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' tailscale/config.yaml || echo "0.0.0")
+          echo "📌 Hiện tại trên Repo: $CURRENT_VER | Mới nhất từ hãng: $CLEAN_VER"
+
+          CURRENT_BASE=$(grep -oP 'ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || echo "3.20")
+          LATEST_BASE=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name' || echo "$CURRENT_BASE")
+          if [[ ! "$LATEST_BASE" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            LATEST_BASE="$CURRENT_BASE"
+          fi
+
+          # Chỉ nâng base nếu image thật sự tồn tại trên ghcr.io
+          if [ "$LATEST_BASE" != "$CURRENT_BASE" ]; then
+            if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_BASE}" >/dev/null 2>&1; then
+              echo "⚠️ Base image ${LATEST_BASE} chưa tồn tại, giữ nguyên ${CURRENT_BASE}."
+              LATEST_BASE="$CURRENT_BASE"
+            fi
+          fi
+
+          if [ "$CLEAN_VER" == "$CURRENT_VER" ] && [ "$LATEST_BASE" == "$CURRENT_BASE" ]; then
+            echo "✅ Cả Tailscale và Alpine Base đều đã ở phiên bản mới nhất."
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "🔍 2. Kiểm tra kiến trúc linux/arm64 bên trong Docker Hub Manifest..."
+          MANIFEST_JSON=$(docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null || echo "")
+          HAS_ARM64=$(echo "$MANIFEST_JSON" | jq -r '.manifests[]? | select(.platform.architecture == "arm64" and .platform.os == "linux") | .digest')
+
+          if [ -z "$HAS_ARM64" ]; then
+            echo "⏳ Docker Image cho Raspberry Pi 5 (linux/arm64) chưa được đẩy lên xong. Chờ chu kỳ sau!"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "✅ Đã xác nhận đầy đủ image linux/arm64!"
+
+          echo "update_needed=true" >> $GITHUB_OUTPUT
+          echo "new_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "new_ver=$CLEAN_VER" >> $GITHUB_OUTPUT
+          echo "new_base=$LATEST_BASE" >> $GITHUB_OUTPUT
+
+      - name: Update Dockerfile and config.yaml
+        if: steps.check.outputs.update_needed == 'true'
+        run: |
+          NEW_TAG="${{ steps.check.outputs.new_tag }}"
+          NEW_VER="${{ steps.check.outputs.new_ver }}"
+          NEW_BASE="${{ steps.check.outputs.new_base }}"
+
+          echo "🛠️ Đang cập nhật lên v${NEW_VER} (Base Alpine ${NEW_BASE})..."
+          sed -i "s|^ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|" tailscale/Dockerfile
+          sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
+          sed -i "s|^version:.*|version: \"${NEW_VER}\"|" tailscale/config.yaml
+
+          echo "📄 Kết quả thay đổi:"
+          git diff --stat
 
       - name: Commit and Push Update
+        if: steps.check.outputs.update_needed == 'true'
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "github-actions[bot]"
-          git reset --hard HEAD
-          git pull --rebase origin main
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
           git add tailscale/Dockerfile tailscale/config.yaml
-          
-          if ! git diff --staged --quiet; then
-            git commit -m "chore(tailscale): sync version to v${{ steps.check_version.outputs.new_ver }}"
-            git push
-            echo "🎉 Đã tự động commit và đẩy phiên bản mới thành công!"
-          else
-            echo "✨ Phiên bản đã đồng bộ sẵn."
+
+          if git diff --staged --quiet; then
+            echo "❌ Không có file nào thay đổi dù cần cập nhật, kiểm tra lại pattern sed!"
+            exit 1
           fi
+
+          git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
+          git pull --rebase origin main
+          git push
+          echo "🚀 Đã tự động commit và đẩy phiên bản mới thành công!"
