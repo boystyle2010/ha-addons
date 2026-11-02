@@ -1,25 +1,67 @@
 #!/usr/bin/with-contenv bashio
 
+SOCK="/var/run/tailscale/tailscaled.sock"
+
 # 1. Đọc cấu hình từ UI của Home Assistant
 AUTH_KEY=$(bashio::config 'auth_key')
 HOSTNAME=$(bashio::config 'hostname')
-EXIT_NODE=$(bashio::config 'advertise_exit_node')
-ACCEPT_ROUTES=$(bashio::config 'accept_routes')
+LOGIN_SERVER=$(bashio::config 'login_server')
 ACCEPT_DNS=$(bashio::config 'accept_dns')
+ACCEPT_ROUTES=$(bashio::config 'accept_routes')
+EXIT_NODE_ADV=$(bashio::config 'advertise_exit_node')
+CONNECTOR=$(bashio::config 'advertise_connector')
+ALWAYS_DERP=$(bashio::config 'always_use_derp')
 ENABLE_SSH=$(bashio::config 'enable_ssh')
 SNAT_ROUTES=$(bashio::config 'snat_subnet_routes')
+STATEFUL=$(bashio::config 'stateful_filtering')
+USERSPACE=$(bashio::config 'userspace_networking')
+LOG_UPLOAD=$(bashio::config 'log_upload')
+SHARE_MODE=$(bashio::config 'share_homeassistant')
+SHARE_PORT=$(bashio::config 'share_on_port')
 EXTRA_ARGS=$(bashio::config 'extra_args')
+
+USE_EXIT_NODE=""
+if bashio::config.has_value 'exit_node'; then
+    USE_EXIT_NODE=$(bashio::config 'exit_node')
+fi
 
 ROUTES_LIST=""
 if bashio::config.has_value 'advertise_routes'; then
     ROUTES_LIST=$(bashio::config 'advertise_routes | join(",")')
 fi
 
-# 2. Tối ưu hóa phần cứng cổng mạng Pi 5 (UDP GRO Forwarding)
-NETDEV=$(ip -o route get 8.8.8.8 2>/dev/null | cut -f 5 -d " ")
-if [ -n "${NETDEV}" ]; then
-    bashio::log.info "Đang tối ưu hóa thông lượng UDP GRO trên cổng mạng ${NETDEV}..."
-    ethtool -K "${NETDEV}" rx-udp-gro-forwarding on rx-gro-list off 2>/dev/null || true
+TAGS_LIST=""
+if bashio::config.has_value 'advertise_tags'; then
+    for TAG in $(bashio::config 'advertise_tags'); do
+        if [[ "${TAG}" =~ ^tag:[A-Za-z][A-Za-z0-9-]*$ ]]; then
+            TAGS_LIST="${TAGS_LIST:+${TAGS_LIST},}${TAG}"
+        else
+            bashio::log.warning "Bỏ qua tag không hợp lệ '${TAG}' (phải có dạng tag:ten-tag)."
+        fi
+    done
+fi
+
+# Không thể vừa là exit node vừa dùng exit node khác
+if [ -n "${USE_EXIT_NODE}" ] && bashio::var.true "${EXIT_NODE_ADV}"; then
+    bashio::log.warning "Không thể vừa quảng bá exit node vừa dùng exit node khác. Bỏ qua tùy chọn 'exit_node'."
+    USE_EXIT_NODE=""
+fi
+
+# Biến môi trường cho tailscaled
+if bashio::var.true "${ALWAYS_DERP}"; then
+    export TS_DEBUG_ALWAYS_USE_DERP=true
+fi
+if ! bashio::var.true "${LOG_UPLOAD}"; then
+    export TS_NO_LOGS_NO_SUPPORT=true
+fi
+
+# 2. Tối ưu hóa cổng mạng (UDP GRO Forwarding), bỏ qua khi chạy userspace
+if ! bashio::var.true "${USERSPACE}"; then
+    NETDEV=$(ip -o route get 8.8.8.8 2>/dev/null | cut -f 5 -d " ")
+    if [ -n "${NETDEV}" ]; then
+        bashio::log.info "Đang tối ưu hóa thông lượng UDP GRO trên cổng mạng ${NETDEV}..."
+        ethtool -K "${NETDEV}" rx-udp-gro-forwarding on rx-gro-list off 2>/dev/null || true
+    fi
 fi
 
 # 3. Khởi tạo thư mục lưu trữ trạng thái bền vững
@@ -27,7 +69,6 @@ mkdir -p /data/state /var/run/tailscale
 
 TAILSCALED_PID=""
 
-# Bắt tín hiệu tắt từ Home Assistant để đóng kết nối an toàn
 cleanup() {
     bashio::log.info "Đang dừng tiến trình Tailscale Pro an toàn..."
     if [ -n "${TAILSCALED_PID}" ]; then
@@ -38,18 +79,26 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT
 
+TAILSCALED_ARGS=(
+    "--state=/data/state/tailscaled.state"
+    "--statedir=/data/state"
+    "--socket=${SOCK}"
+    "--port=41641"
+)
+if bashio::var.true "${USERSPACE}"; then
+    bashio::log.info "Chế độ userspace networking: sẽ không tạo card mạng tailscale0."
+    TAILSCALED_ARGS+=("--tun=userspace-networking")
+else
+    TAILSCALED_ARGS+=("--tun=tailscale0")
+fi
+
 bashio::log.info "Đang khởi chạy tiến trình nền tailscaled..."
-tailscaled \
-    --state=/data/state/tailscaled.state \
-    --statedir=/data/state \
-    --socket=/var/run/tailscale/tailscaled.sock \
-    --port=41641 \
-    --tun=tailscale0 &
+tailscaled "${TAILSCALED_ARGS[@]}" &
 TAILSCALED_PID=$!
 
 # Đợi socket sẵn sàng (tối đa 15 giây), thoát sớm nếu tailscaled đã chết
 WAIT_COUNT=0
-while [ ! -S /var/run/tailscale/tailscaled.sock ]; do
+while [ ! -S "${SOCK}" ]; do
     if ! kill -0 "${TAILSCALED_PID}" 2>/dev/null; then
         bashio::log.error "tailscaled đã thoát ngay khi khởi động. Xem các dòng log phía trên."
         bashio::log.error "Nếu log báo 'device or resource busy': đang có add-on Tailscale khác giữ card tailscale0. Hãy dừng add-on đó rồi chạy lại."
@@ -70,16 +119,32 @@ UP_ARGS=(
     "--reset"
 )
 
+if bashio::config.has_value 'login_server'; then
+    UP_ARGS+=("--login-server=${LOGIN_SERVER}")
+fi
+
 if ! bashio::var.is_empty "${AUTH_KEY}"; then
     UP_ARGS+=("--authkey=${AUTH_KEY}")
 fi
 
-if bashio::var.true "${EXIT_NODE}"; then
+if bashio::var.true "${EXIT_NODE_ADV}"; then
     UP_ARGS+=("--advertise-exit-node")
+fi
+
+if bashio::var.true "${CONNECTOR}"; then
+    UP_ARGS+=("--advertise-connector")
 fi
 
 if [ -n "${ROUTES_LIST}" ]; then
     UP_ARGS+=("--advertise-routes=${ROUTES_LIST}")
+fi
+
+if [ -n "${TAGS_LIST}" ]; then
+    UP_ARGS+=("--advertise-tags=${TAGS_LIST}")
+fi
+
+if [ -n "${USE_EXIT_NODE}" ]; then
+    UP_ARGS+=("--exit-node=${USE_EXIT_NODE}")
 fi
 
 if bashio::var.true "${ACCEPT_ROUTES}"; then
@@ -102,6 +167,10 @@ if bashio::var.false "${SNAT_ROUTES}"; then
     UP_ARGS+=("--snat-subnet-routes=false")
 fi
 
+if bashio::var.true "${STATEFUL}"; then
+    UP_ARGS+=("--stateful-filtering")
+fi
+
 if ! bashio::var.is_empty "${EXTRA_ARGS}"; then
     # shellcheck disable=SC2206
     UP_ARGS+=(${EXTRA_ARGS})
@@ -109,31 +178,62 @@ fi
 
 # 5. Bật Web UI trên cổng 5252 cho Home Assistant Ingress
 bashio::log.info "Đang kích hoạt giao diện Web UI nội bộ trên cổng 5252..."
-tailscale --socket=/var/run/tailscale/tailscaled.sock set --webclient=true || true
+tailscale --socket="${SOCK}" set --webclient=true || true
 
-# 6. Kết nối Tailscale
-bashio::log.info "Đang áp dụng cấu hình Tailscale Pro: ${UP_ARGS[*]}"
-tailscale --socket=/var/run/tailscale/tailscaled.sock up "${UP_ARGS[@]}" &
+# 6. Kết nối Tailscale (che auth key trong log)
+SAFE_ARGS="${UP_ARGS[*]}"
+if ! bashio::var.is_empty "${AUTH_KEY}"; then
+    SAFE_ARGS="${SAFE_ARGS//"${AUTH_KEY}"/***}"
+fi
+bashio::log.info "Đang áp dụng cấu hình Tailscale Pro: ${SAFE_ARGS}"
+tailscale --socket="${SOCK}" up "${UP_ARGS[@]}" &
+
+# Chia sẻ Home Assistant qua Serve / Funnel (chạy một lần sau khi đã kết nối)
+apply_share() {
+    case "${SHARE_MODE}" in
+        serve|funnel)
+            if [ "${SHARE_MODE}" = "funnel" ] && ! [[ "${SHARE_PORT}" =~ ^(443|8443|10000)$ ]]; then
+                bashio::log.warning "Funnel chỉ hỗ trợ cổng 443, 8443 hoặc 10000 (đang đặt ${SHARE_PORT}). Bỏ qua chia sẻ."
+                return 1
+            fi
+            tailscale --socket="${SOCK}" serve reset >/dev/null 2>&1 || true
+            if tailscale --socket="${SOCK}" "${SHARE_MODE}" --bg --https="${SHARE_PORT}" "http://127.0.0.1:8123"; then
+                bashio::log.info "✅ Đã bật ${SHARE_MODE} cho Home Assistant trên cổng ${SHARE_PORT}."
+            else
+                bashio::log.warning "Không bật được ${SHARE_MODE}. Hãy bật HTTPS Certificates trong Tailscale admin console rồi khởi động lại add-on."
+                return 1
+            fi
+            ;;
+        *)
+            tailscale --socket="${SOCK}" serve reset >/dev/null 2>&1 || true
+            ;;
+    esac
+    return 0
+}
 
 bashio::log.info "✅ Tailscale Pro đã hoạt động và bắt đầu chế độ giám sát sức khỏe đường truyền (Health Monitor)!"
 
 # 7. Vòng lặp kiểm tra sức khỏe đường truyền & tự phục hồi (mỗi 60 giây)
 FAIL_COUNT=0
+SHARE_DONE=0
 while kill -0 "${TAILSCALED_PID}" 2>/dev/null; do
-    # sleep chạy nền + wait để tín hiệu Stop được xử lý ngay
     sleep 60 &
     wait $!
 
-    STATE=$(tailscale --socket=/var/run/tailscale/tailscaled.sock status --json 2>/dev/null | jq -r '.BackendState // "Unknown"')
+    STATE=$(tailscale --socket="${SOCK}" status --json 2>/dev/null | jq -r '.BackendState // "Unknown"')
 
     if [ "${STATE}" == "Running" ]; then
         FAIL_COUNT=0
+        if [ "${SHARE_DONE}" -eq 0 ]; then
+            apply_share || true
+            SHARE_DONE=1
+        fi
     elif [ "${STATE}" == "NeedsLogin" ] || [ "${STATE}" == "Starting" ]; then
         bashio::log.warning "Tailscale đang ở trạng thái '${STATE}'. Vui lòng kiểm tra Auth Key hoặc đăng nhập qua Web UI."
     else
         FAIL_COUNT=$((FAIL_COUNT + 1))
         bashio::log.warning "⚠️ Đường truyền Tailscale không ổn định (Trạng thái: ${STATE} - Lần ${FAIL_COUNT}/3). Đang thử kích hoạt lại..."
-        tailscale --socket=/var/run/tailscale/tailscaled.sock up "${UP_ARGS[@]}" || true
+        tailscale --socket="${SOCK}" up "${UP_ARGS[@]}" || true
 
         if [ "${FAIL_COUNT}" -ge 3 ]; then
             bashio::log.error "❌ Đường truyền bị treo quá 3 lần liên tiếp. Đang thoát để Home Assistant Watchdog khởi động lại mới hoàn toàn!"
