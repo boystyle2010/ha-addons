@@ -1,8 +1,6 @@
-# Changelog
+## 1.104.4-1
 
-## 1.104.4
-
-- Initial release of Tailscale Pro add-on
-- Upstream-synced Tailscale with automatic version tracking
-- Subnet router, exit node and Web UI (Ingress) support
-- Built-in health monitor with automatic recovery
+- Fix: add-on failed to start when another Tailscale add-on held the tailscale0 device
+- Faster and cleaner shutdown
+- Update Alpine base image to 3.23
+- Add AppArmor profile and improved add-on metadata
