@@ -1,0 +1,16 @@
+#include <tunables/global>
+
+profile tailscale_pro flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  capability,
+  file,
+  signal,
+  mount,
+  umount,
+  remount,
+  network,
+
+  deny /proc/sysrq-trigger rwklx,
+  deny /proc/kcore rwklx,
+}
