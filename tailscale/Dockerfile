@@ -5,7 +5,6 @@ FROM tailscale/tailscale:${TAILSCALE_VERSION} AS tailscale-upstream
 
 FROM ${BUILD_FROM}
 
-# Cài đặt gói mạng lõi + ethtool để tự động tối ưu tốc độ UDP GRO trên Pi 5
 RUN apk add --no-cache \
     ca-certificates \
     iptables \
@@ -20,5 +19,9 @@ COPY --from=tailscale-upstream /usr/local/bin/tailscaled /usr/bin/tailscaled
 
 COPY run.sh /
 RUN chmod a+x /run.sh
+
+# Kiểm tra sức khỏe đường truyền mỗi 60 giây cho Home Assistant Watchdog
+HEALTHCHECK --interval=60s --timeout=10s --start-period=45s --retries=3 \
+    CMD tailscale --socket=/var/run/tailscale/tailscaled.sock status --json | jq -e '.BackendState == "Running" or .BackendState == "NeedsLogin"' >/dev/null || exit 1
 
 CMD [ "/run.sh" ]
