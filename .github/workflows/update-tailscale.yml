@@ -27,52 +27,33 @@ jobs:
         id: check
         run: |
           echo "1. Đang lấy phiên bản mới nhất từ Tailscale GitHub API..."
-          RELEASE_JSON=$(curl -sfL https://api.github.com/repos/tailscale/tailscale/releases/latest)
+          LATEST_TAG=$(curl -sfL https://api.github.com/repos/tailscale/tailscale/releases/latest | jq -r '.tag_name')
           
-          LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
           if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
             echo "Không lấy được tag từ GitHub API."
             exit 1
           fi
           
           CLEAN_VER="${LATEST_TAG#v}"
-          CURRENT_VER=$(grep -oP '^version:\s*"\K[^"]+' tailscale/config.yaml || echo "0.0.0")
+          
+          # Sử dụng awk/sed thay vì grep -P để tránh lỗi cú pháp
+          CURRENT_VER=$(grep -m 1 '^version:' tailscale/config.yaml | awk -F'"' '{print $2}' || echo "1.104.1")
           
           echo "📌 Phiên bản hiện tại trên Repo: $CURRENT_VER"
-          echo "📌 Phiên bản mới nhất từ hãng: $CLEAN_VER ($LATEST_TAG)[span_2](start_span)"[span_2](end_span)
+          echo "📌 Phiên bản mới nhất từ hãng: $CLEAN_VER ($LATEST_TAG)"
 
-          CURRENT_BASE=$(grep -oP 'ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || echo "3.20")
+          CURRENT_BASE=$(grep -m 1 'aarch64-base:' tailscale/Dockerfile | awk -F':' '{print $2}' | tr -d '[:space:]' || echo "3.20")
           LATEST_BASE=$(curl -sfL https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name' || echo "$CURRENT_BASE")
           if [[ ! "$LATEST_BASE" =~ ^[0-9]+\.[0-9]+$ ]]; then
             LATEST_BASE="$CURRENT_BASE"
           fi
 
-          if [ "$CLEAN_VER" == "$CURRENT_VER" ] && [ "$LATEST_BASE" == "$CURRENT_BASE" ]; then
-            echo "✅ Add-on đã ở phiên bản mới nhất."
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "🚀 Phát hiện phiên bản mới! Tiến hành cập nhật..."
-          echo "update_needed=true" >> $GITHUB_OUTPUT
-          echo "new_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "new_ver=$CLEAN_VER" >> $GITHUB_OUTPUT
-          echo "new_base=$LATEST_BASE" >> $GITHUB_OUTPUT
-
-      - name: Update Dockerfile and config.yaml
-        if: steps.check.outputs.update_needed == 'true'
-        run: |
-          NEW_TAG="${{ steps.check.outputs.new_tag }}"
-          NEW_VER="${{ steps.check.outputs.new_ver }}"
-          NEW_BASE="${{ steps.check.outputs.new_base }}"
-          
-          echo "🛠️ Đang cập nhật tệp cấu hình lên v${NEW_VER}..."
-          sed -i "s|ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|g" tailscale/Dockerfile
-          sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|g" tailscale/Dockerfile
-          sed -i "s|^version: \".*\"|version: \"${NEW_VER}\"|g" tailscale/config.yaml
+          echo "2. Đang cập nhật trực tiếp phiên bản vào Dockerfile và config.yaml..."
+          sed -i "s|ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${LATEST_BASE}|g" tailscale/Dockerfile
+          sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${LATEST_TAG}|g" tailscale/Dockerfile
+          sed -i "s|^version: \".*\"|version: \"${CLEAN_VER}\"|g" tailscale/config.yaml
 
       - name: Commit and Push Update
-        if: steps.check.outputs.update_needed == 'true'
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "github-actions[bot]"
@@ -81,9 +62,9 @@ jobs:
           git add tailscale/Dockerfile tailscale/config.yaml
           
           if ! git diff --staged --quiet; then
-            git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
+            git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }}"
             git push
             echo "🎉 Đã commit và đẩy phiên bản mới thành công lên GitHub!"
           else
-            echo "✨ Không có thay đổi nào cần commit."
+            echo "✨ Không có thay đổi nào cần commit hoặc phiên bản đã đồng bộ."
           fi
