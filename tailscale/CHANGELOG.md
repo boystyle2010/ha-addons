@@ -1,6 +1,7 @@
-## 1.104.4.1
+## 1.104.4.2
 
-- Fix: add-on failed to start when another Tailscale add-on held the tailscale0 device
-- Faster and cleaner shutdown
-- Update Alpine base image to 3.23
-- Add AppArmor profile and improved add-on metadata
+- New options: login server, app connector, ACL tags, exit node selection, always use DERP, stateful filtering, userspace networking, log upload
+- Share Home Assistant over Tailscale Serve or Funnel
+- Translated option names and descriptions (English and Vietnamese) and expanded documentation
+- The auth key is no longer printed in the add-on log
+
