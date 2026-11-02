@@ -1,6 +1,6 @@
 name: "Tailscale Pro"
 description: "High-stability, upstream-synced Tailscale mesh VPN & Subnet Router with full UI"
-version: "1.104.1"
+version: "1.104.4"
 slug: "tailscale_pro"
 init: false
 arch:
