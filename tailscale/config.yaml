@@ -15,6 +15,7 @@ devices:
   - /dev/net/tun
 ingress: true
 ingress_port: 5252
+watchdog: "tcp://[HOST]:5252"
 panel_icon: mdi:vpn
 panel_title: "Tailscale Pro"
 map:
