@@ -1,6 +1,6 @@
 name: "Tailscale Pro"
 description: "Zero-config mesh VPN, subnet router and exit node with a built-in health monitor"
-version: "1.104.4.4"
+version: "1.104.4.5"
 slug: "tailscale_pro"
 url: "https://github.com/boystyle2010/ha-addons/tree/main/tailscale"
 stage: stable
@@ -31,6 +31,9 @@ map:
   - addons:rw
   - addon_config:rw
 options:
+  auth_key: ""
+  hostname: "hass-pi5-pro"
+  login_server: "https://controlplane.tailscale.com"
   accept_dns: false
   accept_routes: false
   advertise_exit_node: true
@@ -38,38 +41,45 @@ options:
   advertise_routes:
     - "192.168.68.0/24"
   advertise_tags: []
+  exit_node: ""
   always_use_derp: false
+  enable_ssh: false
   log_suppression: true
   log_upload: false
-  login_server: "https://controlplane.tailscale.com"
-  share_homeassistant: "disabled"
-  share_on_port: 443
   snat_subnet_routes: true
   stateful_filtering: false
-  taildrive: {}
+  taildrive:
+    addons: false
+    addon_configs: false
+    backup: false
+    config: false
+    media: false
+    share: false
+    ssl: false
   taildrop: false
   userspace_networking: false
+  share_homeassistant: "disabled"
+  share_on_port: 443
+  extra_args: ""
 schema:
   auth_key: password?
-  hostname: str?
-  accept_dns: bool?
-  accept_routes: bool?
-  advertise_connector: bool?
-  advertise_exit_node: bool?
+  hostname: str
+  login_server: url
+  accept_dns: bool
+  accept_routes: bool
+  advertise_exit_node: bool
+  advertise_connector: bool
   advertise_routes:
     - str
   advertise_tags:
     - "match(^tag:[a-zA-Z][a-zA-Z0-9-]*$)"
-  always_use_derp: bool?
-  enable_ssh: bool?
   exit_node: str?
-  log_suppression: bool?
-  log_upload: bool?
-  login_server: url?
-  share_homeassistant: list(disabled|serve|funnel)?
-  share_on_port: match(^(443|8443|10000)$)?
-  snat_subnet_routes: bool?
-  stateful_filtering: bool?
+  always_use_derp: bool
+  enable_ssh: bool
+  log_suppression: bool
+  log_upload: bool
+  snat_subnet_routes: bool
+  stateful_filtering: bool
   taildrive:
     addons: bool?
     addon_configs: bool?
@@ -78,6 +88,8 @@ schema:
     media: bool?
     share: bool?
     ssl: bool?
-  taildrop: bool?
-  userspace_networking: bool?
+  taildrop: bool
+  userspace_networking: bool
+  share_homeassistant: list(disabled|serve|funnel)
+  share_on_port: match(^(443|8443|10000)$)
   extra_args: str?
