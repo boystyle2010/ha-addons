@@ -1,6 +1,6 @@
 name: "Tailscale Pro"
 description: "Zero-config mesh VPN, subnet router and exit node with a built-in health monitor"
-version: "1.104.4.1"
+version: "1.104.4.2"
 slug: "tailscale_pro"
 url: "https://github.com/boystyle2010/ha-addons/tree/main/tailscale"
 stage: stable
@@ -27,22 +27,43 @@ map:
 options:
   auth_key: ""
   hostname: "hass-pi5-pro"
+  login_server: "https://controlplane.tailscale.com"
+  accept_dns: false
+  accept_routes: false
   advertise_exit_node: true
+  advertise_connector: false
   advertise_routes:
     - "192.168.68.0/24"
-  accept_routes: false
-  accept_dns: false
+  advertise_tags: []
+  exit_node: ""
+  always_use_derp: false
   enable_ssh: false
   snat_subnet_routes: true
+  stateful_filtering: false
+  userspace_networking: false
+  log_upload: false
+  share_homeassistant: "disabled"
+  share_on_port: 443
   extra_args: ""
 schema:
   auth_key: password?
   hostname: str
+  login_server: str
+  accept_dns: bool
+  accept_routes: bool
   advertise_exit_node: bool
+  advertise_connector: bool
   advertise_routes:
     - str
-  accept_routes: bool
-  accept_dns: bool
+  advertise_tags:
+    - str
+  exit_node: str?
+  always_use_derp: bool
   enable_ssh: bool
   snat_subnet_routes: bool
+  stateful_filtering: bool
+  userspace_networking: bool
+  log_upload: bool
+  share_homeassistant: list(disabled|serve|funnel)
+  share_on_port: port
   extra_args: str?
