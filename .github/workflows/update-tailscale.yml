@@ -1,5 +1,3 @@
-name: Auto Update Tailscale Pro
-
 name: Auto Check Tailscale & Alpine Base (Verified)
 
 on:
@@ -26,7 +24,7 @@ jobs:
       - name: Deep Verify Upstream Release (Anti-Broken-Build)
         id: check
         run: |
-          echo "🔍 1. Đang kiểm tra bản phát hành chính thức từ GitHub API..."
+          echo "1. Checking latest release from Tailscale GitHub API..."
           RELEASE_JSON=$(curl -sfL https://api.github.com/repos/tailscale/tailscale/releases/latest)
           
           IS_DRAFT=$(echo "$RELEASE_JSON" | jq -r '.draft')
@@ -34,49 +32,47 @@ jobs:
           LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
           
           if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ] || [ "$IS_DRAFT" == "true" ] || [ "$IS_PRERELEASE" == "true" ]; then
-            echo "⚠️ Bản phát hành chưa hợp lệ hoặc đang ở trạng thái nháp/thử nghiệm. Bỏ qua!"
+            echo "Release is draft or invalid. Skipping."
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           CLEAN_VER="${LATEST_TAG#v}"
-          CURRENT_VER=$(grep -oP 'version:\s*"\K[^"]+' tailscale/config.yaml)
-          echo "📌 Hiện tại: $CURRENT_VER | Mới nhất từ hãng: $CLEAN_VER"
+          CURRENT_VER=$(grep -oP 'version:\s*"\K[^"]+' tailscale/config.yaml || echo "0.0.0")
+          echo "Current: $CURRENT_VER | Latest Upstream: $CLEAN_VER"
 
-          # Kiểm tra thêm phiên bản Alpine Base Image của Home Assistant
-          CURRENT_BASE=$(grep -oP 'ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile)
+          CURRENT_BASE=$(grep -oP 'ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || echo "3.20")
           LATEST_BASE=$(curl -sfL https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name' || echo "$CURRENT_BASE")
           if [[ ! "$LATEST_BASE" =~ ^[0-9]+\.[0-9]+$ ]]; then
             LATEST_BASE="$CURRENT_BASE"
           fi
 
           if [ "$CLEAN_VER" == "$CURRENT_VER" ] && [ "$LATEST_BASE" == "$CURRENT_BASE" ]; then
-            echo "✅ Cả Tailscale và Alpine Base đều đã ở phiên bản mới nhất."
+            echo "Both Tailscale and Alpine Base are up to date."
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "🔍 2. Kiểm tra HTTP 200 OK từ máy chủ gói chính thức của Tailscale (arm64)..."
+          echo "2. Verifying HTTP 200 OK on pkgs.tailscale.com (arm64)..."
           TARBALL_URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_arm64.tgz"
           HTTP_STATUS=$(curl -sL -o /dev/null -w "%{http_code}" -I "$TARBALL_URL")
           if [ "$HTTP_STATUS" != "200" ]; then
-            echo "⏳ Nhà phát triển mới tạo Tag trên GitHub, nhưng file binary arm64 trên máy chủ chưa sẵn sàng (HTTP $HTTP_STATUS). Chờ chu kỳ sau!"
+            echo "Tag exists, but arm64 binary not ready yet (HTTP $HTTP_STATUS). Waiting for next run."
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          echo "✅ Máy chủ Tailscale xác nhận HTTP 200 OK cho bản arm64!"
 
-          echo "🔍 3. Kiểm tra kiến trúc linux/arm64 bên trong Docker Hub Manifest..."
+          echo "3. Verifying linux/arm64 image in Docker Hub Manifest..."
           MANIFEST_JSON=$(docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null || echo "")
           HAS_ARM64=$(echo "$MANIFEST_JSON" | jq -r '.manifests[]? | select(.platform.architecture == "arm64" and .platform.os == "linux") | .digest')
           
           if [ -z "$HAS_ARM64" ]; then
-            echo "⏳ Docker Image cho kiến trúc Raspberry Pi 5 (linux/arm64) chưa được đẩy lên xong. Chờ chu kỳ sau!"
+            echo "Docker image for linux/arm64 not pushed yet. Waiting for next run."
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          echo "✅ Đã xác nhận đầy đủ image linux/arm64 (Digest: $HAS_ARM64)!"
 
+          echo "All checks passed! Ready to update."
           echo "update_needed=true" >> $GITHUB_OUTPUT
           echo "new_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "new_ver=$CLEAN_VER" >> $GITHUB_OUTPUT
@@ -89,20 +85,6 @@ jobs:
           sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${{ steps.check.outputs.new_tag }}|g" tailscale/Dockerfile
           sed -i "s|version: \".*\"|version: \"${{ steps.check.outputs.new_ver }}\"|g" tailscale/config.yaml
 
-      - name: Set up QEMU & Buildx
-        if: steps.check.outputs.update_needed == 'true'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Test Build for Raspberry Pi 5 (aarch64)
-        if: steps.check.outputs.update_needed == 'true'
-        run: |
-          echo "🛠️ Đang chạy thử bản Build trên kiến trúc ARM64 trước khi phát hành..."
-          docker buildx build \
-            --platform linux/arm64 \
-            --build-arg BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${{ steps.check.outputs.new_base }} \
-            --build-arg TAILSCALE_VERSION=${{ steps.check.outputs.new_tag }} \
-            ./tailscale
-
       - name: Commit and Push Update
         if: steps.check.outputs.update_needed == 'true'
         run: |
@@ -110,5 +92,5 @@ jobs:
           git config --local user.name "github-actions[bot]"
           git pull --rebase origin main
           git add tailscale/Dockerfile tailscale/config.yaml
-          git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${LATEST_BASE})"
+          git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
           git push
