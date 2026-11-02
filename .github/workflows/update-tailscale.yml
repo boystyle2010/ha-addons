@@ -26,19 +26,22 @@ jobs:
       - name: Deep Verify Upstream Release (Anti-Broken-Build)
         id: check
         run: |
-          echo "1. Checking latest release from Tailscale GitHub API..."
+          echo "🔍 1. Đang kiểm tra bản phát hành chính thức từ Tailscale GitHub API..."
           RELEASE_JSON=$(curl -sfL https://api.github.com/repos/tailscale/tailscale/releases/latest)
           
+          IS_DRAFT=$(echo "$RELEASE_JSON" | jq -r '.draft')
+          IS_PRERELEASE=$(echo "$RELEASE_JSON" | jq -r '.prerelease')
           LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
-          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
-            echo "Không lấy được tag từ GitHub API."
+          
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ] || [ "$IS_DRAFT" == "true" ] || [ "$IS_PRERELEASE" == "true" ]; then
+            echo "⚠️ Bản phát hành chưa hợp lệ hoặc đang ở trạng thái nháp/thử nghiệm. Bỏ qua!"
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           CLEAN_VER="${LATEST_TAG#v}"
           CURRENT_VER=$(grep -oP '^version:\s*"\K[^"]+' tailscale/config.yaml || echo "0.0.0")
-          echo "Hiện tại trên Repo: $CURRENT_VER | Mới nhất từ hãng: $CLEAN_VER"
+          echo "📌 Hiện tại trên Repo: $CURRENT_VER | Mới nhất từ hãng: $CLEAN_VER"
 
           CURRENT_BASE=$(grep -oP 'ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || echo "3.20")
           LATEST_BASE=$(curl -sfL https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name' || echo "$CURRENT_BASE")
@@ -46,17 +49,23 @@ jobs:
             LATEST_BASE="$CURRENT_BASE"
           fi
 
-          # Dù phiên bản có trùng hay không, ta vẫn cho phép cập nhật nếu cần ép đồng bộ
-          echo "2. Verifying HTTP 200 OK on pkgs.tailscale.com (arm64)..."
-          TARBALL_URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_arm64.tgz"
-          HTTP_STATUS=$(curl -sL -o /dev/null -w "%{http_code}" -I "$TARBALL_URL")
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "Tag tồn tại nhưng file arm64 chưa sẵn sàng (HTTP $HTTP_STATUS). Bỏ qua."
+          if [ "$CLEAN_VER" == "$CURRENT_VER" ] && [ "$LATEST_BASE" == "$CURRENT_BASE" ]; then
+            echo "✅ Cả Tailscale và Alpine Base đều đã ở phiên bản mới nhất."
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "Tất cả kiểm tra đã vượt qua!"
+          echo "🔍 2. Kiểm tra kiến trúc linux/arm64 bên trong Docker Hub Manifest..."
+          MANIFEST_JSON=$(docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null || echo "")
+          HAS_ARM64=$(echo "$MANIFEST_JSON" | jq -r '.manifests[]? | select(.platform.architecture == "arm64" and .platform.os == "linux") | .digest')
+          
+          if [ -z "$HAS_ARM64" ]; then
+            echo "⏳ Docker Image cho kiến trúc Raspberry Pi 5 (linux/arm64) chưa được đẩy lên xong. Chờ chu kỳ sau!"
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "✅ Đã xác nhận đầy đủ image linux/arm64!"
+
           echo "update_needed=true" >> $GITHUB_OUTPUT
           echo "new_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "new_ver=$CLEAN_VER" >> $GITHUB_OUTPUT
@@ -69,7 +78,7 @@ jobs:
           NEW_VER="${{ steps.check.outputs.new_ver }}"
           NEW_BASE="${{ steps.check.outputs.new_base }}"
           
-          echo "Đang cập nhật phiên bản lên v${NEW_VER}..."
+          echo "🛠️ Đang cập nhật phiên bản lên v${NEW_VER} (Base Alpine ${NEW_BASE})..."
           sed -i "s|ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|g" tailscale/Dockerfile
           sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|g" tailscale/Dockerfile
           sed -i "s|^version: \".*\"|version: \"${NEW_VER}\"|g" tailscale/config.yaml
@@ -86,6 +95,7 @@ jobs:
           if ! git diff --staged --quiet; then
             git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
             git push
+            echo "🚀 Đã tự động commit và đẩy phiên bản mới thành công!"
           else
-            echo "Không có thay đổi mới nào để commit."
+            echo "✨ Phiên bản đã đồng bộ sẵn, không có thay đổi mới."
           fi
