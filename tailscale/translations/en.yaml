@@ -1,28 +1,100 @@
+---
 configuration:
   auth_key:
-    name: "Auth Key (tskey-auth-...)"
-    description: "Authentication key from Tailscale Admin Console for headless login (leave blank to log in via Web UI)."
+    name: Auth key
+    description: >-
+      Optional key to sign in automatically. Create one in the Tailscale admin
+      console (reusable keys are recommended). Leave empty to sign in through
+      the Web UI instead.
   hostname:
-    name: "Device Hostname"
-    description: "The machine name shown on your Tailscale Admin Console."
-  advertise_exit_node:
-    name: "Advertise as Exit Node"
-    description: "Allow routing all remote internet traffic through your home network."
-  advertise_routes:
-    name: "Advertise Subnet Routes (LAN)"
-    description: "Local IP subnets to expose to your Tailnet (e.g., 192.168.68.0/24)."
-  accept_routes:
-    name: "Accept Subnet Routes"
-    description: "Accept subnet routes advertised by other nodes on your Tailnet."
+    name: Hostname
+    description: >-
+      The name this device shows in your tailnet.
+  login_server:
+    name: Login server
+    description: >-
+      Control server to use. Keep the default unless you run your own server,
+      for example Headscale.
   accept_dns:
-    name: "Accept MagicDNS"
-    description: "Keep OFF (false) on Home Assistant to prevent local DNS resolution loops or slowdowns."
+    name: Accept DNS
+    description: >-
+      Use the DNS settings of your tailnet (MagicDNS) on this device.
+      Disabled by default in this add-on.
+  accept_routes:
+    name: Accept routes
+    description: >-
+      Accept subnet routes advertised by other devices in your tailnet.
+      Disabled by default.
+  advertise_exit_node:
+    name: Advertise as an exit node
+    description: >-
+      Offer this device as an exit node so other devices can send their
+      internet traffic through your home connection. Approve it in the admin
+      console afterwards.
+  advertise_connector:
+    name: Advertise as an app connector
+    description: >-
+      Let this device act as an app connector. Requires app connectors to be
+      set up in your tailnet policy. Disabled by default.
+  advertise_routes:
+    name: Advertise subnet routes
+    description: >-
+      Local subnets to share with your tailnet, for example 192.168.1.0/24.
+      Approve them in the admin console afterwards.
+  advertise_tags:
+    name: Advertise tags
+    description: >-
+      ACL tags for this device. Each tag must start with tag: and must be
+      allowed in the tagOwners section of your tailnet policy.
+  exit_node:
+    name: Use an exit node
+    description: >-
+      Tailscale IP address of an exit node to route this device's traffic
+      through. Cannot be combined with advertising this device as an exit node.
+  always_use_derp:
+    name: Always use DERP connection
+    description: >-
+      Force all peer traffic through DERP relays and disable direct UDP.
+      Only useful for troubleshooting. Disabled by default.
   enable_ssh:
-    name: "Tailscale SSH"
-    description: "Enable SSH access to the container managed via Tailscale authentication."
+    name: Tailscale SSH
+    description: >-
+      Allow Tailscale SSH access to this device, controlled by your tailnet
+      policy. Disabled by default.
   snat_subnet_routes:
-    name: "SNAT Subnet Routes"
-    description: "Keep ON (true) so LAN devices respond back to the Pi 5 properly without configuring static routes on your Deco router."
+    name: Source NAT subnet routes
+    description: >-
+      Lets devices on your local subnet see traffic coming from this device,
+      which keeps routing simple. Turn it off only for advanced site-to-site
+      setups. Enabled by default.
+  stateful_filtering:
+    name: Stateful packet filtering
+    description: >-
+      On exit nodes and subnet routers, only allow return packets for
+      connections that were started from inside. Disabled by default.
+  userspace_networking:
+    name: Userspace networking mode
+    description: >-
+      Do not create the tailscale0 network interface. Tailnet devices can reach
+      Home Assistant, but this device cannot start connections into the
+      tailnet. Disabled by default.
+  log_upload:
+    name: Log upload
+    description: >-
+      Upload client logs to log.tailscale.com. Enable it only if your tailnet
+      policy requires it. Disabled by default.
+  share_homeassistant:
+    name: Share Home Assistant with Serve or Funnel
+    description: >-
+      serve shares Home Assistant with devices in your tailnet over HTTPS.
+      funnel shares it with the public internet. Requires HTTPS certificates to
+      be enabled in the admin console. See the Documentation tab.
+  share_on_port:
+    name: Share on port
+    description: >-
+      HTTPS port used by Serve or Funnel. Funnel only supports 443, 8443 and
+      10000.
   extra_args:
-    name: "Extra CLI Flags"
-    description: "Additional optional flags passed to 'tailscale up' (e.g., --stateful-filtering=false)."
+    name: Extra arguments
+    description: >-
+      Additional arguments passed to tailscale up. For advanced use only.
