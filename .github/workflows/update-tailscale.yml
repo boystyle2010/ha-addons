@@ -21,80 +21,320 @@ concurrency:
 jobs:
   update-tailscale:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Deep Verify Upstream Release (Anti-Broken-Build)
+      # ------------------------------------------------------------------
+      # Tự tạo các file còn thiếu (không bao giờ ghi đè file đã có)
+      # ------------------------------------------------------------------
+      - name: Bootstrap missing add-on files
+        run: |
+          D="tailscale"
+          VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' $D/config.yaml || echo "1.0.0")
+
+          if [ ! -f "$D/CHANGELOG.md" ]; then
+            echo "📝 Tạo CHANGELOG.md"
+            cat > "$D/CHANGELOG.md" <<EOF
+          # Changelog
+
+          ## ${VER}
+
+          - Initial release of Tailscale Pro add-on
+          - Upstream-synced Tailscale with automatic version tracking
+          - Subnet router, exit node and Web UI (Ingress) support
+          - Built-in health monitor with automatic recovery
+          EOF
+          fi
+
+          if [ ! -f "$D/README.md" ]; then
+            echo "📝 Tạo README.md"
+            cat > "$D/README.md" <<'EOF'
+          # Home Assistant App: Tailscale Pro
+
+          High-stability, upstream-synced Tailscale mesh VPN and Subnet Router for Home Assistant, tuned for Raspberry Pi 5.
+
+          ## Features
+
+          - Always up to date: a bot checks for new official Tailscale releases and updates this add-on automatically
+          - Subnet router and exit node support
+          - Web UI integrated in the Home Assistant sidebar (Ingress)
+          - Built-in health monitor: restarts the connection automatically if it becomes unstable
+          - UDP GRO forwarding optimization for better throughput
+          - Persistent state, so you do not need to log in again after a restart
+          - Supports aarch64 and amd64
+
+          ## Installation
+
+          1. Add this repository to the Home Assistant Add-on Store
+          2. Install **Tailscale Pro**
+          3. Fill in the configuration (see the Documentation tab)
+          4. Start the add-on
+
+          See the **Documentation** tab for full setup instructions.
+          EOF
+          fi
+
+          if [ ! -f "$D/DOCS.md" ]; then
+            echo "📝 Tạo DOCS.md"
+            cat > "$D/DOCS.md" <<'EOF'
+          # Home Assistant App: Tailscale Pro
+
+          ## Quick start
+
+          1. Create an auth key at https://login.tailscale.com/admin/settings/keys
+             (reusable keys are recommended)
+          2. Paste it into the **auth_key** option and start the add-on
+          3. Open the **Tailscale Pro** panel in the sidebar to check the status
+          4. If you use subnet routes or an exit node, approve them in the Tailscale
+             admin console (Machines -> your device -> Edit route settings)
+
+          You can also leave **auth_key** empty and log in through the Web UI instead.
+
+          ## Configuration
+
+          - **auth_key**: Tailscale auth key used to log in automatically. Optional
+          - **hostname**: Name of this device in your tailnet
+          - **advertise_exit_node**: Offer this device as an exit node
+          - **advertise_routes**: List of subnets to share with your tailnet
+            (for example `192.168.1.0/24`)
+          - **accept_routes**: Accept subnet routes advertised by other devices
+          - **accept_dns**: Use Tailscale DNS settings (MagicDNS) on this device
+          - **enable_ssh**: Enable Tailscale SSH
+          - **snat_subnet_routes**: Source NAT for subnet routes. Keep it enabled
+            unless you know you need it off
+          - **extra_args**: Extra arguments passed to `tailscale up`. Optional
+
+          ## Health monitor
+
+          The add-on checks the connection state every 60 seconds:
+
+          - **Running**: everything is fine
+          - **NeedsLogin / Starting**: a warning is logged, check your auth key or log in via the Web UI
+          - Any other state: the add-on tries to reconnect. After 3 failed attempts in a row
+            it exits so the Home Assistant Watchdog can restart it cleanly
+
+          ## Automatic updates
+
+          A GitHub Actions bot checks for new official Tailscale releases every 6 hours.
+          It only updates when the release is stable, fully published, and passes all verification checks.
+          Every update is recorded in the Changelog tab.
+
+          ## Troubleshooting
+
+          - **Cannot log in**: check the auth key has not expired or been revoked
+          - **Subnet not reachable**: make sure the routes are approved in the admin console
+          - **Add-on keeps restarting**: open the Log tab, the health monitor explains the reason
+          - **Exit node not shown**: approve it in the admin console first
+
+          ## Support
+
+          Please open an issue in the GitHub repository.
+          EOF
+          fi
+
+          if [ ! -f "$D/icon.png" ] || [ ! -f "$D/logo.png" ]; then
+            echo "🎨 Tạo icon.png / logo.png"
+            python3 -c "import PIL" 2>/dev/null || pip install --quiet pillow || pip install --quiet --break-system-packages pillow
+            ICON_OUT="$D/icon.png" LOGO_OUT="$D/logo.png" python3 - <<'PY'
+          import os
+          from PIL import Image, ImageDraw, ImageFont
+
+          def make_icon(size):
+              S = size * 4
+              grad = Image.new("RGBA", (S, S))
+              px = grad.load()
+              c1, c2 = (30, 58, 138), (59, 130, 246)
+              for y in range(S):
+                  t = y / (S - 1)
+                  col = tuple(int(c1[i] + (c2[i] - c1[i]) * t) for i in range(3)) + (255,)
+                  for x in range(S):
+                      px[x, y] = col
+              mask = Image.new("L", (S, S), 0)
+              ImageDraw.Draw(mask).rounded_rectangle((0, 0, S - 1, S - 1), radius=int(S * 0.22), fill=255)
+              img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+              img.paste(grad, (0, 0), mask)
+
+              d = ImageDraw.Draw(img)
+              pts = [(0.5, 0.26), (0.26, 0.68), (0.74, 0.68)]
+              pts = [(int(x * S), int(y * S)) for x, y in pts]
+              center = (int(0.5 * S), int(0.52 * S))
+              w = max(2, int(S * 0.035))
+              white = (255, 255, 255, 255)
+              for i in range(3):
+                  d.line([pts[i], pts[(i + 1) % 3]], fill=white, width=w)
+                  d.line([pts[i], center], fill=(255, 255, 255, 190), width=w)
+              r = int(S * 0.085)
+              for p in pts:
+                  d.ellipse((p[0] - r, p[1] - r, p[0] + r, p[1] + r), fill=white)
+              rc = int(S * 0.065)
+              d.ellipse((center[0] - rc, center[1] - rc, center[0] + rc, center[1] + rc), fill=white)
+              return img.resize((size, size), Image.LANCZOS)
+
+          def find_font(px):
+              for path in (
+                  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                  "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+              ):
+                  if os.path.exists(path):
+                      return ImageFont.truetype(path, px)
+              return ImageFont.load_default()
+
+          make_icon(128).save(os.environ["ICON_OUT"])
+
+          W, H = 1000, 400
+          logo = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+          ic = make_icon(300)
+          logo.paste(ic, (20, (H - 300) // 2), ic)
+          text = "Tailscale Pro"
+          fs = 90
+          font = find_font(fs)
+          while fs > 20:
+              font = find_font(fs)
+              box = ImageDraw.Draw(logo).textbbox((0, 0), text, font=font)
+              if box[2] - box[0] <= W - 360 - 20:
+                  break
+              fs -= 4
+          d = ImageDraw.Draw(logo)
+          box = d.textbbox((0, 0), text, font=font)
+          ty = (H - (box[3] - box[1])) // 2 - box[1]
+          d.text((350, ty), text, font=font, fill=(91, 141, 239, 255))
+          logo.resize((250, 100), Image.LANCZOS).save(os.environ["LOGO_OUT"])
+          PY
+          fi
+
+      # ------------------------------------------------------------------
+      # Kiểm tra nguồn gốc nhiều tầng
+      # ------------------------------------------------------------------
+      - name: Multi-layer upstream verification
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "🔍 1. Đang kiểm tra bản phát hành chính thức từ Tailscale GitHub API..."
-          RELEASE_JSON=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/tailscale/tailscale/releases/latest || echo "")
+          set -uo pipefail
 
-          if [ -z "$RELEASE_JSON" ]; then
-            echo "⚠️ Không gọi được GitHub API. Bỏ qua chu kỳ này!"
-            echo "update_needed=false" >> $GITHUB_OUTPUT
+          skip() {
+            echo "⏭️ $1"
+            echo "update_needed=false" >> "$GITHUB_OUTPUT"
+            echo "- ⏭️ $1" >> "$GITHUB_STEP_SUMMARY"
             exit 0
-          fi
+          }
+          fail() {
+            echo "❌ $1"
+            echo "- ❌ $1" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          pass() {
+            echo "✅ $1"
+            echo "- ✅ $1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          retry() {
+            for i in 1 2 3; do
+              "$@" && return 0
+              sleep $((i * 5))
+            done
+            return 1
+          }
+          http_ok() {
+            [ "$(curl -s -o /dev/null -L -I -w '%{http_code}' --max-time 30 "$1")" = "200" ]
+          }
+          base_ok() {
+            docker manifest inspect "ghcr.io/home-assistant/$1-base:$2" >/dev/null 2>&1
+          }
+          newer_or_equal() {
+            [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+          }
+
+          echo "### 🔍 Kết quả kiểm tra" >> "$GITHUB_STEP_SUMMARY"
+
+          # ---- Đọc phiên bản hiện tại ----
+          CURRENT_VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' tailscale/config.yaml || true)
+          CURRENT_BASE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || true)
+          [ -n "$CURRENT_VER" ]  || fail "Không đọc được version trong config.yaml"
+          [ -n "$CURRENT_BASE" ] || fail "Không đọc được BUILD_FROM trong Dockerfile"
+          echo "📌 Hiện tại: Tailscale $CURRENT_VER | Base $CURRENT_BASE"
+
+          # ---- Lớp 1: Release hợp lệ ----
+          RELEASE_JSON=$(retry curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/tailscale/tailscale/releases/latest) \
+            || skip "Không gọi được GitHub API, thử lại chu kỳ sau"
 
           IS_DRAFT=$(echo "$RELEASE_JSON" | jq -r '.draft')
           IS_PRERELEASE=$(echo "$RELEASE_JSON" | jq -r '.prerelease')
-          LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
+          LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name // empty')
 
-          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ] || [ "$IS_DRAFT" == "true" ] || [ "$IS_PRERELEASE" == "true" ]; then
-            echo "⚠️ Bản phát hành chưa hợp lệ hoặc đang ở trạng thái nháp/thử nghiệm. Bỏ qua!"
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
+          [ -n "$LATEST_TAG" ] || skip "Release không có tag"
+          [ "$IS_DRAFT" = "false" ] || skip "Release $LATEST_TAG đang là draft"
+          [ "$IS_PRERELEASE" = "false" ] || skip "Release $LATEST_TAG là pre-release"
+          [[ "$LATEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || skip "Tag '$LATEST_TAG' không phải dạng vX.Y.Z ổn định"
           CLEAN_VER="${LATEST_TAG#v}"
-          CURRENT_VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' tailscale/config.yaml || echo "0.0.0")
-          echo "📌 Hiện tại trên Repo: $CURRENT_VER | Mới nhất từ hãng: $CLEAN_VER"
+          pass "Lớp 1: release $LATEST_TAG hợp lệ (không draft, không pre-release)"
 
-          CURRENT_BASE=$(grep -oP 'ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || echo "3.20")
+          # ---- Lớp 2: Tag tồn tại thật trong repo gốc ----
+          retry git ls-remote --exit-code --tags https://github.com/tailscale/tailscale.git "refs/tags/${LATEST_TAG}" >/dev/null 2>&1 \
+            || skip "Tag $LATEST_TAG chưa tồn tại trong repo gốc"
+          pass "Lớp 2: tag $LATEST_TAG tồn tại trong repo gốc"
+
+          # ---- Lớp 3: Chống hạ cấp ----
+          newer_or_equal "$CLEAN_VER" "$CURRENT_VER" \
+            || skip "Bản mới nhất ($CLEAN_VER) thấp hơn bản hiện tại ($CURRENT_VER), không hạ cấp"
+          pass "Lớp 3: không hạ cấp ($CURRENT_VER -> $CLEAN_VER)"
+
+          # ---- Alpine base: chỉ nâng khi image tồn tại đủ 2 kiến trúc ----
           LATEST_BASE=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name' || echo "$CURRENT_BASE")
-          if [[ ! "$LATEST_BASE" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name // empty' || true)
+          if [[ ! "${LATEST_BASE:-}" =~ ^[0-9]+\.[0-9]+$ ]]; then
             LATEST_BASE="$CURRENT_BASE"
           fi
-
-          # Chỉ nâng base nếu image thật sự tồn tại trên ghcr.io
           if [ "$LATEST_BASE" != "$CURRENT_BASE" ]; then
-            if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_BASE}" >/dev/null 2>&1; then
-              echo "⚠️ Base image ${LATEST_BASE} chưa tồn tại, giữ nguyên ${CURRENT_BASE}."
+            if ! newer_or_equal "$LATEST_BASE" "$CURRENT_BASE"; then
+              echo "⚠️ Base $LATEST_BASE thấp hơn $CURRENT_BASE, giữ nguyên"
               LATEST_BASE="$CURRENT_BASE"
+            elif ! (base_ok aarch64 "$LATEST_BASE" && base_ok amd64 "$LATEST_BASE"); then
+              echo "⚠️ Base $LATEST_BASE chưa có đủ image aarch64/amd64, giữ nguyên $CURRENT_BASE"
+              LATEST_BASE="$CURRENT_BASE"
+            else
+              pass "Base Alpine $LATEST_BASE có đủ image aarch64 + amd64"
             fi
           fi
 
-          if [ "$CLEAN_VER" == "$CURRENT_VER" ] && [ "$LATEST_BASE" == "$CURRENT_BASE" ]; then
-            echo "✅ Cả Tailscale và Alpine Base đều đã ở phiên bản mới nhất."
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            exit 0
+          if [ "$CLEAN_VER" = "$CURRENT_VER" ] && [ "$LATEST_BASE" = "$CURRENT_BASE" ]; then
+            skip "Tailscale $CURRENT_VER và base $CURRENT_BASE đều đã mới nhất"
           fi
 
-          echo "🔍 2. Kiểm tra kiến trúc linux/arm64 bên trong Docker Hub Manifest..."
-          MANIFEST_JSON=$(docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null || echo "")
-          HAS_ARM64=$(echo "$MANIFEST_JSON" | jq -r '.manifests[]? | select(.platform.architecture == "arm64" and .platform.os == "linux") | .digest')
+          if [ "$CLEAN_VER" != "$CURRENT_VER" ]; then
+            # ---- Lớp 4: File gốc đã tải lên xong ----
+            for ARCH in arm64 amd64; do
+              URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_${ARCH}.tgz"
+              retry http_ok "$URL" || skip "File gốc ${ARCH} chưa sẵn sàng: $URL"
+            done
+            pass "Lớp 4: tarball gốc arm64 + amd64 đã có trên pkgs.tailscale.com"
 
-          if [ -z "$HAS_ARM64" ]; then
-            echo "⏳ Docker Image cho Raspberry Pi 5 (linux/arm64) chưa được đẩy lên xong. Chờ chu kỳ sau!"
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            exit 0
+            # ---- Lớp 5: Docker image đủ kiến trúc ----
+            MANIFEST_JSON=$(retry docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null) \
+              || skip "Chưa có manifest Docker cho tailscale/tailscale:${LATEST_TAG}"
+            for ARCH in arm64 amd64; do
+              DGST=$(echo "$MANIFEST_JSON" | jq -r --arg a "$ARCH" '.manifests[]? | select(.platform.architecture == $a and .platform.os == "linux") | .digest' | head -n1)
+              [ -n "$DGST" ] || skip "Docker image chưa có kiến trúc linux/${ARCH}"
+            done
+            pass "Lớp 5: Docker image có đủ linux/arm64 + linux/amd64"
           fi
-          echo "✅ Đã xác nhận đầy đủ image linux/arm64!"
 
-          echo "update_needed=true" >> $GITHUB_OUTPUT
-          echo "new_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
-          echo "new_ver=$CLEAN_VER" >> $GITHUB_OUTPUT
-          echo "new_base=$LATEST_BASE" >> $GITHUB_OUTPUT
-          echo "old_ver=$CURRENT_VER" >> $GITHUB_OUTPUT
-          echo "old_base=$CURRENT_BASE" >> $GITHUB_OUTPUT
+          {
+            echo "update_needed=true"
+            echo "new_tag=$LATEST_TAG"
+            echo "new_ver=$CLEAN_VER"
+            echo "new_base=$LATEST_BASE"
+            echo "old_ver=$CURRENT_VER"
+            echo "old_base=$CURRENT_BASE"
+          } >> "$GITHUB_OUTPUT"
 
+      # ------------------------------------------------------------------
+      # Cập nhật file
+      # ------------------------------------------------------------------
       - name: Update Dockerfile and config.yaml
         if: steps.check.outputs.update_needed == 'true'
         run: |
@@ -107,9 +347,60 @@ jobs:
           sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
           sed -i "s|^version:.*|version: \"${NEW_VER}\"|" tailscale/config.yaml
 
-          echo "📄 Kết quả thay đổi:"
           git diff --stat
 
+      # ------------------------------------------------------------------
+      # Lớp 6: Kiểm tra file sau khi sửa (sẵn sàng để build)
+      # ------------------------------------------------------------------
+      - name: Validate edited files
+        if: steps.check.outputs.update_needed == 'true'
+        env:
+          NEW_TAG: ${{ steps.check.outputs.new_tag }}
+          NEW_VER: ${{ steps.check.outputs.new_ver }}
+          NEW_BASE: ${{ steps.check.outputs.new_base }}
+        run: |
+          set -euo pipefail
+
+          grep -qx "ARG TAILSCALE_VERSION=${NEW_TAG}" tailscale/Dockerfile
+          grep -qx "ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}" tailscale/Dockerfile
+          grep -qx "version: \"${NEW_VER}\"" tailscale/config.yaml
+          echo "✅ Giá trị trong Dockerfile/config.yaml đúng"
+
+          grep -q '^FROM tailscale/tailscale:${TAILSCALE_VERSION}' tailscale/Dockerfile
+          grep -q '^FROM ${BUILD_FROM}' tailscale/Dockerfile
+          echo "✅ Dockerfile còn nguyên cấu trúc FROM"
+
+          # Mọi file được COPY từ thư mục build phải tồn tại
+          for f in $(grep -E '^COPY ' tailscale/Dockerfile | grep -v -- '--from' | awk '{print $2}'); do
+            [ -e "tailscale/$f" ] || { echo "❌ Dockerfile COPY $f nhưng file không tồn tại"; exit 1; }
+          done
+          echo "✅ Các file COPY đều tồn tại"
+
+          CHANGED=$(git diff --name-only | sort | tr '\n' ' ')
+          [ "$CHANGED" = "tailscale/Dockerfile tailscale/config.yaml " ] \
+            || { echo "❌ Có file lạ bị đổi: $CHANGED"; exit 1; }
+          echo "✅ Chỉ có Dockerfile và config.yaml bị thay đổi"
+
+          bash -n tailscale/run.sh
+          echo "✅ run.sh không lỗi cú pháp"
+
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml || pip install --quiet --break-system-packages pyyaml
+          python3 - <<'PY'
+          import os, yaml
+          c = yaml.safe_load(open("tailscale/config.yaml"))
+          assert str(c["version"]) == os.environ["NEW_VER"], "version không khớp"
+          for k in ("name", "slug", "arch", "options", "schema"):
+              assert k in c, f"thiếu khóa {k}"
+          extra = set(c["options"]) - set(c["schema"])
+          assert not extra, f"options không có trong schema: {extra}"
+          print("✅ config.yaml hợp lệ, options khớp schema")
+          PY
+
+          echo "- ✅ Lớp 6: file hợp lệ, sẵn sàng build" >> "$GITHUB_STEP_SUMMARY"
+
+      # ------------------------------------------------------------------
+      # Changelog
+      # ------------------------------------------------------------------
       - name: Generate Changelog
         if: steps.check.outputs.update_needed == 'true'
         env:
@@ -148,22 +439,52 @@ jobs:
           { printf "# Changelog\n\n"; cat /tmp/entry.md /tmp/existing.md; } > /tmp/new.md
           mv /tmp/new.md "$FILE"
 
-          echo "📝 Đã ghi changelog:"
           head -n 12 "$FILE"
 
-      - name: Commit and Push Update
-        if: steps.check.outputs.update_needed == 'true'
+      # ------------------------------------------------------------------
+      # Lớp 7: Commit + push có retry
+      # ------------------------------------------------------------------
+      - name: Commit and Push
+        env:
+          UPDATE_NEEDED: ${{ steps.check.outputs.update_needed }}
+          NEW_VER: ${{ steps.check.outputs.new_ver }}
+          NEW_BASE: ${{ steps.check.outputs.new_base }}
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add tailscale/Dockerfile tailscale/config.yaml tailscale/CHANGELOG.md
+          git add tailscale/
 
           if git diff --staged --quiet; then
-            echo "❌ Không có file nào thay đổi dù cần cập nhật, kiểm tra lại pattern sed!"
-            exit 1
+            if [ "$UPDATE_NEEDED" == "true" ]; then
+              echo "❌ Không có file nào thay đổi dù cần cập nhật, kiểm tra lại pattern sed!"
+              exit 1
+            fi
+            echo "✨ Không có gì cần commit."
+            exit 0
           fi
 
-          git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
-          git pull --rebase origin main
-          git push
-          echo "🚀 Đã tự động commit và đẩy phiên bản mới thành công!"
+          if [ "$UPDATE_NEEDED" == "true" ]; then
+            MSG="chore(tailscale): update to v${NEW_VER} (base ${NEW_BASE})"
+          else
+            MSG="chore(tailscale): add missing add-on files (icon, logo, docs)"
+          fi
+
+          git commit -m "$MSG"
+
+          OK=0
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push; then
+              OK=1
+              break
+            fi
+            echo "⚠️ Push lần $i thất bại, thử lại..."
+            git rebase --abort 2>/dev/null || true
+            sleep $((i * 10))
+          done
+          [ "$OK" = "1" ] || { echo "❌ Push thất bại sau 3 lần"; exit 1; }
+
+          git fetch origin main
+          [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
+            || { echo "❌ Sau push, main trên GitHub không khớp bản local"; exit 1; }
+
+          echo "🚀 Đã commit và xác nhận push thành công: $MSG"
