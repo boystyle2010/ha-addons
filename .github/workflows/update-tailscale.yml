@@ -17,8 +17,6 @@ permissions:
 jobs:
   update-tailscale:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Cấp quyền ghi trực tiếp cho GITHUB_TOKEN
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,19 +29,16 @@ jobs:
           echo "1. Checking latest release from Tailscale GitHub API..."
           RELEASE_JSON=$(curl -sfL https://api.github.com/repos/tailscale/tailscale/releases/latest)
           
-          IS_DRAFT=$(echo "$RELEASE_JSON" | jq -r '.draft')
-          IS_PRERELEASE=$(echo "$RELEASE_JSON" | jq -r '.prerelease')
           LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
-          
-          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ] || [ "$IS_DRAFT" == "true" ] || [ "$IS_PRERELEASE" == "true" ]; then
-            echo "Release is draft or invalid. Skipping."
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
+            echo "Không lấy được tag từ GitHub API."
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
           CLEAN_VER="${LATEST_TAG#v}"
-          CURRENT_VER=$(grep -oP 'version:\s*"\K[^"]+' tailscale/config.yaml || echo "0.0.0")
-          echo "Current: $CURRENT_VER | Latest Upstream: $CLEAN_VER"
+          CURRENT_VER=$(grep -oP '^version:\s*"\K[^"]+' tailscale/config.yaml || echo "0.0.0")
+          echo "Hiện tại trên Repo: $CURRENT_VER | Mới nhất từ hãng: $CLEAN_VER"
 
           CURRENT_BASE=$(grep -oP 'ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || echo "3.20")
           LATEST_BASE=$(curl -sfL https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name' || echo "$CURRENT_BASE")
@@ -51,32 +46,17 @@ jobs:
             LATEST_BASE="$CURRENT_BASE"
           fi
 
-          if [ "$CLEAN_VER" == "$CURRENT_VER" ] && [ "$LATEST_BASE" == "$CURRENT_BASE" ]; then
-            echo "Both Tailscale and Alpine Base are up to date."
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
+          # Dù phiên bản có trùng hay không, ta vẫn cho phép cập nhật nếu cần ép đồng bộ
           echo "2. Verifying HTTP 200 OK on pkgs.tailscale.com (arm64)..."
           TARBALL_URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_arm64.tgz"
           HTTP_STATUS=$(curl -sL -o /dev/null -w "%{http_code}" -I "$TARBALL_URL")
           if [ "$HTTP_STATUS" != "200" ]; then
-            echo "Tag exists, but arm64 binary not ready yet (HTTP $HTTP_STATUS). Waiting for next run."
+            echo "Tag tồn tại nhưng file arm64 chưa sẵn sàng (HTTP $HTTP_STATUS). Bỏ qua."
             echo "update_needed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "3. Verifying linux/arm64 image in Docker Hub Manifest..."
-          MANIFEST_JSON=$(docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null || echo "")
-          HAS_ARM64=$(echo "$MANIFEST_JSON" | jq -r '.manifests[]? | select(.platform.architecture == "arm64" and .platform.os == "linux") | .digest')
-          
-          if [ -z "$HAS_ARM64" ]; then
-            echo "Docker image for linux/arm64 not pushed yet. Waiting for next run."
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "All checks passed! Ready to update."
+          echo "Tất cả kiểm tra đã vượt qua!"
           echo "update_needed=true" >> $GITHUB_OUTPUT
           echo "new_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "new_ver=$CLEAN_VER" >> $GITHUB_OUTPUT
@@ -85,9 +65,14 @@ jobs:
       - name: Update Dockerfile and config.yaml
         if: steps.check.outputs.update_needed == 'true'
         run: |
-          sed -i "s|ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${{ steps.check.outputs.new_base }}|g" tailscale/Dockerfile
-          sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${{ steps.check.outputs.new_tag }}|g" tailscale/Dockerfile
-          sed -i "s|version: \".*\"|version: \"${{ steps.check.outputs.new_ver }}\"|g" tailscale/config.yaml
+          NEW_TAG="${{ steps.check.outputs.new_tag }}"
+          NEW_VER="${{ steps.check.outputs.new_ver }}"
+          NEW_BASE="${{ steps.check.outputs.new_base }}"
+          
+          echo "Đang cập nhật phiên bản lên v${NEW_VER}..."
+          sed -i "s|ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|g" tailscale/Dockerfile
+          sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|g" tailscale/Dockerfile
+          sed -i "s|^version: \".*\"|version: \"${NEW_VER}\"|g" tailscale/config.yaml
 
       - name: Commit and Push Update
         if: steps.check.outputs.update_needed == 'true'
@@ -102,5 +87,5 @@ jobs:
             git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
             git push
           else
-            echo "Không có thay đổi nào mới cần commit."
+            echo "Không có thay đổi mới nào để commit."
           fi
