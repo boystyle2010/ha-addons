@@ -22,13 +22,18 @@ if [ -n "${NETDEV}" ]; then
     ethtool -K "${NETDEV}" rx-udp-gro-forwarding on rx-gro-list off 2>/dev/null || true
 fi
 
-# 3. Khởi tạo thư mục lưu trữ trạng thái bền vững trên NVMe
+# 3. Khởi tạo thư mục lưu trữ trạng thái bền vững
 mkdir -p /data/state /var/run/tailscale
+
+TAILSCALED_PID=""
 
 # Bắt tín hiệu tắt từ Home Assistant để đóng kết nối an toàn
 cleanup() {
     bashio::log.info "Đang dừng tiến trình Tailscale Pro an toàn..."
-    kill -TERM "${TAILSCALED_PID}" 2>/dev/null || true
+    if [ -n "${TAILSCALED_PID}" ]; then
+        kill -TERM "${TAILSCALED_PID}" 2>/dev/null || true
+        wait "${TAILSCALED_PID}" 2>/dev/null || true
+    fi
     exit 0
 }
 trap cleanup SIGTERM SIGINT
@@ -36,18 +41,25 @@ trap cleanup SIGTERM SIGINT
 bashio::log.info "Đang khởi chạy tiến trình nền tailscaled..."
 tailscaled \
     --state=/data/state/tailscaled.state \
+    --statedir=/data/state \
     --socket=/var/run/tailscale/tailscaled.sock \
     --port=41641 \
     --tun=tailscale0 &
 TAILSCALED_PID=$!
 
-# Đợi socket sẵn sàng (Tối đa 15 giây)
+# Đợi socket sẵn sàng (tối đa 15 giây), thoát sớm nếu tailscaled đã chết
 WAIT_COUNT=0
 while [ ! -S /var/run/tailscale/tailscaled.sock ]; do
+    if ! kill -0 "${TAILSCALED_PID}" 2>/dev/null; then
+        bashio::log.error "tailscaled đã thoát ngay khi khởi động. Xem các dòng log phía trên."
+        bashio::log.error "Nếu log báo 'device or resource busy': đang có add-on Tailscale khác giữ card tailscale0. Hãy dừng add-on đó rồi chạy lại."
+        exit 1
+    fi
     sleep 1
     WAIT_COUNT=$((WAIT_COUNT + 1))
     if [ "${WAIT_COUNT}" -ge 15 ]; then
         bashio::log.error "Không thể khởi tạo socket tailscaled! Đang thoát để Watchdog khởi động lại..."
+        kill -TERM "${TAILSCALED_PID}" 2>/dev/null || true
         exit 1
     fi
 done
@@ -105,25 +117,26 @@ tailscale --socket=/var/run/tailscale/tailscaled.sock up "${UP_ARGS[@]}" &
 
 bashio::log.info "✅ Tailscale Pro đã hoạt động và bắt đầu chế độ giám sát sức khỏe đường truyền (Health Monitor)!"
 
-# 7. Vòng lặp kiểm tra sức khỏe đường truyền & Tự phục hồi (Mỗi 60 giây)
+# 7. Vòng lặp kiểm tra sức khỏe đường truyền & tự phục hồi (mỗi 60 giây)
 FAIL_COUNT=0
 while kill -0 "${TAILSCALED_PID}" 2>/dev/null; do
-    sleep 60
-    
-    # Kiểm tra trạng thái BackendState
+    # sleep chạy nền + wait để tín hiệu Stop được xử lý ngay
+    sleep 60 &
+    wait $!
+
     STATE=$(tailscale --socket=/var/run/tailscale/tailscaled.sock status --json 2>/dev/null | jq -r '.BackendState // "Unknown"')
-    
+
     if [ "${STATE}" == "Running" ]; then
         FAIL_COUNT=0
     elif [ "${STATE}" == "NeedsLogin" ] || [ "${STATE}" == "Starting" ]; then
         bashio::log.warning "Tailscale đang ở trạng thái '${STATE}'. Vui lòng kiểm tra Auth Key hoặc đăng nhập qua Web UI."
     else
         FAIL_COUNT=$((FAIL_COUNT + 1))
-        bashio::log.warning "⚠️ Phát hiện đường truyền Tailscale không ổn định (Trạng thái: ${STATE} - Lần ${FAIL_COUNT}/3). Đang thử kích hoạt lại..."
+        bashio::log.warning "⚠️ Đường truyền Tailscale không ổn định (Trạng thái: ${STATE} - Lần ${FAIL_COUNT}/3). Đang thử kích hoạt lại..."
         tailscale --socket=/var/run/tailscale/tailscaled.sock up "${UP_ARGS[@]}" || true
-        
+
         if [ "${FAIL_COUNT}" -ge 3 ]; then
-            bashio::log.error "❌ Đường truyền bị treo quá 3 lần liên tiếp. Đang thoát container để Home Assistant Watchdog khởi động lại mới hoàn toàn!"
+            bashio::log.error "❌ Đường truyền bị treo quá 3 lần liên tiếp. Đang thoát để Home Assistant Watchdog khởi động lại mới hoàn toàn!"
             kill -TERM "${TAILSCALED_PID}" 2>/dev/null || true
             exit 1
         fi
