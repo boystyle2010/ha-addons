@@ -97,5 +97,11 @@ jobs:
           git reset --hard HEAD
           git pull --rebase origin main
           git add tailscale/Dockerfile tailscale/config.yaml
-          git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
-          git push
+          
+          # Chỉ tiến hành commit và push nếu thực sự có nội dung thay đổi
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
+            git push
+          else
+            echo "Không có thay đổi nào mới cần commit."
+          fi
