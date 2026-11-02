@@ -92,6 +92,8 @@ jobs:
           echo "new_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "new_ver=$CLEAN_VER" >> $GITHUB_OUTPUT
           echo "new_base=$LATEST_BASE" >> $GITHUB_OUTPUT
+          echo "old_ver=$CURRENT_VER" >> $GITHUB_OUTPUT
+          echo "old_base=$CURRENT_BASE" >> $GITHUB_OUTPUT
 
       - name: Update Dockerfile and config.yaml
         if: steps.check.outputs.update_needed == 'true'
@@ -108,12 +110,53 @@ jobs:
           echo "📄 Kết quả thay đổi:"
           git diff --stat
 
+      - name: Generate Changelog
+        if: steps.check.outputs.update_needed == 'true'
+        env:
+          NEW_VER: ${{ steps.check.outputs.new_ver }}
+          OLD_VER: ${{ steps.check.outputs.old_ver }}
+          NEW_BASE: ${{ steps.check.outputs.new_base }}
+          OLD_BASE: ${{ steps.check.outputs.old_base }}
+          NEW_TAG: ${{ steps.check.outputs.new_tag }}
+        run: |
+          FILE="tailscale/CHANGELOG.md"
+
+          if [ -f "$FILE" ] && grep -q "^## ${NEW_VER}$" "$FILE"; then
+            echo "Changelog đã có mục ${NEW_VER}, bỏ qua."
+            exit 0
+          fi
+
+          {
+            printf "## %s\n\n" "$NEW_VER"
+            printf "_Released: %s_\n\n" "$(date -u +%F)"
+            if [ "$NEW_VER" != "$OLD_VER" ]; then
+              printf -- "- Update Tailscale from v%s to v%s\n" "$OLD_VER" "$NEW_VER"
+              printf -- "- [Upstream release notes](https://github.com/tailscale/tailscale/releases/tag/%s)\n" "$NEW_TAG"
+            fi
+            if [ "$NEW_BASE" != "$OLD_BASE" ]; then
+              printf -- "- Update Alpine base image from %s to %s\n" "$OLD_BASE" "$NEW_BASE"
+            fi
+            printf "\n"
+          } > /tmp/entry.md
+
+          if [ -f "$FILE" ]; then
+            sed '1{/^# Changelog$/d}' "$FILE" | sed '1{/^$/d}' > /tmp/existing.md
+          else
+            : > /tmp/existing.md
+          fi
+
+          { printf "# Changelog\n\n"; cat /tmp/entry.md /tmp/existing.md; } > /tmp/new.md
+          mv /tmp/new.md "$FILE"
+
+          echo "📝 Đã ghi changelog:"
+          head -n 12 "$FILE"
+
       - name: Commit and Push Update
         if: steps.check.outputs.update_needed == 'true'
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add tailscale/Dockerfile tailscale/config.yaml
+          git add tailscale/Dockerfile tailscale/config.yaml tailscale/CHANGELOG.md
 
           if git diff --staged --quiet; then
             echo "❌ Không có file nào thay đổi dù cần cập nhật, kiểm tra lại pattern sed!"
