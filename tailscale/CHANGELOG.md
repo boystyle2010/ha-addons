@@ -1,4 +1,4 @@
-## 1.104.4-1
+## 1.104.4.1
 
 - Fix: add-on failed to start when another Tailscale add-on held the tailscale0 device
 - Faster and cleaner shutdown
