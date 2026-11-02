@@ -23,30 +23,27 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch Latest Tailscale Release & Force Sync
+      - name: Sync Latest Tailscale Version
+        id: check_version
         run: |
-          echo "1. Đang lấy phiên bản mới nhất từ Tailscale GitHub API..."
-          LATEST_TAG=$(curl -sfL https://api.github.com/repos/tailscale/tailscale/releases/latest | jq -r '.tag_name')
-          
-          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" == "null" ]; then
-            echo "❌ Không lấy được tag từ GitHub API."
-            exit 1
-          fi
-          
-          CLEAN_VER="${LATEST_TAG#v}"
-          echo "📌 Phiên bản mới nhất từ hãng: $CLEAN_VER ($LATEST_TAG)"
+          echo "1. Đang quét phiên bản mới nhất từ GitHub API của Tailscale..."
+          CURRENT_VER=$(grep -oP '^version:\s*"\K[^"]+' tailscale/config.yaml || echo "1.104.1")
+          LATEST_TAG=$(curl -s https://api.github.com/repos/tailscale/tailscale/releases/latest | jq -r '.tag_name')
+          LATEST_VER=$(echo "$LATEST_TAG" | sed 's/^v//')
 
-          # Lấy phiên bản Alpine Base mới nhất
-          CURRENT_BASE=$(grep -m 1 'aarch64-base:' tailscale/Dockerfile | awk -F':' '{print $2}' | tr -d '[:space:]' || echo "3.20")
-          LATEST_BASE=$(curl -sfL https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name' || echo "$CURRENT_BASE")
-          if [[ ! "$LATEST_BASE" =~ ^[0-9]+\.[0-9]+$ ]]; then
-            LATEST_BASE="$CURRENT_BASE"
+          if [ -z "$LATEST_VER" ] || [ "$LATEST_VER" == "null" ]; then
+            echo "Không lấy được version, giữ nguyên phiên bản cũ."
+            exit 0
           fi
 
-          echo "2. Đang tiến hành cập nhật tệp config.yaml và Dockerfile..."
-          sed -i "s|ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${LATEST_BASE}|g" tailscale/Dockerfile
+          echo "Phiên bản hiện tại trên Repo: $CURRENT_VER"
+          echo "Phiên bản mới nhất từ Tailscale: $LATEST_VER ($LATEST_TAG)"
+
+          # Tự động thay thế phiên bản mới vào config.yaml và Dockerfile
           sed -i "s|ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${LATEST_TAG}|g" tailscale/Dockerfile
-          sed -i "s|^version:.*|version: \"${CLEAN_VER}\"|g" tailscale/config.yaml
+          sed -i "s|^version:.*|version: \"${LATEST_VER}\"|g" tailscale/config.yaml
+
+          echo "new_ver=$LATEST_VER" >> $GITHUB_OUTPUT
 
       - name: Commit and Push Update
         run: |
@@ -57,9 +54,9 @@ jobs:
           git add tailscale/Dockerfile tailscale/config.yaml
           
           if ! git diff --staged --quiet; then
-            git commit -m "chore(tailscale): sync to latest release"
+            git commit -m "chore(tailscale): sync version to v${{ steps.check_version.outputs.new_ver }}"
             git push
-            echo "🎉 Đã commit và đẩy phiên bản mới thành công lên GitHub!"
+            echo "🎉 Đã tự động commit và đẩy phiên bản mới thành công!"
           else
-            echo "✨ Tệp cấu hình đã khớp phiên bản."
+            echo "✨ Phiên bản đã đồng bộ sẵn."
           fi
