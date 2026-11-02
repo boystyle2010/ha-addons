@@ -41,13 +41,11 @@ if bashio::config.has_value 'advertise_tags'; then
     done
 fi
 
-# Không thể vừa là exit node vừa dùng exit node khác
 if [ -n "${USE_EXIT_NODE}" ] && bashio::var.true "${EXIT_NODE_ADV}"; then
     bashio::log.warning "Không thể vừa quảng bá exit node vừa dùng exit node khác. Bỏ qua tùy chọn 'exit_node'."
     USE_EXIT_NODE=""
 fi
 
-# Biến môi trường cho tailscaled
 if bashio::var.true "${ALWAYS_DERP}"; then
     export TS_DEBUG_ALWAYS_USE_DERP=true
 fi
@@ -55,7 +53,7 @@ if ! bashio::var.true "${LOG_UPLOAD}"; then
     export TS_NO_LOGS_NO_SUPPORT=true
 fi
 
-# 2. Tối ưu hóa cổng mạng (UDP GRO Forwarding), bỏ qua khi chạy userspace
+# 2. Tối ưu hóa cổng mạng (UDP GRO Forwarding)
 if ! bashio::var.true "${USERSPACE}"; then
     NETDEV=$(ip -o route get 8.8.8.8 2>/dev/null | cut -f 5 -d " ")
     if [ -n "${NETDEV}" ]; then
@@ -65,12 +63,16 @@ if ! bashio::var.true "${USERSPACE}"; then
 fi
 
 # 3. Khởi tạo thư mục lưu trữ trạng thái bền vững
-mkdir -p /data/state /var/run/tailscale
+mkdir -p /data/state /var/run/tailscale /run/nginx
 
 TAILSCALED_PID=""
+WEB_PID=""
+NGINX_PID=""
 
 cleanup() {
     bashio::log.info "Đang dừng tiến trình Tailscale Pro an toàn..."
+    [ -n "${NGINX_PID}" ] && kill -TERM "${NGINX_PID}" 2>/dev/null || true
+    [ -n "${WEB_PID}" ] && kill -TERM "${WEB_PID}" 2>/dev/null || true
     if [ -n "${TAILSCALED_PID}" ]; then
         kill -TERM "${TAILSCALED_PID}" 2>/dev/null || true
         wait "${TAILSCALED_PID}" 2>/dev/null || true
@@ -96,24 +98,60 @@ bashio::log.info "Đang khởi chạy tiến trình nền tailscaled..."
 tailscaled "${TAILSCALED_ARGS[@]}" &
 TAILSCALED_PID=$!
 
-# Đợi socket sẵn sàng (tối đa 15 giây), thoát sớm nếu tailscaled đã chết
+# Đợi socket sẵn sàng (tối đa 15 giây)
 WAIT_COUNT=0
 while [ ! -S "${SOCK}" ]; do
     if ! kill -0 "${TAILSCALED_PID}" 2>/dev/null; then
-        bashio::log.error "tailscaled đã thoát ngay khi khởi động. Xem các dòng log phía trên."
-        bashio::log.error "Nếu log báo 'device or resource busy': đang có add-on Tailscale khác giữ card tailscale0. Hãy dừng add-on đó rồi chạy lại."
+        bashio::log.error "tailscaled đã thoát ngay khi khởi động."
         exit 1
     fi
     sleep 1
     WAIT_COUNT=$((WAIT_COUNT + 1))
     if [ "${WAIT_COUNT}" -ge 15 ]; then
-        bashio::log.error "Không thể khởi tạo socket tailscaled! Đang thoát để Watchdog khởi động lại..."
+        bashio::log.error "Không thể khởi tạo socket tailscaled! Đang thoát..."
         kill -TERM "${TAILSCALED_PID}" 2>/dev/null || true
         exit 1
     fi
 done
 
-# 4. Xây dựng tham số cấu hình
+# 4. Khởi chạy giao diện Web UI cho Home Assistant Ingress (Cổng 5252 -> 5253)
+bashio::log.info "Đang khởi chạy máy chủ Web UI nội bộ cho Home Assistant Ingress (Cổng 5252)..."
+
+# Tắt chế độ webclient cũ để tránh xung đột port
+tailscale --socket="${SOCK}" set --webclient=false 2>/dev/null || true
+
+# Chạy tiến trình tailscale web lắng nghe cục bộ ở cổng 5253
+tailscale --socket="${SOCK}" web --listen=127.0.0.1:5253 &
+WEB_PID=$!
+
+# Cấu hình Nginx proxy ở cổng 5252: chỉ cho phép kết nối từ Home Assistant Ingress (172.30.32.2) và localhost
+cat > /etc/nginx/http.d/ingress.conf <<'EOF'
+server {
+    listen 5252;
+    allow 127.0.0.1;
+    allow 172.30.32.2;
+    deny all;
+
+    access_log off;
+
+    location / {
+        proxy_pass http://127.0.0.1:5253;
+        proxy_http_version 1.1;
+        proxy_set_header Host "127.0.0.1:5253";
+        proxy_set_header Origin "http://127.0.0.1:5253";
+        proxy_set_header Referer "http://127.0.0.1:5253/";
+        proxy_set_header X-Forwarded-For "";
+        proxy_set_header X-Forwarded-Host "";
+        proxy_set_header X-Forwarded-Proto "";
+        proxy_buffering off;
+    }
+}
+EOF
+rm -f /etc/nginx/http.d/default.conf
+nginx -g "daemon off;" &
+NGINX_PID=$!
+
+# 5. Xây dựng tham số cấu hình Tailscale
 UP_ARGS=(
     "--hostname=${HOSTNAME}"
     "--reset"
@@ -176,11 +214,7 @@ if ! bashio::var.is_empty "${EXTRA_ARGS}"; then
     UP_ARGS+=(${EXTRA_ARGS})
 fi
 
-# 5. Bật Web UI trên cổng 5252 cho Home Assistant Ingress
-bashio::log.info "Đang kích hoạt giao diện Web UI nội bộ trên cổng 5252..."
-tailscale --socket="${SOCK}" set --webclient=true || true
-
-# 6. Kết nối Tailscale (che auth key trong log)
+# 6. Kết nối Tailscale
 SAFE_ARGS="${UP_ARGS[*]}"
 if ! bashio::var.is_empty "${AUTH_KEY}"; then
     SAFE_ARGS="${SAFE_ARGS//"${AUTH_KEY}"/***}"
@@ -188,7 +222,6 @@ fi
 bashio::log.info "Đang áp dụng cấu hình Tailscale Pro: ${SAFE_ARGS}"
 tailscale --socket="${SOCK}" up "${UP_ARGS[@]}" &
 
-# Chia sẻ Home Assistant qua Serve / Funnel (chạy một lần sau khi đã kết nối)
 apply_share() {
     case "${SHARE_MODE}" in
         serve|funnel)
@@ -219,6 +252,13 @@ SHARE_DONE=0
 while kill -0 "${TAILSCALED_PID}" 2>/dev/null; do
     sleep 60 &
     wait $!
+
+    # Tự động khởi động lại tiến trình Web UI nếu chẳng may bị tắt
+    if ! kill -0 "${WEB_PID}" 2>/dev/null; then
+        bashio::log.warning "Tiến trình Web UI bị dừng, đang khởi chạy lại..."
+        tailscale --socket="${SOCK}" web --listen=127.0.0.1:5253 &
+        WEB_PID=$!
+    fi
 
     STATE=$(tailscale --socket="${SOCK}" status --json 2>/dev/null | jq -r '.BackendState // "Unknown"')
 
