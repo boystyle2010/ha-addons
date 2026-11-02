@@ -1,9 +1,17 @@
 name: Auto Update Tailscale Pro
 
+name: Auto Check Tailscale & Alpine Base (Verified)
+
 on:
   schedule:
-    - cron: "15 */6 * * *" # Kiểm tra mỗi 6 tiếng
+    - cron: "15 */6 * * *"
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "tailscale/**"
+      - ".github/workflows/update-tailscale.yml"
 
 permissions:
   contents: write
