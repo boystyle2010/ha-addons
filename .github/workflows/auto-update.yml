@@ -11,9 +11,6 @@ on:
       - "cloudflared/**"
       - ".github/workflows/auto-update.yml"
 
-permissions:
-  contents: write
-
 # Chống xung đột khi sửa nhiều file liên tiếp (Tự huỷ lượt chạy cũ nếu có lượt mới)
 concurrency:
   group: auto-update-cloudflared
