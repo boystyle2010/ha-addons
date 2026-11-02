@@ -1,7 +1,5 @@
 name: Auto Check Cloudflared & Alpine Base (Verified)
 
-name: Auto Check Cloudflared & Alpine Base (Verified)
-
 on:
   schedule:
     - cron: "0 */6 * * *"
@@ -11,7 +9,10 @@ on:
       - main
     paths:
       - "cloudflared/**"
-      - ".github/workflows/update.yml" # (Hoặc tên file workflow cloudflared hiện tại của bạn)
+      - ".github/workflows/auto-update.yml"
+
+permissions:
+  contents: write
 
 # Chống xung đột khi sửa nhiều file liên tiếp (Tự huỷ lượt chạy cũ nếu có lượt mới)
 concurrency:
