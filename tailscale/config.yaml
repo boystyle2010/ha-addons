@@ -1,6 +1,6 @@
 name: "Tailscale Pro"
-description: "High-stability, upstream-synced Tailscale mesh VPN & Subnet Router with full UI"
-version: "1.104.4"
+description: "Zero-config mesh VPN, subnet router and exit node with a built-in health monitor"
+version: "1.104.4-1"
 slug: "tailscale_pro"
 url: "https://github.com/boystyle2010/ha-addons/tree/main/tailscale"
 stage: stable
@@ -10,7 +10,6 @@ apparmor: true
 init: false
 arch:
   - aarch64
-  - amd64
 host_network: true
 privileged:
   - NET_ADMIN
@@ -47,4 +46,3 @@ schema:
   enable_ssh: bool
   snat_subnet_routes: bool
   extra_args: str?
-
