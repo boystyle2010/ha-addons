@@ -1,28 +1,97 @@
+---
 configuration:
   auth_key:
-    name: "Khóa xác thực (Auth Key)"
-    description: "Mã tskey-auth-... lấy từ trang quản trị Tailscale để tự động đăng nhập (để trống nếu muốn đăng nhập qua Web UI)."
+    name: Auth key
+    description: >-
+      Khóa để đăng nhập tự động (tùy chọn). Tạo trong Tailscale admin console,
+      nên dùng khóa reusable. Để trống nếu muốn đăng nhập qua Web UI.
   hostname:
-    name: "Tên thiết bị (Hostname)"
-    description: "Tên máy chủ hiển thị trên bảng điều khiển Tailscale của bạn."
-  advertise_exit_node:
-    name: "Chạy làm Exit Node"
-    description: "Cho phép định tuyến toàn bộ lưu lượng Internet từ xa đi qua mạng gia đình của bạn."
-  advertise_routes:
-    name: "Quảng bá dải mạng LAN (Subnet Routes)"
-    description: "Các lớp mạng nội bộ muốn truy cập từ xa (mặc định: 192.168.68.0/24)."
-  accept_routes:
-    name: "Chấp nhận dải mạng từ nơi khác (Accept Routes)"
-    description: "Nhận các dải mạng nội bộ do thiết bị Tailscale khác quảng bá tới."
+    name: Tên thiết bị
+    description: >-
+      Tên hiển thị của thiết bị này trong tailnet.
+  login_server:
+    name: Máy chủ đăng nhập
+    description: >-
+      Máy chủ điều khiển. Giữ nguyên mặc định trừ khi bạn tự dựng máy chủ
+      riêng, ví dụ Headscale.
   accept_dns:
-    name: "Chấp nhận DNS (MagicDNS)"
-    description: "Nên TẮT (false) trên Home Assistant để tránh xung đột với DNS nội bộ và làm chậm mạng."
+    name: Nhận cấu hình DNS
+    description: >-
+      Dùng cài đặt DNS của tailnet (MagicDNS) trên thiết bị này. Mặc định tắt.
+  accept_routes:
+    name: Nhận route từ thiết bị khác
+    description: >-
+      Chấp nhận các subnet route do thiết bị khác trong tailnet quảng bá.
+      Mặc định tắt.
+  advertise_exit_node:
+    name: Quảng bá làm exit node
+    description: >-
+      Cho phép thiết bị khác đi internet qua mạng nhà bạn. Cần duyệt trong
+      admin console sau khi bật.
+  advertise_connector:
+    name: Quảng bá làm app connector
+    description: >-
+      Cho thiết bị này làm app connector. Cần cấu hình app connector trong
+      policy của tailnet. Mặc định tắt.
+  advertise_routes:
+    name: Chia sẻ subnet
+    description: >-
+      Các dải mạng nội bộ chia sẻ vào tailnet, ví dụ 192.168.1.0/24. Cần duyệt
+      trong admin console sau khi bật.
+  advertise_tags:
+    name: Gắn ACL tag
+    description: >-
+      Tag ACL cho thiết bị này. Mỗi tag phải bắt đầu bằng tag: và đã được khai
+      báo trong tagOwners của policy.
+  exit_node:
+    name: Dùng exit node
+    description: >-
+      Địa chỉ IP Tailscale của exit node muốn đi qua. Không dùng chung với
+      tùy chọn quảng bá làm exit node.
+  always_use_derp:
+    name: Luôn dùng DERP
+    description: >-
+      Ép mọi kết nối đi qua máy chủ relay DERP, tắt kết nối UDP trực tiếp.
+      Chỉ dùng khi cần gỡ lỗi. Mặc định tắt.
   enable_ssh:
-    name: "Bật Tailscale SSH"
-    description: "Cho phép truy cập SSH vào container thông qua xác thực của Tailscale."
+    name: Tailscale SSH
+    description: >-
+      Cho phép truy cập SSH qua Tailscale, kiểm soát bởi policy của tailnet.
+      Mặc định tắt.
   snat_subnet_routes:
-    name: "Bật SNAT cho Subnet Routes"
-    description: "Giữ BẬT (true) để các thiết bị trong mạng LAN phản hồi gói tin về đúng Pi 5 mà không cần chỉnh định tuyến trên Router Deco."
+    name: Source NAT cho subnet route
+    description: >-
+      Giúp thiết bị trong mạng nội bộ thấy lưu lượng đến từ thiết bị này, cấu
+      hình định tuyến đơn giản hơn. Chỉ tắt khi cần site-to-site nâng cao.
+      Mặc định bật.
+  stateful_filtering:
+    name: Lọc gói tin có trạng thái
+    description: >-
+      Trên exit node và subnet router, chỉ cho gói trả về của các kết nối do
+      bên trong khởi tạo. Mặc định tắt.
+  userspace_networking:
+    name: Chế độ userspace networking
+    description: >-
+      Không tạo card mạng tailscale0. Thiết bị trong tailnet vào được Home
+      Assistant, nhưng thiết bị này không chủ động kết nối ra tailnet được.
+      Mặc định tắt.
+  log_upload:
+    name: Gửi log lên Tailscale
+    description: >-
+      Gửi log client lên log.tailscale.com. Chỉ bật nếu policy của tailnet yêu
+      cầu. Mặc định tắt.
+  share_homeassistant:
+    name: Chia sẻ Home Assistant bằng Serve hoặc Funnel
+    description: >-
+      serve chia sẻ Home Assistant trong tailnet qua HTTPS. funnel chia sẻ ra
+      internet công khai. Cần bật HTTPS Certificates trong admin console. Xem
+      tab Documentation.
+  share_on_port:
+    name: Cổng chia sẻ
+    description: >-
+      Cổng HTTPS dùng cho Serve hoặc Funnel. Funnel chỉ hỗ trợ 443, 8443 và
+      10000.
   extra_args:
-    name: "Tham số nâng cao (Extra Flags)"
-    description: "Các cờ CLI bổ sung truyền vào lệnh 'tailscale up' nếu cần (ví dụ: --stateful-filtering=false)."
+    name: Tham số bổ sung
+    description: >-
+      Tham số thêm cho lệnh tailscale up. Chỉ dành cho người dùng nâng cao.
