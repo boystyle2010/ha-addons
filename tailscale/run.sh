@@ -2,23 +2,28 @@
 
 SOCK="/var/run/tailscale/tailscaled.sock"
 
-# 1. Đọc cấu hình từ UI của Home Assistant
-AUTH_KEY=$(bashio::config 'auth_key')
-HOSTNAME=$(bashio::config 'hostname')
-LOGIN_SERVER=$(bashio::config 'login_server')
-ACCEPT_DNS=$(bashio::config 'accept_dns')
-ACCEPT_ROUTES=$(bashio::config 'accept_routes')
-EXIT_NODE_ADV=$(bashio::config 'advertise_exit_node')
-CONNECTOR=$(bashio::config 'advertise_connector')
-ALWAYS_DERP=$(bashio::config 'always_use_derp')
-ENABLE_SSH=$(bashio::config 'enable_ssh')
-SNAT_ROUTES=$(bashio::config 'snat_subnet_routes')
-STATEFUL=$(bashio::config 'stateful_filtering')
-USERSPACE=$(bashio::config 'userspace_networking')
-LOG_UPLOAD=$(bashio::config 'log_upload')
-SHARE_MODE=$(bashio::config 'share_homeassistant')
-SHARE_PORT=$(bashio::config 'share_on_port')
-EXTRA_ARGS=$(bashio::config 'extra_args')
+# 1. Đọc cấu hình từ UI của Home Assistant (Có giá trị dự phòng khi ẩn trong Unused Options)
+AUTH_KEY=$(bashio::config 'auth_key' '')
+HOSTNAME=$(bashio::config 'hostname' '')
+if bashio::var.is_empty "${HOSTNAME}"; then
+    HOSTNAME=$(bashio::info.hostname 2>/dev/null || echo "hass-pi5-pro")
+fi
+LOGIN_SERVER=$(bashio::config 'login_server' 'https://controlplane.tailscale.com')
+ACCEPT_DNS=$(bashio::config 'accept_dns' 'false')
+ACCEPT_ROUTES=$(bashio::config 'accept_routes' 'false')
+EXIT_NODE_ADV=$(bashio::config 'advertise_exit_node' 'true')
+CONNECTOR=$(bashio::config 'advertise_connector' 'false')
+ALWAYS_DERP=$(bashio::config 'always_use_derp' 'false')
+ENABLE_SSH=$(bashio::config 'enable_ssh' 'false')
+SNAT_ROUTES=$(bashio::config 'snat_subnet_routes' 'true')
+STATEFUL=$(bashio::config 'stateful_filtering' 'false')
+USERSPACE=$(bashio::config 'userspace_networking' 'false')
+LOG_SUPPRESS=$(bashio::config 'log_suppression' 'true')
+LOG_UPLOAD=$(bashio::config 'log_upload' 'false')
+TAILDROP=$(bashio::config 'taildrop' 'false')
+SHARE_MODE=$(bashio::config 'share_homeassistant' 'disabled')
+SHARE_PORT=$(bashio::config 'share_on_port' '443')
+EXTRA_ARGS=$(bashio::config 'extra_args' '')
 
 USE_EXIT_NODE=""
 if bashio::config.has_value 'exit_node'; then
@@ -68,9 +73,11 @@ mkdir -p /data/state /var/run/tailscale /run/nginx
 TAILSCALED_PID=""
 WEB_PID=""
 NGINX_PID=""
+TAILDROP_PID=""
 
 cleanup() {
     bashio::log.info "Đang dừng tiến trình Tailscale Pro an toàn..."
+    [ -n "${TAILDROP_PID}" ] && kill -TERM "${TAILDROP_PID}" 2>/dev/null || true
     [ -n "${NGINX_PID}" ] && kill -TERM "${NGINX_PID}" 2>/dev/null || true
     [ -n "${WEB_PID}" ] && kill -TERM "${WEB_PID}" 2>/dev/null || true
     if [ -n "${TAILSCALED_PID}" ]; then
@@ -94,9 +101,18 @@ else
     TAILSCALED_ARGS+=("--tun=tailscale0")
 fi
 
+# Khởi chạy tailscaled kèm bộ lọc Log Suppression (ẩn sau 200 dòng nếu được bật)
 bashio::log.info "Đang khởi chạy tiến trình nền tailscaled..."
-tailscaled "${TAILSCALED_ARGS[@]}" &
-TAILSCALED_PID=$!
+if bashio::var.true "${LOG_SUPPRESS}"; then
+    tailscaled "${TAILSCALED_ARGS[@]}" 2>&1 | awk '
+        NR <= 200 { print; fflush(); next }
+        NR == 201 { print "[Tailscale Pro] Log suppression enabled: suppressing further tailscaled output after 200 lines (turn off Log suppression in configuration to view all logs)."; fflush() }
+    ' &
+    TAILSCALED_PID=$!
+else
+    tailscaled "${TAILSCALED_ARGS[@]}" &
+    TAILSCALED_PID=$!
+fi
 
 # Đợi socket sẵn sàng (tối đa 15 giây)
 WAIT_COUNT=0
@@ -116,15 +132,10 @@ done
 
 # 4. Khởi chạy giao diện Web UI cho Home Assistant Ingress (Cổng 5252 -> 5253)
 bashio::log.info "Đang khởi chạy máy chủ Web UI nội bộ cho Home Assistant Ingress (Cổng 5252)..."
-
-# Tắt chế độ webclient cũ để tránh xung đột port
 tailscale --socket="${SOCK}" set --webclient=false 2>/dev/null || true
-
-# Chạy tiến trình tailscale web lắng nghe cục bộ ở cổng 5253
 tailscale --socket="${SOCK}" web --listen=127.0.0.1:5253 &
 WEB_PID=$!
 
-# Cấu hình Nginx proxy ở cổng 5252: chỉ cho phép kết nối từ Home Assistant Ingress (172.30.32.2) và localhost
 cat > /etc/nginx/http.d/ingress.conf <<'EOF'
 server {
     listen 5252;
@@ -157,7 +168,7 @@ UP_ARGS=(
     "--reset"
 )
 
-if bashio::config.has_value 'login_server'; then
+if ! bashio::var.is_empty "${LOGIN_SERVER}" && [ "${LOGIN_SERVER}" != "https://controlplane.tailscale.com" ]; then
     UP_ARGS+=("--login-server=${LOGIN_SERVER}")
 fi
 
@@ -222,38 +233,73 @@ fi
 bashio::log.info "Đang áp dụng cấu hình Tailscale Pro: ${SAFE_ARGS}"
 tailscale --socket="${SOCK}" up "${UP_ARGS[@]}" &
 
-apply_share() {
+# Hàm thiết lập Serve / Funnel, Taildrop và Taildrive sau khi kết nối thành công
+apply_post_connect_features() {
+    # 6.1. Serve / Funnel
     case "${SHARE_MODE}" in
         serve|funnel)
             if [ "${SHARE_MODE}" = "funnel" ] && ! [[ "${SHARE_PORT}" =~ ^(443|8443|10000)$ ]]; then
                 bashio::log.warning "Funnel chỉ hỗ trợ cổng 443, 8443 hoặc 10000 (đang đặt ${SHARE_PORT}). Bỏ qua chia sẻ."
-                return 1
-            fi
-            tailscale --socket="${SOCK}" serve reset >/dev/null 2>&1 || true
-            if tailscale --socket="${SOCK}" "${SHARE_MODE}" --bg --https="${SHARE_PORT}" "http://127.0.0.1:8123"; then
-                bashio::log.info "✅ Đã bật ${SHARE_MODE} cho Home Assistant trên cổng ${SHARE_PORT}."
             else
-                bashio::log.warning "Không bật được ${SHARE_MODE}. Hãy bật HTTPS Certificates trong Tailscale admin console rồi khởi động lại add-on."
-                return 1
+                tailscale --socket="${SOCK}" serve reset >/dev/null 2>&1 || true
+                if tailscale --socket="${SOCK}" "${SHARE_MODE}" --bg --https="${SHARE_PORT}" "http://127.0.0.1:8123"; then
+                    bashio::log.info "✅ Đã bật ${SHARE_MODE} cho Home Assistant trên cổng ${SHARE_PORT}."
+                else
+                    bashio::log.warning "Không bật được ${SHARE_MODE}. Hãy kiểm tra HTTPS Certificates trong Tailscale Admin Console."
+                fi
             fi
             ;;
         *)
             tailscale --socket="${SOCK}" serve reset >/dev/null 2>&1 || true
             ;;
     esac
-    return 0
+
+    # 6.2. Taildrop (Nhận file lưu vào /share/taildrop)
+    if bashio::var.true "${TAILDROP}"; then
+        mkdir -p /share/taildrop
+        if [ -z "${TAILDROP_PID}" ] || ! kill -0 "${TAILDROP_PID}" 2>/dev/null; then
+            bashio::log.info "📂 Đang kích hoạt dịch vụ nhận file Taildrop (Lưu tại /share/taildrop)..."
+            tailscale --socket="${SOCK}" file get --loop --verbose --conflict=rename /share/taildrop &
+            TAILDROP_PID=$!
+        fi
+    fi
+
+    # 6.3. Taildrive shares
+    declare -A DRIVE_MAP=(
+        ["addons"]="/addons"
+        ["addon_configs"]="/addon_configs"
+        ["backup"]="/backup"
+        ["config"]="/homeassistant"
+        ["media"]="/media"
+        ["share"]="/share"
+        ["ssl"]="/ssl"
+    )
+    for SHARE_NAME in "${!DRIVE_MAP[@]}"; do
+        SHARE_PATH="${DRIVE_MAP[$SHARE_NAME]}"
+        if [ ! -d "${SHARE_PATH}" ] && [ "${SHARE_NAME}" = "config" ] && [ -d "/config" ]; then
+            SHARE_PATH="/config"
+        fi
+        if bashio::config.true "taildrive.${SHARE_NAME}"; then
+            if [ -d "${SHARE_PATH}" ]; then
+                tailscale --socket="${SOCK}" drive share "${SHARE_NAME}" "${SHARE_PATH}" >/dev/null 2>&1 && \
+                    bashio::log.info "🗂️ Đã chia sẻ Taildrive: ${SHARE_NAME} -> ${SHARE_PATH}" || \
+                    bashio::log.warning "Không thể chia sẻ Taildrive '${SHARE_NAME}' (Hãy kiểm tra quyền ACLs trên Tailscale Admin)."
+            fi
+        else
+            tailscale --socket="${SOCK}" drive unshare "${SHARE_NAME}" >/dev/null 2>&1 || true
+        fi
+    done
 }
 
 bashio::log.info "✅ Tailscale Pro đã hoạt động và bắt đầu chế độ giám sát sức khỏe đường truyền (Health Monitor)!"
 
 # 7. Vòng lặp kiểm tra sức khỏe đường truyền & tự phục hồi (mỗi 60 giây)
 FAIL_COUNT=0
-SHARE_DONE=0
+FEATURES_APPLIED=0
 while kill -0 "${TAILSCALED_PID}" 2>/dev/null; do
     sleep 60 &
     wait $!
 
-    # Tự động khởi động lại tiến trình Web UI nếu chẳng may bị tắt
     if ! kill -0 "${WEB_PID}" 2>/dev/null; then
         bashio::log.warning "Tiến trình Web UI bị dừng, đang khởi chạy lại..."
         tailscale --socket="${SOCK}" web --listen=127.0.0.1:5253 &
@@ -264,9 +310,9 @@ while kill -0 "${TAILSCALED_PID}" 2>/dev/null; do
 
     if [ "${STATE}" == "Running" ]; then
         FAIL_COUNT=0
-        if [ "${SHARE_DONE}" -eq 0 ]; then
-            apply_share || true
-            SHARE_DONE=1
+        if [ "${FEATURES_APPLIED}" -eq 0 ]; then
+            apply_post_connect_features || true
+            FEATURES_APPLIED=1
         fi
     elif [ "${STATE}" == "NeedsLogin" ] || [ "${STATE}" == "Starting" ]; then
         bashio::log.warning "Tailscale đang ở trạng thái '${STATE}'. Vui lòng kiểm tra Auth Key hoặc đăng nhập qua Web UI."
