@@ -94,6 +94,7 @@ jobs:
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "github-actions[bot]"
+          git reset --hard HEAD
           git pull --rebase origin main
           git add tailscale/Dockerfile tailscale/config.yaml
           git commit -m "chore(tailscale): update to v${{ steps.check.outputs.new_ver }} (base ${{ steps.check.outputs.new_base }})"
