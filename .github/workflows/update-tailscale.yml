@@ -231,6 +231,10 @@ jobs:
             echo "✅ $1"
             echo "- ✅ $1" >> "$GITHUB_STEP_SUMMARY"
           }
+          warn() {
+            echo "⚠️ $1"
+            echo "- ⚠️ $1" >> "$GITHUB_STEP_SUMMARY"
+          }
           retry() {
             for i in 1 2 3; do
               "$@" && return 0
@@ -255,7 +259,7 @@ jobs:
           CURRENT_BASE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || true)
           [ -n "$CURRENT_VER" ]  || fail "Không đọc được version trong config.yaml"
           [ -n "$CURRENT_BASE" ] || fail "Không đọc được BUILD_FROM trong Dockerfile"
-          echo "📌 Hiện tại: Tailscale $CURRENT_VER | Base $CURRENT_BASE"
+          echo "📌 Hiện tại: Tailscale $CURRENT_VER | Alpine $CURRENT_BASE"
 
           # ---- Lớp 1: Release hợp lệ ----
           RELEASE_JSON=$(retry curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
@@ -280,47 +284,55 @@ jobs:
 
           # ---- Lớp 3: Chống hạ cấp ----
           newer_or_equal "$CLEAN_VER" "$CURRENT_VER" \
-            || skip "Bản mới nhất ($CLEAN_VER) thấp hơn bản hiện tại ($CURRENT_VER), không hạ cấp"
+            || skip "Bản mới nhất ($CLEAN_VER) không cao hơn bản hiện tại ($CURRENT_VER), giữ nguyên"
           pass "Lớp 3: không hạ cấp ($CURRENT_VER -> $CLEAN_VER)"
 
-          # ---- Alpine base: chỉ nâng khi image tồn tại đủ 2 kiến trúc ----
-          LATEST_BASE=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/home-assistant/docker-base/releases/latest | jq -r '.tag_name // empty' || true)
-          if [[ ! "${LATEST_BASE:-}" =~ ^[0-9]+\.[0-9]+$ ]]; then
-            LATEST_BASE="$CURRENT_BASE"
+          # ---- Không có bản Tailscale mới thì dừng (Alpine chỉ nâng cùng bản Tailscale mới) ----
+          if [ "$CLEAN_VER" = "$CURRENT_VER" ]; then
+            skip "Tailscale $CURRENT_VER đã là bản mới nhất"
           fi
-          if [ "$LATEST_BASE" != "$CURRENT_BASE" ]; then
-            if ! newer_or_equal "$LATEST_BASE" "$CURRENT_BASE"; then
-              echo "⚠️ Base $LATEST_BASE thấp hơn $CURRENT_BASE, giữ nguyên"
-              LATEST_BASE="$CURRENT_BASE"
-            elif ! (base_ok aarch64 "$LATEST_BASE" && base_ok amd64 "$LATEST_BASE"); then
-              echo "⚠️ Base $LATEST_BASE chưa có đủ image aarch64/amd64, giữ nguyên $CURRENT_BASE"
-              LATEST_BASE="$CURRENT_BASE"
+
+          # ---- Lớp 4: File gốc đã tải lên xong ----
+          for ARCH in arm64 amd64; do
+            URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_${ARCH}.tgz"
+            retry http_ok "$URL" || skip "File gốc ${ARCH} chưa sẵn sàng: $URL"
+          done
+          pass "Lớp 4: tarball gốc arm64 + amd64 đã có trên pkgs.tailscale.com"
+
+          # ---- Lớp 5: Docker image Tailscale đủ kiến trúc ----
+          MANIFEST_JSON=$(retry docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null) \
+            || skip "Chưa có manifest Docker cho tailscale/tailscale:${LATEST_TAG}"
+          for ARCH in arm64 amd64; do
+            DGST=$(echo "$MANIFEST_JSON" | jq -r --arg a "$ARCH" '.manifests[]? | select(.platform.architecture == $a and .platform.os == "linux") | .digest' | head -n1)
+            [ -n "$DGST" ] || skip "Docker image chưa có kiến trúc linux/${ARCH}"
+          done
+          pass "Lớp 5: Docker image Tailscale có đủ linux/arm64 + linux/amd64"
+
+          # ---- Lớp 6: Alpine base (chỉ xét khi đang có bản Tailscale mới) ----
+          # Mặc định giữ Alpine cũ. Chỉ nâng khi tag mới tồn tại VÀ các gói trong Dockerfile cài được.
+          LATEST_BASE="$CURRENT_BASE"
+          BASE_MAJOR="${CURRENT_BASE%%.*}"
+          BASE_MINOR="${CURRENT_BASE#*.}"
+          CAND="$CURRENT_BASE"
+          for i in 1 2 3; do
+            NEXT="${BASE_MAJOR}.$((BASE_MINOR + i))"
+            if base_ok aarch64 "$NEXT"; then CAND="$NEXT"; else break; fi
+          done
+
+          if [ "$CAND" = "$CURRENT_BASE" ]; then
+            echo "ℹ️ Chưa có Alpine mới hơn $CURRENT_BASE, giữ nguyên"
+          else
+            PKGS=$(sed -n '/apk add/,/^$/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
+            if [ -z "$PKGS" ]; then
+              warn "Lớp 6: không đọc được danh sách gói trong Dockerfile, giữ Alpine $CURRENT_BASE"
+            elif docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
+                   -c "apk add --simulate --no-cache ${PKGS}" >/tmp/apk-test.log 2>&1; then
+              LATEST_BASE="$CAND"
+              pass "Lớp 6: Alpine $CAND có đủ image và cài được các gói (${PKGS}), sẽ nâng $CURRENT_BASE -> $CAND"
             else
-              pass "Base Alpine $LATEST_BASE có đủ image aarch64 + amd64"
+              warn "Lớp 6: Alpine $CAND chưa qua kiểm tra gói, giữ Alpine $CURRENT_BASE"
+              tail -n 5 /tmp/apk-test.log || true
             fi
-          fi
-
-          if [ "$CLEAN_VER" = "$CURRENT_VER" ] && [ "$LATEST_BASE" = "$CURRENT_BASE" ]; then
-            skip "Tailscale $CURRENT_VER và base $CURRENT_BASE đều đã mới nhất"
-          fi
-
-          if [ "$CLEAN_VER" != "$CURRENT_VER" ]; then
-            # ---- Lớp 4: File gốc đã tải lên xong ----
-            for ARCH in arm64 amd64; do
-              URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_${ARCH}.tgz"
-              retry http_ok "$URL" || skip "File gốc ${ARCH} chưa sẵn sàng: $URL"
-            done
-            pass "Lớp 4: tarball gốc arm64 + amd64 đã có trên pkgs.tailscale.com"
-
-            # ---- Lớp 5: Docker image đủ kiến trúc ----
-            MANIFEST_JSON=$(retry docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null) \
-              || skip "Chưa có manifest Docker cho tailscale/tailscale:${LATEST_TAG}"
-            for ARCH in arm64 amd64; do
-              DGST=$(echo "$MANIFEST_JSON" | jq -r --arg a "$ARCH" '.manifests[]? | select(.platform.architecture == $a and .platform.os == "linux") | .digest' | head -n1)
-              [ -n "$DGST" ] || skip "Docker image chưa có kiến trúc linux/${ARCH}"
-            done
-            pass "Lớp 5: Docker image có đủ linux/arm64 + linux/amd64"
           fi
 
           {
