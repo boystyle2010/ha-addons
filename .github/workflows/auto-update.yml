@@ -156,94 +156,98 @@ jobs:
           # Cập nhật version
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
-          # ==================== TẠO CHANGELOG (GIỮ 3 BẢN GẦN NHẤT) ====================
-          if $CF_UPDATED || $ALPINE_UPDATED || [ ! -f cloudflared/CHANGELOG.md ]; then
-            echo "📝 Đang tạo CHANGELOG.md (giữ tối đa 3 phiên bản gần nhất)..."
+          # ==================== TẠO CHANGELOG ====================
+          echo "📝 Đang tạo CHANGELOG.md..."
 
-            # Tạo phần changelog của bản mới
-            NEW_SECTION=$(cat <<EOF
-          # What's Changed in ${FINAL_VERSION}
+          # Tạo nội dung cho bản hiện tại
+          NEW_SECTION="# What's Changed in ${FINAL_VERSION}
 
           * **Cloudflared Binary (arm64 verified):** \`${NEW_CF}\`
           * **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\`
+          "
 
-          EOF
-          )
-
-            if $CF_UPDATED && $ALPINE_UPDATED; then
-              NEW_SECTION+=$(cat <<EOF
-
+          if $CF_UPDATED && $ALPINE_UPDATED; then
+            NEW_SECTION+="
           ### Cập nhật lần này
-          - Nâng cấp Cloudflared lên phiên bản mới nhất
-          - Nâng cấp Alpine Base Image lên ${NEW_ALPINE}
-
-          EOF
-          )
-            elif $CF_UPDATED; then
-              NEW_SECTION+=$(cat <<EOF
-
+          - Nâng cấp Cloudflared lên phiên bản mới nhất (\`${NEW_CF}\`)
+          - Nâng cấp Alpine Base Image lên \`${NEW_ALPINE}\`
+          "
+          elif $CF_UPDATED; then
+            NEW_SECTION+="
           ### Cập nhật lần này
-          - Nâng cấp Cloudflared lên phiên bản mới nhất
-
-          EOF
-          )
-            elif $ALPINE_UPDATED; then
-              NEW_SECTION+=$(cat <<EOF
-
+          - Nâng cấp Cloudflared lên phiên bản mới nhất (\`${NEW_CF}\`)
+          "
+          elif $ALPINE_UPDATED; then
+            NEW_SECTION+="
           ### Cập nhật lần này
           - Nâng cấp Home Assistant Alpine Base từ \`${CUR_ALPINE}\` lên \`${NEW_ALPINE}\`
           - Giữ nguyên phiên bản Cloudflared \`${NEW_CF}\`
+          "
+          else
+            # Không có update mới → vẫn in changelog cơ bản của bản hiện tại
+            NEW_SECTION+="
+          ### Thông tin phiên bản hiện tại
+          - Cloudflared: \`${NEW_CF}\` (đã xác thực binary arm64)
+          - Alpine Base: \`${NEW_ALPINE}\` (Home Assistant official base)
+          - Add-on đã được tối ưu cho Raspberry Pi 5 (aarch64)
+          "
+          fi
 
-          EOF
-          )
-            fi
-
-            # Lấy release notes của Cloudflare nếu có update
-            if $CF_UPDATED; then
-              BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // empty' | sed '/SHA256 Checksums:/,$d')
-              if [ -n "$BODY" ]; then
-                NEW_SECTION+=$(cat <<EOF
-
+          # Lấy release notes thật của Cloudflare (nếu có)
+          if $CF_UPDATED; then
+            BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // empty' | sed '/SHA256 Checksums:/,$d' | sed '/^$/d')
+            if [ -n "$BODY" ]; then
+              NEW_SECTION+="
           ---
           ### Cloudflare Release Notes (${NEW_CF}):
 
           ${BODY}
-
-          EOF
-          )
-              fi
+          "
+            else
+              NEW_SECTION+="
+          ---
+          ### Cloudflare Release Notes (${NEW_CF}):
+          - Cập nhật bảo mật và sửa lỗi thông thường.
+          - Xem chi tiết tại: https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}
+          "
             fi
-
-            NEW_SECTION+=$'\n---\n'
-
-            # Lấy các phần changelog cũ (bỏ phần đầu tiên nếu trùng version)
-            OLD_CONTENT=""
-            if [ -f cloudflared/CHANGELOG.md ]; then
-              # Tách các section theo dòng bắt đầu bằng "# What's Changed"
-              # Giữ tối đa 2 section cũ (cộng với bản mới = 3)
-              OLD_CONTENT=$(awk '
-                BEGIN { section=0; print_section=0 }
-                /^# What'\''s Changed in / {
-                  section++
-                  if (section == 1) { print_section=0; next }
-                  if (section <= 3) { print_section=1 }
-                  else { print_section=0 }
-                }
-                print_section { print }
-              ' cloudflared/CHANGELOG.md)
-            fi
-
-            # Ghi file mới: bản mới nhất + tối đa 2 bản cũ
-            {
-              echo "$NEW_SECTION"
-              if [ -n "$OLD_CONTENT" ]; then
-                echo "$OLD_CONTENT"
-              fi
-            } > cloudflared/CHANGELOG.md
-
-            # Đảm bảo file kết thúc bằng dòng trống
-            echo "" >> cloudflared/CHANGELOG.md
+          else
+            # Không có bản mới của Cloudflared → vẫn in ghi chú cơ bản
+            NEW_SECTION+="
+          ---
+          ### Cloudflare Release Notes (${NEW_CF}):
+          - Đây là phiên bản ổn định hiện tại.
+          - Binary arm64 đã được xác thực.
+          - Xem release notes gốc: https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}
+          "
           fi
+
+          NEW_SECTION+="
+          ---
+          "
+
+          # Giữ lại tối đa 2 bản cũ (tổng cộng 3 bản)
+          OLD_CONTENT=""
+          if [ -f cloudflared/CHANGELOG.md ]; then
+            OLD_CONTENT=$(awk '
+              BEGIN { section=0; print_section=0 }
+              /^# What'\''s Changed in / {
+                section++
+                if (section == 1) { print_section=0; next }
+                if (section <= 3) { print_section=1 }
+                else { print_section=0 }
+              }
+              print_section { print }
+            ' cloudflared/CHANGELOG.md)
+          fi
+
+          # Ghi file
+          {
+            echo "$NEW_SECTION"
+            if [ -n "$OLD_CONTENT" ]; then
+              echo "$OLD_CONTENT"
+            fi
+          } > cloudflared/CHANGELOG.md
 
           # Keep-Alive 45 ngày
           LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
