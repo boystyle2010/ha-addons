@@ -2,16 +2,12 @@ name: Auto Check Cloudflared & Alpine Base (Verified)
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: '0 */6 * * *'
   workflow_dispatch:
   push:
     branches:
       - main
-    paths:
-      - "cloudflared/**"
-      - ".github/workflows/auto-update.yml"
 
-# Chống xung đột khi sửa nhiều file liên tiếp (Tự huỷ lượt chạy cũ nếu có lượt mới)
 concurrency:
   group: auto-update-cloudflared
   cancel-in-progress: true
@@ -44,7 +40,7 @@ jobs:
       - name: Check & Verify Cloudflared arm64 and Alpine Base
         id: check_versions
         run: |
-          CURRENT_VER_FULL=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml || echo "2026.10.5")
+          CURRENT_VER_FULL=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml || echo "2026.10.7")
           CURRENT_CF=$(echo "$CURRENT_VER_FULL" | cut -d'-' -f1)
           LATEST_CF=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name' | sed 's/^v//')
 
@@ -62,19 +58,14 @@ jobs:
             VERIFIED_CF="$CURRENT_CF"
           fi
 
+          # Lấy phiên bản Alpine hiện tại trong Dockerfile và bản mới nhất từ Home Assistant
           CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9]+\.[0-9]+' cloudflared/Dockerfile || echo "3.21")
-          LATEST_ALPINE=$(curl -s https://raw.githubusercontent.com/home-assistant/docker-base/master/alpine/build.yaml | grep -oP 'amd64:\s*alpine:\K[0-9]+\.[0-9]+' | head -n 1)
+          LATEST_ALPINE=$(curl -s https://raw.githubusercontent.com/home-assistant/docker-base/master/alpine/build.yaml | grep -oP 'aarch64:\s*alpine:\K[0-9]+\.[0-9]+' | head -n 1)
 
-          if [ -z "$LATEST_ALPINE" ]; then
+          if [ -z "$LATEST_ALPINE" ] || [ "$LATEST_ALPINE" == "null" ]; then
             VERIFIED_ALPINE="$CURRENT_ALPINE"
-          elif [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ]; then
-            if docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" > /dev/null 2>&1; then
-              VERIFIED_ALPINE="$LATEST_ALPINE"
-            else
-              VERIFIED_ALPINE="$CURRENT_ALPINE"
-            fi
           else
-            VERIFIED_ALPINE="$CURRENT_ALPINE"
+            VERIFIED_ALPINE="$LATEST_ALPINE"
           fi
 
           echo "verified_cf=$VERIFIED_CF" >> $GITHUB_OUTPUT
@@ -94,7 +85,7 @@ jobs:
           elif [ "$NEW_ALPINE" != "$CUR_ALPINE" ]; then
             FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
           else
-            FINAL_VERSION="$NEW_CF"
+            FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
           fi
 
           sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
@@ -102,7 +93,8 @@ jobs:
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
           if [ "$NEW_CF" != "$CUR_CF" ] || [ "$NEW_ALPINE" != "$CUR_ALPINE" ] || [ ! -f cloudflared/CHANGELOG.md ]; then
-            BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine security update."')
+            # Lọc bỏ phần SHA256 Checksums dài dòng ở cuối Release Notes của Cloudflare
+            BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine security update."' | sed '/SHA256 Checksums:/,$d')
             printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
           fi
 
@@ -118,7 +110,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
           if ! git diff --staged --quiet; then
-            git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} / keep-alive"
+            git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} (Alpine ${NEW_ALPINE})"
             git pull --rebase origin main
             git push
           fi
