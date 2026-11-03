@@ -1,37 +1,8 @@
-# What's Changed in 2026.10.7
+# What's Changed in 2026.10.7-alpineedge
 
 * **Cloudflared Binary (arm64 verified):** `2026.10.7`
-* **Home Assistant Alpine Base:** `Alpine 3.21`
+* **Home Assistant Alpine Base:** `Alpine edge`
 
 ---
 ### Cloudflare Release Notes (2026.10.7):
  
-### SHA256 Checksums:
-```
-cloudflared-amd64.pkg: 917e804561007221f83d9ba2ebd3dc9f7f2f328653d52af33e91e4a7a942d1fb
-cloudflared-arm64.pkg: 1ec2fdf94235f0b1422296383cb3eb028b75f4d9c2f2d51255651a3da2e357e6
-cloudflared-darwin-amd64.tgz: 5c55e77da7012cebca19170357e196176c48c9647cc2ead404702fa125ddbd86
-cloudflared-darwin-arm64.tgz: 2136431d5eb467bf447d2ee514b713e192719b143aec1d9e09bf7dc290d5bb12
-cloudflared-fips-linux-amd64: 426c7c0e3bdb1b62f43b88ede364c7e41bee9b5a5397546d1dd301420c75f9c7
-cloudflared-fips-linux-amd64.deb: 5ecda786849ef40b73407fcf946e922224a587f53ca4394745f521b567bb0c8c
-cloudflared-fips-linux-x86_64.rpm: 796608193f67341a37d86fec6097da8d439149593de8150df923495878dff0b7
-cloudflared-linux-386: 4823d2f038395617e04e4070601ab45c0c43f31f15ee7586be299e19ef49d46e
-cloudflared-linux-386.deb: 3b8c98b929855469a1bed892b4a2c5a88b25b071bb3307e670cf55cff10c0880
-cloudflared-linux-386.rpm: 155f7152eb85700569ae09c638b7088532ea9e66031ec10d272feb052509ffe3
-cloudflared-linux-aarch64.rpm: 6e58e8e388a4b4454b0f6c80f00eecbc98ac40a9bed76c4afc261b6ca7300c04
-cloudflared-linux-amd64: 1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872
-cloudflared-linux-amd64.deb: 70b1a1e0f46033ffc8d90b406e554044ba6cbf2e4360295ef1163aed31e09393
-cloudflared-linux-arm: 74f690f6707182839b63e0465726c7776dd63f0a174390b911d5d71f35cab94e
-cloudflared-linux-arm.deb: d8ad068223c19b9221319e7985c6ed0423f11e472493228a344ed347b0f1c93f
-cloudflared-linux-arm.rpm: f6f20852c7269a2c83635bad6a93ea8f4015356c4711318b1709a330f95409dc
-cloudflared-linux-arm64: 3df43aedc9ff291d1735b5cb576cb97e0b157488796db2e32b28aecabb445775
-cloudflared-linux-arm64.deb: d9407eb6e70ac31f54978a6b408a0320b51b664a6d0b498248692d7ac56bf836
-cloudflared-linux-armhf: 04548d1d5e6a45eaec43916078538192e447256bcc3551bc8265c4ece06a655b
-cloudflared-linux-armhf.deb: a89914a3db4faeaf935d673ccc5ca549655ebb2bb9b5db1ef23389ff51358216
-cloudflared-linux-armhf.rpm: 5622d077583cb93f86b45a0182c144b36615464f60ad6191ebbb39f77d5ce5cc
-cloudflared-linux-x86_64.rpm: 26c47d9d361459a818b519bc6b207dafe941bc50da921294752c6b0f094c32f0
-cloudflared-windows-386.exe: 88c6b972b410db0e26745f593510d772c825a13c5a2374819e3f13a05b333082
-cloudflared-windows-386.msi: d083222b52b52d73b477a922fe7bfb0043d7fca77228edd5ac155bab1c9dbe6f
-cloudflared-windows-amd64.exe: 2493dbc168923bb3e59e5e7716f71deced92992eea9acd6e9d74f84ac7751343
-cloudflared-windows-amd64.msi: 057a1370fe26b1a4d45d8673c219fa3ddb3c3b4bcbf0cde25ee938c932645387
-```
