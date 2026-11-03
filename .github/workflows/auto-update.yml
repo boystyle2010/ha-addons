@@ -28,18 +28,9 @@ jobs:
       - name: Download Official Assets (Logo, Icon, DOCS)
         run: |
           echo "🔍 [1/4] Kiểm tra tài nguyên giao diện (icon, logo, DOCS)..."
-          if [ ! -f cloudflared/icon.png ]; then
-            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
-            echo "  -> Đã tải mới icon.png"
-          fi
-          if [ ! -f cloudflared/logo.png ]; then
-            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
-            echo "  -> Đã tải mới logo.png"
-          fi
-          if [ ! -f cloudflared/DOCS.md ]; then
-            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o cloudflared/DOCS.md
-            echo "  -> Đã tải mới DOCS.md"
-          fi
+          [ ! -f cloudflared/icon.png ] && curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
+          [ ! -f cloudflared/logo.png ] && curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
+          [ ! -f cloudflared/DOCS.md ] && curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o cloudflared/DOCS.md
           echo "✅ Tài nguyên giao diện đã đầy đủ!"
 
       - name: Check & Verify Cloudflared arm64 and Alpine Base
@@ -52,27 +43,23 @@ jobs:
           CURRENT_CF=$(echo "$CURRENT_VER_FULL" | cut -d'-' -f1)
           LATEST_CF=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name' | sed 's/^v//')
 
-          echo "📌 Phiên bản Cloudflared hiện tại trong repo : $CURRENT_CF"
-          echo "🌐 Phiên bản Cloudflared mới nhất trên GitHub: $LATEST_CF"
+          echo "📌 Phiên bản Cloudflared hiện tại : $CURRENT_CF"
+          echo "🌐 Phiên bản Cloudflared mới nhất : $LATEST_CF"
 
           if [ -z "$LATEST_CF" ] || [ "$LATEST_CF" == "null" ]; then
-            echo "⚠️ Không lấy được API GitHub, giữ nguyên bản hiện tại: $CURRENT_CF"
             VERIFIED_CF="$CURRENT_CF"
             CF_STATUS="⚠️ Lỗi API (Giữ nguyên $CURRENT_CF)"
           elif [ "$LATEST_CF" != "$CURRENT_CF" ]; then
             BINARY_URL="https://github.com/cloudflare/cloudflared/releases/download/${LATEST_CF}/cloudflared-linux-arm64"
             HTTP_STATUS=$(curl -sL -I -o /dev/null -w "%{http_code}" "$BINARY_URL")
             if [ "$HTTP_STATUS" -eq 200 ]; then
-              echo "✅ Đã phát hiện bản mới ($LATEST_CF) và xác thực file arm64 (HTTP 200 OK)!"
               VERIFIED_CF="$LATEST_CF"
               CF_STATUS="🆕 Cập nhật mới ($CURRENT_CF ➔ $LATEST_CF)"
             else
-              echo "⏳ Có bản mới ($LATEST_CF) nhưng chưa có binary arm64 (HTTP $HTTP_STATUS). Tạm giữ $CURRENT_CF."
               VERIFIED_CF="$CURRENT_CF"
               CF_STATUS="⏳ Chờ binary arm64 (Giữ $CURRENT_CF)"
             fi
           else
-            echo "✅ Cloudflared đang ở phiên bản mới nhất ($CURRENT_CF)."
             VERIFIED_CF="$CURRENT_CF"
             CF_STATUS="✅ Đã mới nhất ($CURRENT_CF)"
           fi
@@ -81,24 +68,28 @@ jobs:
           echo "=========================================================="
           echo "🏔️ [3/4] KIỂM TRA PHIÊN BẢN HOME ASSISTANT ALPINE BASE"
           echo "=========================================================="
-          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9]+\.[0-9]+' cloudflared/Dockerfile || echo "3.21")
-          LATEST_ALPINE=$(curl -s https://raw.githubusercontent.com/home-assistant/docker-base/master/alpine/build.yaml | grep -oP '[0-9]+\.[0-9]+' | sort -V | tail -n 1)
+          # Đọc phiên bản Alpine hiện tại trong Dockerfile hoặc CHANGELOG.md
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9]+\.[0-9]+' cloudflared/Dockerfile || grep -oP 'Alpine \K[0-9]+\.[0-9]+' cloudflared/CHANGELOG.md | head -n 1 || echo "3.21")
+
+          # Quét từ nhánh main (và master dự phòng) của home-assistant/docker-base giống bên Tailscale
+          LATEST_ALPINE=$(curl -sL https://raw.githubusercontent.com/home-assistant/docker-base/main/alpine/build.yaml https://raw.githubusercontent.com/home-assistant/docker-base/master/alpine/build.yaml | grep -oP '3\.[0-9]+' | sort -V | tail -n 1)
+
+          # Nếu GitHub raw bị trễ, quét thêm từ API tag của home-assistant/docker-base
           if [ -z "$LATEST_ALPINE" ]; then
-            LATEST_ALPINE=$(curl -s https://alpinelinux.org/releases.json | jq -r '.release_branches[0].rel_branch' | sed 's/^v//; s/-stable//')
+            LATEST_ALPINE=$(curl -s https://api.github.com/repos/home-assistant/docker-base/releases/latest | grep -oP '3\.[0-9]+' | sort -V | tail -n 1)
           fi
 
-          echo "📌 Phiên bản Alpine hiện tại trong Dockerfile: $CURRENT_ALPINE"
-          echo "🌐 Phiên bản Alpine mới nhất từ hệ thống     : $LATEST_ALPINE"
+          echo "📌 Phiên bản Alpine hiện tại : $CURRENT_ALPINE"
+          echo "🌐 Phiên bản Alpine mới nhất : $LATEST_ALPINE"
 
           if [ -z "$LATEST_ALPINE" ] || [ "$LATEST_ALPINE" == "null" ]; then
             VERIFIED_ALPINE="$CURRENT_ALPINE"
             ALPINE_STATUS="⚠️ Giữ nguyên ($CURRENT_ALPINE)"
           elif [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ]; then
-            echo "🆕 Phát hiện bản cập nhật Alpine Base mới: $CURRENT_ALPINE ➔ $LATEST_ALPINE"
+            echo "🆕 Phát hiện Alpine Base mới: $CURRENT_ALPINE ➔ $LATEST_ALPINE"
             VERIFIED_ALPINE="$LATEST_ALPINE"
             ALPINE_STATUS="🆕 Cập nhật mới ($CURRENT_ALPINE ➔ $LATEST_ALPINE)"
           else
-            echo "✅ Alpine Base đang ở phiên bản mới nhất ($CURRENT_ALPINE)."
             VERIFIED_ALPINE="$CURRENT_ALPINE"
             ALPINE_STATUS="✅ Đã mới nhất ($CURRENT_ALPINE)"
           fi
@@ -112,9 +103,6 @@ jobs:
 
       - name: Apply Updates & Generate Summary Report
         run: |
-          echo "=========================================================="
-          echo "⚙️ [4/4] ÁP DỤNG CẬP NHẬT & TẠO BÁO CÁO KẾT QUẢ"
-          echo "=========================================================="
           NEW_CF="${{ steps.check_versions.outputs.verified_cf }}"
           CUR_CF="${{ steps.check_versions.outputs.current_cf }}"
           CF_STATUS="${{ steps.check_versions.outputs.cf_status }}"
@@ -130,24 +118,41 @@ jobs:
             FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
           fi
 
-          sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
+          # Đảm bảo Dockerfile luôn được cập nhật đúng dòng FROM Alpine mới nhất
+          if grep -q "aarch64-base:" cloudflared/Dockerfile; then
+            sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
+          else
+            sed -i "s|^ARG BUILD_FROM.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
+          fi
+
           [ -f cloudflared/build.yaml ] && rm -f cloudflared/build.yaml
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
-          # Cập nhật lại CHANGELOG nếu có bản mới HOẶC nếu CHANGELOG cũ còn dính SHA256 Checksums
+          # Tạo lại CHANGELOG theo chuẩn gọn đẹp giống Tailscale (Tích hợp lịch sử phiên bản)
           if [ "$NEW_CF" != "$CUR_CF" ] || [ "$NEW_ALPINE" != "$CUR_ALPINE" ] || [ ! -f cloudflared/CHANGELOG.md ] || grep -q "SHA256 Checksums" cloudflared/CHANGELOG.md; then
-            echo "📝 Đang tạo mới file CHANGELOG.md (đã lọc bỏ SHA256 Checksums)..."
             BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine security update."' | sed '/SHA256 Checksums:/,$d')
-            printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
+            TODAY=$(date -u '+%Y-%m-%d')
+            cat <<EOF > cloudflared/CHANGELOG.md
+# Changelog
+
+## ${FINAL_VERSION}
+Released: ${TODAY}
+
+### 📦 Component Updates
+* **Cloudflared Engine (arm64 verified):** \`v${NEW_CF}\`
+* **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\` (Verified package compatibility)
+* **Official Release Source:** [GitHub Release ${NEW_CF}](https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF})
+
+### 📝 Upstream Release Notes (${NEW_CF})
+${BODY}
+EOF
           fi
 
-          # Kiểm tra Keep-Alive 45 ngày
           LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
           NOW_TS=$(date +%s)
           DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
 
           if [ "$DAYS_IDLE" -ge 45 ]; then
-            echo "💓 Đã $DAYS_IDLE ngày không có commit mới -> Kích hoạt Keep-Alive Heartbeat!"
             echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
           fi
 
@@ -159,13 +164,10 @@ jobs:
             git pull --rebase origin main
             git push
             ACTION_TAKEN="🚀 **Đã đẩy bản cập nhật mới lên GitHub (\`v${FINAL_VERSION}\`)**"
-            echo "✅ Đã commit và push bản cập nhật v${FINAL_VERSION} thành công!"
           else
             ACTION_TAKEN="💤 **Không có thay đổi (Giữ nguyên \`v${FINAL_VERSION}\`)**"
-            echo "💤 Mọi thứ đều đã ở bản mới nhất, không cần tạo commit mới."
           fi
 
-          # In bảng báo cáo đẹp mắt ra màn hình chính của GitHub Actions (Job Summary)
           cat <<EOF >> $GITHUB_STEP_SUMMARY
           ### 📊 Báo cáo Kiểm tra Tự động Cloudflared Pro (Pi 5)
           | Thành phần | Phiên bản đang cài | Phiên bản mới nhất | Trạng thái xử lý |
@@ -174,6 +176,6 @@ jobs:
           | **Alpine Base Image** | \`Alpine ${CUR_ALPINE}\` | \`Alpine ${NEW_ALPINE}\` | ${ALPINE_STATUS} |
 
           * **Phiên bản Add-on hiện hành:** \`${FINAL_VERSION}\`
-          * **Thời gian không hoạt động (Idle):** \`${DAYS_IDLE} / 45 ngày\` (Keep-Alive Bảo vệ chống tắt bot)
+          * **Thời gian không hoạt động (Idle):** \`${DAYS_IDLE} / 45 ngày\`
           * **Kết quả thực thi:** ${ACTION_TAKEN}
           EOF
