@@ -540,6 +540,18 @@ jobs:
             fi
             echo "- **Official Release Source:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
             echo ""
+
+            # Trích xuất Upstream Notes an toàn cho bản mới nhất
+            LATEST_BODY=$(echo "$RELEASES" | jq -r --arg tag "$NEW_TAG" '.[] | select(.tag_name == $tag) | .body // empty')
+            if [ -n "$LATEST_BODY" ] && [ "$LATEST_BODY" != "null" ]; then
+              echo "### 📝 Upstream Release Notes (${NEW_TAG})"
+              echo "${LATEST_BODY}"
+              echo ""
+            else
+              echo "### 📝 Upstream Release Notes (${NEW_TAG})"
+              echo "Please refer to the changelog available at https://tailscale.com/changelog"
+              echo ""
+            fi
             echo "---"
             echo ""
 
@@ -553,12 +565,10 @@ jobs:
               [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
 
               V="${TAG#v}"
-              if [ "$V" = "$NEW_VER" ]; then
-                continue
-              fi
+              [ "$V" = "$NEW_VER" ] && continue
 
               DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
-              BODY=$(echo "$rel" | jq -r '.body // "See official changelog at https://tailscale.com/changelog"')
+              BODY=$(echo "$rel" | jq -r '.body // empty')
 
               echo "## ${V}"
               echo "_Released: ${DATE}_"
@@ -568,9 +578,15 @@ jobs:
               echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
               echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
               echo ""
-              echo "### 📝 Upstream Release Notes (${TAG})"
-              echo "${BODY}"
-              echo ""
+              if [ -n "$BODY" ] && [ "$BODY" != "null" ]; then
+                echo "### 📝 Upstream Release Notes (${TAG})"
+                echo "${BODY}"
+                echo ""
+              else
+                echo "### 📝 Upstream Release Notes (${TAG})"
+                echo "Please refer to the changelog available at https://tailscale.com/changelog"
+                echo ""
+              fi
               echo "---"
               echo ""
 
