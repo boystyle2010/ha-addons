@@ -5,14 +5,14 @@
 
 ### Current Version Information
 - Cloudflared: `2026.10.7` (arm64 binary verified)
-- Alpine Base: `3.24` (official Home Assistant base image)
+- Alpine Base: `3.24` (official Home Assistant base)
 - Optimized for Raspberry Pi 5 (aarch64)
 
 ---
 ### Cloudflare Release Notes (2026.10.7)
-- This is the current stable version.
-- arm64 binary has been verified.
-- Full release notes: https://github.com/cloudflare/cloudflared/releases/tag/2026.10.7
+- Current stable version
+- arm64 binary verified
+- Full notes: https://github.com/cloudflare/cloudflared/releases/tag/2026.10.7
 
 ---
 
