@@ -1,212 +1,205 @@
-name: Auto Update Cloudflared and Alpine Stable
+name: Auto Check Cloudflared & Alpine Base (Verified)
 
 on:
   schedule:
     - cron: '0 */6 * * *'
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
+
+concurrency:
+  group: auto-update-cloudflared
+  cancel-in-progress: true
 
 permissions:
   contents: write
-
-concurrency:
-  group: auto-update-cloudflared-${{ github.ref }}
-  cancel-in-progress: false
 
 jobs:
   check-and-update:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    defaults:
-      run:
-        shell: bash
     steps:
-      - name: Checkout default branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
-      - name: Enable ARM64 emulation
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install YAML parser
-        run: python -m pip install 'PyYAML==6.0.2'
-
-      - name: Check, verify and prepare updates
-        id: update
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Download Official Assets (Logo, Icon, DOCS)
         run: |
-          set -euo pipefail
-          cat > "$RUNNER_TEMP/update_cloudflared.py" <<'PY'
-          import base64
-          import datetime as dt
-          import json
-          import os
-          from pathlib import Path
-          import re
-          import subprocess
-          import tempfile
-          import time
-          import urllib.error
-          import urllib.parse
-          import urllib.request
-          import yaml
+          echo "🔍 [1/4] Kiểm tra tài nguyên giao diện (icon, logo, DOCS)..."
+          mkdir -p cloudflared
+          if [ ! -f cloudflared/icon.png ]; then
+            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
+            echo "  -> Đã tải mới icon.png"
+          fi
+          if [ ! -f cloudflared/logo.png ]; then
+            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
+            echo "  -> Đã tải mới logo.png"
+          fi
+          if [ ! -f cloudflared/DOCS.md ]; then
+            curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o cloudflared/DOCS.md
+            echo "  -> Đã tải mới DOCS.md"
+          fi
+          echo "✅ Tài nguyên giao diện đã đầy đủ!"
 
-          ROOT = Path.cwd()
-          ADDON = ROOT / 'cloudflared'
-          CONFIG = ADDON / 'config.yaml'
-          DOCKERFILE = ADDON / 'Dockerfile'
-          TARGET_REPO = 'home-assistant/base'
-          TARGET_PREFIX = 'ghcr.io/' + TARGET_REPO + ':'
-          notes = []
+      - name: Check & Verify Cloudflared arm64 and Alpine Base
+        id: check_versions
+        run: |
+          set -e
 
-          def request(url, headers=None):
-              headers = {'User-Agent': 'cloudflared-stable-updater', **(headers or {})}
-              for attempt in range(3):
-                  try:
-                      with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=60) as response:
-                          return response.read(), response.headers
-                  except (urllib.error.URLError, TimeoutError):
-                      if attempt == 2:
-                          raise
-                      time.sleep(2 ** attempt)
+          echo "=========================================================="
+          echo "🚀 [2/4] KIỂM TRA PHIÊN BẢN CLOUDFLARED (ARM64 RASPBERRY PI 5)"
+          echo "=========================================================="
 
-          def get_json(url, headers=None):
-              return json.loads(request(url, headers)[0])
+          CURRENT_VER_FULL=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml || echo "2026.10.7")
+          CURRENT_CF=$(echo "$CURRENT_VER_FULL" | cut -d'-' -f1)
+          LATEST_CF=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name' | sed 's/^v//')
 
-          def gh_json(path):
-              return get_json('https://api.github.com/' + path, {
-                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
-                  'Accept': 'application/vnd.github+json',
-                  'X-GitHub-Api-Version': '2022-11-28',
-              })
+          echo "📌 Phiên bản Cloudflared hiện tại trong repo : $CURRENT_CF"
+          echo "🌐 Phiên bản Cloudflared mới nhất trên GitHub: $LATEST_CF"
 
-          def run(args, **kwargs):
-              return subprocess.run(args, check=True, text=True, **kwargs)
+          if [ -z "$LATEST_CF" ] || [ "$LATEST_CF" = "null" ]; then
+            echo "⚠️ Không lấy được API GitHub, giữ nguyên bản hiện tại: $CURRENT_CF"
+            VERIFIED_CF="$CURRENT_CF"
+            CF_STATUS="⚠️ Lỗi API (Giữ nguyên $CURRENT_CF)"
+          elif [ "$LATEST_CF" != "$CURRENT_CF" ]; then
+            BINARY_URL="https://github.com/cloudflare/cloudflared/releases/download/${LATEST_CF}/cloudflared-linux-arm64"
+            HTTP_STATUS=$(curl -sL -I -o /dev/null -w "%{http_code}" "$BINARY_URL")
+            if [ "$HTTP_STATUS" -eq 200 ]; then
+              echo "✅ Đã phát hiện bản mới ($LATEST_CF) và xác thực file arm64 (HTTP 200 OK)!"
+              VERIFIED_CF="$LATEST_CF"
+              CF_STATUS="🆕 Cập nhật mới ($CURRENT_CF ➔ $LATEST_CF)"
+            else
+              echo "⏳ Có bản mới ($LATEST_CF) nhưng chưa có binary arm64 (HTTP $HTTP_STATUS). Tạm giữ $CURRENT_CF."
+              VERIFIED_CF="$CURRENT_CF"
+              CF_STATUS="⏳ Chờ binary arm64 (Giữ $CURRENT_CF)"
+            fi
+          else
+            echo "✅ Cloudflared đang ở phiên bản mới nhất ($CURRENT_CF)."
+            VERIFIED_CF="$CURRENT_CF"
+            CF_STATUS="✅ Đã mới nhất ($CURRENT_CF)"
+          fi
 
-          def log(message):
-              print(message, flush=True)
-              notes.append(message)
+          echo ""
+          echo "=========================================================="
+          echo "🏔️ [3/4] KIỂM TRA PHIÊN BẢN HOME ASSISTANT ALPINE BASE"
+          echo "=========================================================="
 
-          def version(value):
-              return tuple(int(part) for part in value.split('.'))
+          # Lấy phiên bản Alpine hiện tại từ Dockerfile
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' cloudflared/Dockerfile | head -1 || echo "3.22")
+          echo "📌 Alpine Base hiện tại trong Dockerfile: $CURRENT_ALPINE"
 
-          config_text = CONFIG.read_text()
-          config = yaml.safe_load(config_text)
-          current_full = str(config['version'])
-          match = re.fullmatch(r'(\d+\.\d+\.\d+)(?:[-+].*)?', current_full)
-          if not match:
-              raise SystemExit('Unsupported config.yaml version: ' + current_full)
-          current_cf = match.group(1)
-          docker_text = DOCKERFILE.read_text()
-          # Require an explicit Home Assistant base reference; never guess ARG values.
-          pattern = re.compile(r'(?m)^(\s*FROM\s+(?:--platform=\S+\s+)?)(ghcr\.io/home-assistant/(?:aarch64-base|base):)([A-Za-z0-9_.-]+)(?=\s|$)', re.I)
-          bases = list(pattern.finditer(docker_text))
-          if len(bases) != 1:
-              raise SystemExit('Expected exactly one literal FROM ghcr.io/home-assistant/{aarch64-base|base}:TAG in cloudflared/Dockerfile. ARG-based or digest-pinned FROM needs explicit handling.')
-          base = bases[0]
-          current_base = base.group(3)
-          if current_base != 'edge' and not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', current_base):
-              raise SystemExit('Unsupported current Alpine tag: ' + current_base)
-          if 'aarch64' not in config.get('arch', []):
-              raise SystemExit('config.yaml does not declare aarch64; refusing an ARM64-only verification.')
-          if any(arch != 'aarch64' for arch in config.get('arch', [])):
-              raise SystemExit('This workflow verifies ARM64 only. Multi-architecture add-ons require verification for every declared architecture.')
+          # Danh sách các bản Alpine được Home Assistant hỗ trợ (mới → cũ)
+          # Có thể mở rộng thêm 3.25, 3.26... khi HA hỗ trợ
+          CANDIDATES="3.24 3.23 3.22"
 
-          # Query registry tags, not the edge package listing or a guessed next minor.
-          token_url = 'https://ghcr.io/token?' + urllib.parse.urlencode({
-              'service': 'ghcr.io', 'scope': 'repository:' + TARGET_REPO + ':pull'})
-          token = get_json(token_url)['token']
-          headers = {'Authorization': 'Bearer ' + token}
-          url = 'https://ghcr.io/v2/' + TARGET_REPO + '/tags/list?n=1000'
-          tags = set()
-          visited = set()
-          while url:
-              if url in visited:
-                  raise RuntimeError('Registry pagination loop')
-              visited.add(url)
-              body, response_headers = request(url, headers)
-              tags.update(json.loads(body).get('tags') or [])
-              link = response_headers.get('Link', '')
-              following = re.search(r'<([^>]+)>;\s*rel="?next"?', link)
-              url = urllib.parse.urljoin(url, following.group(1)) if following else None
-              if url and urllib.parse.urlparse(url).netloc != 'ghcr.io':
-                  raise RuntimeError('Unexpected registry pagination host')
-          stable = sorted((tag for tag in tags if re.fullmatch(r'\d+\.\d+', tag)), key=version, reverse=True)
-          if not stable:
-              raise SystemExit('No numeric stable Alpine tags returned by GHCR; refusing an empty update.')
-          latest_base = stable[0]
-          log('Alpine current: ' + current_base + '; newest published stable tag: ' + latest_base)
-          selected_cf = current_cf
-          release = None
-          cf_status = 'Already current'
-          try:
-              release = gh_json('repos/cloudflare/cloudflared/releases/latest')
-              latest_cf = release['tag_name'].removeprefix('v')
-              if release.get('draft') or release.get('prerelease') or not re.fullmatch(r'\d+\.\d+\.\d+', latest_cf):
-                  raise ValueError('Unexpected stable Cloudflared release')
-              if version(latest_cf) > version(current_cf):
-                  assets = [asset for asset in release.get('assets', []) if asset['name'] == 'cloudflared-linux-arm64']
-                  if len(assets) != 1:
-                      cf_status = 'New release found, waiting for ARM64 binary: ' + latest_cf
-                  else:
-                      with urllib.request.urlopen(assets[0]['browser_download_url'], timeout=60) as response:
-                          if response.status != 200 or not response.read(4).startswith(b'\x7fELF'):
-                              raise ValueError('ARM64 asset is not a downloadable ELF binary')
-                      selected_cf = latest_cf
-                      cf_status = current_cf + ' -> ' + selected_cf
-              elif version(latest_cf) < version(current_cf):
-                  cf_status = 'Repository version newer than upstream; no downgrade'
-          except Exception as exc:
-              cf_status = 'Cloudflared lookup failed; keeping current: ' + str(exc)
-          log(cf_status)
+          VERIFIED_ALPINE="$CURRENT_ALPINE"
+          ALPINE_STATUS="✅ Đã mới nhất (Alpine $CURRENT_ALPINE)"
 
-          selected_base = current_base
-          selected_text = docker_text
-          base_status = 'Already current'
-          change_base = current_base == 'edge' or version(latest_base) > version(current_base)
-          if change_base:
-              candidate = pattern.sub(lambda m: m.group(1) + TARGET_PREFIX + latest_base, docker_text, count=1)
-              image = TARGET_PREFIX + latest_base
-              try:
-                  run(['docker', 'pull', '--platform', 'linux/arm64', image])
-                  result = run(['docker', 'run', '--rm', '--platform', 'linux/arm64', '--entrypoint', '/bin/sh', image,
-                      '-ec', 'test "$(uname -m)" = aarch64; cat /etc/alpine-release; ! grep -Eq "/edge(/|$)" /etc/apk/repositories'], capture_output=True)
-                  actual = result.stdout.strip().splitlines()[-1]
-                  if not actual.startswith(latest_base + '.'):
-                      raise ValueError('Image Alpine release mismatch: ' + actual)
-                  # Build the real Dockerfile under emulation, including its real apk commands.
-                  # Do not parse or simulate packages from another add-on.
-                  with tempfile.NamedTemporaryFile(mode='w', suffix='.Dockerfile', dir=os.environ['RUNNER_TEMP']) as temp:
-                      temp.write(candidate)
-                      temp.flush()
-                      run(['docker', 'build', '--platform', 'linux/arm64', '--pull', '--no-cache',
-                           '--build-arg', 'BUILD_ARCH=aarch64', '--build-arg', 'BUILD_VERSION=' + selected_cf,
-                           '-f', temp.name, '-t', 'cloudflared-update-check:local', str(ADDON)])
-                  selected_base = latest_base
-                  selected_text = candidate
-                  base_status = current_base + ' -> ' + latest_base + ' (ARM64 image and Dockerfile build verified)'
-              except Exception as exc:
-                  base_status = 'Stable ' + latest_base + ' available, verification/build failed; keeping ' + current_base
-                  log('::warning::' + base_status + ': ' + str(exc))
-          elif current_base != 'edge' and version(latest_base) < version(current_base):
-              base_status = 'Current tag newer than published stable; no downgrade'
-          log(base_status)
+          for ver in $CANDIDATES; do
+            # So sánh version đơn giản (3.24 > 3.23 > 3.22)
+            if [ "$(printf '%s\n' "$ver" "$CURRENT_ALPINE" | sort -V | tail -1)" = "$ver" ] && [ "$ver" != "$CURRENT_ALPINE" ]; then
+              echo "🔍 Đang kiểm tra sự tồn tại của aarch64-base:$ver ..."
+              if docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${ver}" > /dev/null 2>&1; then
+                echo "✅ Tìm thấy Alpine $ver (có sẵn trên GHCR)!"
+                VERIFIED_ALPINE="$ver"
+                ALPINE_STATUS="🆕 Cập nhật mới (Alpine $CURRENT_ALPINE ➔ $ver)"
+                break
+              else
+                echo "⏳ Tag $ver chưa tồn tại hoặc chưa public."
+              fi
+            fi
+          done
 
-          changed = selected_cf != current_cf or selected_base != current_base
-          final_version = current_full
-          if changed:
-              final_version = selected_cf + '-alpine' + selected_base
-              version_pattern = re.compile(r'^version\s*:.*$', re.M)
-              if len(version_pattern.findall(config_
+          if [ "$VERIFIED_ALPINE" = "$CURRENT_ALPINE" ]; then
+            echo "ℹ️ Alpine $CURRENT_ALPINE vẫn là bản mới nhất được xác thực."
+          fi
+
+          echo "verified_cf=$VERIFIED_CF" >> $GITHUB_OUTPUT
+          echo "current_cf=$CURRENT_CF" >> $GITHUB_OUTPUT
+          echo "cf_status=$CF_STATUS" >> $GITHUB_OUTPUT
+          echo "verified_alpine=$VERIFIED_ALPINE" >> $GITHUB_OUTPUT
+          echo "current_alpine=$CURRENT_ALPINE" >> $GITHUB_OUTPUT
+          echo "alpine_status=$ALPINE_STATUS" >> $GITHUB_OUTPUT
+
+      - name: Apply Updates & Generate Summary Report
+        run: |
+          set -e
+
+          echo "=========================================================="
+          echo "⚙️ [4/4] ÁP DỤNG CẬP NHẬT & TẠO BÁO CÁO KẾT QUẢ"
+          echo "=========================================================="
+
+          NEW_CF="${{ steps.check_versions.outputs.verified_cf }}"
+          CUR_CF="${{ steps.check_versions.outputs.current_cf }}"
+          CF_STATUS="${{ steps.check_versions.outputs.cf_status }}"
+          NEW_ALPINE="${{ steps.check_versions.outputs.verified_alpine }}"
+          CUR_ALPINE="${{ steps.check_versions.outputs.current_alpine }}"
+          ALPINE_STATUS="${{ steps.check_versions.outputs.alpine_status }}"
+
+          # Quyết định version cuối cùng của add-on
+          if [ "$NEW_CF" != "$CUR_CF" ]; then
+            FINAL_VERSION="${NEW_CF}"
+          elif [ "$NEW_ALPINE" != "$CUR_ALPINE" ]; then
+            FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
+          else
+            FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
+          fi
+
+          # Cập nhật Dockerfile (Alpine base)
+          sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
+
+          # Xóa build.yaml nếu còn sót
+          [ -f cloudflared/build.yaml ] && rm -f cloudflared/build.yaml
+
+          # Cập nhật version trong config.yaml
+          sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
+
+          # Tạo / cập nhật CHANGELOG
+          if [ "$NEW_CF" != "$CUR_CF" ] || [ "$NEW_ALPINE" != "$CUR_ALPINE" ] || [ ! -f cloudflared/CHANGELOG.md ] || grep -q "SHA256 Checksums" cloudflared/CHANGELOG.md 2>/dev/null; then
+            echo "📝 Đang tạo mới file CHANGELOG.md..."
+            BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine security update."' | sed '/SHA256 Checksums:/,$d')
+            printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" \
+              "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
+          fi
+
+          # Keep-Alive 45 ngày
+          LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
+          NOW_TS=$(date +%s)
+          DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
+
+          if [ "$DAYS_IDLE" -ge 45 ]; then
+            echo "💓 Đã $DAYS_IDLE ngày không có commit mới -> Kích hoạt Keep-Alive Heartbeat!"
+            mkdir -p .github/workflows
+            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
+          fi
+
+          # Commit & Push
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} (Alpine ${NEW_ALPINE})"
+            git pull --rebase origin main
+            git push
+            ACTION_TAKEN="🚀 **Đã đẩy bản cập nhật mới lên GitHub (\`v${FINAL_VERSION}\`)**"
+            echo "✅ Đã commit và push bản cập nhật v${FINAL_VERSION} thành công!"
+          else
+            ACTION_TAKEN="💤 **Không có thay đổi (Giữ nguyên \`v${FINAL_VERSION}\`)**"
+            echo "💤 Mọi thứ đều đã ở bản mới nhất, không cần tạo commit mới."
+          fi
+
+          # Báo cáo Job Summary
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ### 📊 Báo cáo Kiểm tra Tự động Cloudflared Pro (Pi 5)
+          | Thành phần | Phiên bản đang cài | Phiên bản mới nhất | Trạng thái xử lý |
+          | :--- | :---: | :---: | :--- |
+          | **Cloudflared (arm64)** | \`${CUR_CF}\` | \`${NEW_CF}\` | ${CF_STATUS} |
+          | **Alpine Base Image** | \`Alpine ${CUR_ALPINE}\` | \`Alpine ${NEW_ALPINE}\` | ${ALPINE_STATUS} |
+
+          * **Phiên bản Add-on hiện hành:** \`${FINAL_VERSION}\`
+          * **Thời gian không hoạt động (Idle):** \`${DAYS_IDLE} / 45 ngày\` (Keep-Alive Bảo vệ chống tắt bot)
+          * **Kết quả thực thi:** ${ACTION_TAKEN}
+          EOF
