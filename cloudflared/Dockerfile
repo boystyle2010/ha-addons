@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:edge
+ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.21
 FROM ${BUILD_FROM}
 
 ARG BUILD_VERSION
@@ -14,7 +14,7 @@ RUN VERSION_CLEAN=$(echo "${CLOUDFLARED_VERSION}" | cut -d'-' -f1) && curl -fL "
 COPY run.sh /
 RUN chmod a+x /run.sh
 
-# Kiểm tra sức khỏe đường hầm mỗi 30 giây (Viết trên 1 dòng để tránh lỗi cú pháp buildx)
+# Kiểm tra sức khỏe đường hầm mỗi 30 giây
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD pgrep cloudflared > /dev/null || exit 1
 
 CMD [ "/run.sh" ]
