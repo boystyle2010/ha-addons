@@ -39,7 +39,6 @@ jobs:
           VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' $D/config.yaml || echo "1.0.0")
           CUR_ALPINE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' $D/Dockerfile || echo "3.23")
 
-          # Tự động làm mới nếu chưa có CHANGELOG.md, có ít hơn 4 bản, hoặc còn sót tiếng Việt cũ
           NEED_CHANGELOG=0
           if [ ! -f "$D/CHANGELOG.md" ]; then
             NEED_CHANGELOG=1
@@ -210,7 +209,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
-      # Multi-layer upstream verification + Smart Addon Version
+      # Multi-layer upstream verification + Smart Addon Version + Force Migrate
       # ------------------------------------------------------------------
       - name: Multi-layer upstream verification
         id: check
@@ -365,6 +364,7 @@ jobs:
           # ---- Quyết định update độc lập ----
           TS_UPDATE=0
           ALPINE_UPDATE=0
+          FORCE_MIGRATE=0
           TS_STATUS="✅ Up to date"
           ALPINE_STATUS="✅ Up to date"
           ADDON_STATUS="✅ Up to date"
@@ -383,34 +383,36 @@ jobs:
             ALPINE_STATUS="⬆️ UPDATE → $LATEST_BASE"
           fi
 
-          if [ "$TS_UPDATE" -eq 0 ] && [ "$ALPINE_UPDATE" -eq 0 ]; then
+          # ---- Ép migrate nếu đang dùng version kiểu cũ (1.104.x) ----
+          if [[ "$CURRENT_VER" =~ ^1\.10[0-9] ]]; then
+            FORCE_MIGRATE=1
+            NEW_ADDON_VER="1.0.0"
+            ADDON_STATUS="🚀 MIGRATE → 1.0.0 (old version style detected)"
+            echo "ℹ️ Old version style detected ($CURRENT_VER) → forcing migration to 1.0.0"
+          fi
+
+          if [ "$TS_UPDATE" -eq 0 ] && [ "$ALPINE_UPDATE" -eq 0 ] && [ "$FORCE_MIGRATE" -eq 0 ]; then
             update_needed=false
             skip "Both Tailscale $CURRENT_TS and Alpine $CURRENT_BASE are already up to date and verified"
           fi
 
-          # ---- Logic version addon mới ----
-          # Nếu đang dùng version kiểu cũ (1.104.x) thì reset về 1.0.0
-          if [[ "$CURRENT_VER" =~ ^1\.10[0-9] ]]; then
-            CUR_MAJOR=1
-            CUR_MINOR=0
-            CUR_PATCH=0
-            echo "ℹ️ Detected old version style → starting from 1.0.0"
-          else
+          # ---- Logic version addon mới (khi không phải migrate) ----
+          if [ "$FORCE_MIGRATE" -eq 0 ]; then
             CUR_MAJOR=$(echo "$CURRENT_VER" | cut -d. -f1)
             CUR_MINOR=$(echo "$CURRENT_VER" | cut -d. -f2)
             CUR_PATCH=$(echo "$CURRENT_VER" | cut -d. -f3)
-          fi
 
-          if [ "$TS_UPDATE" -eq 1 ] && [ "$ALPINE_UPDATE" -eq 1 ]; then
-            # Cả 2 cùng update → nhảy major
-            NEW_MAJOR=$((CUR_MAJOR + 1))
-            NEW_ADDON_VER="${NEW_MAJOR}.0.0"
-            ADDON_STATUS="🚀 MAJOR → $NEW_ADDON_VER (both components updated)"
-          else
-            # Chỉ 1 cái update → tăng patch
-            NEW_PATCH=$((CUR_PATCH + 1))
-            NEW_ADDON_VER="${CUR_MAJOR}.${CUR_MINOR}.${NEW_PATCH}"
-            ADDON_STATUS="⬆️ PATCH → $NEW_ADDON_VER"
+            if [ "$TS_UPDATE" -eq 1 ] && [ "$ALPINE_UPDATE" -eq 1 ]; then
+              # Cả 2 cùng update → nhảy major
+              NEW_MAJOR=$((CUR_MAJOR + 1))
+              NEW_ADDON_VER="${NEW_MAJOR}.0.0"
+              ADDON_STATUS="🚀 MAJOR → $NEW_ADDON_VER (both components updated)"
+            else
+              # Chỉ 1 cái update → tăng patch
+              NEW_PATCH=$((CUR_PATCH + 1))
+              NEW_ADDON_VER="${CUR_MAJOR}.${CUR_MINOR}.${NEW_PATCH}"
+              ADDON_STATUS="⬆️ PATCH → $NEW_ADDON_VER"
+            fi
           fi
 
           update_needed=true
@@ -424,6 +426,7 @@ jobs:
             echo "new_addon_ver=$NEW_ADDON_VER"
             echo "ts_update=$TS_UPDATE"
             echo "alpine_update=$ALPINE_UPDATE"
+            echo "force_migrate=$FORCE_MIGRATE"
           } >> "$GITHUB_OUTPUT"
 
           print_summary_table
@@ -449,7 +452,7 @@ jobs:
           git diff --stat
 
       # ------------------------------------------------------------------
-      # Kiểm tra file sau khi sửa (sẵn sàng để build)
+      # Kiểm tra file sau khi sửa
       # ------------------------------------------------------------------
       - name: Validate edited files
         if: steps.check.outputs.update_needed == 'true'
@@ -492,7 +495,7 @@ jobs:
           echo "- ✅ All files validated and ready to build" >> "$GITHUB_STEP_SUMMARY"
 
       # ------------------------------------------------------------------
-      # Changelog Tiếng Anh: Luôn hiển thị 4 phiên bản gần nhất + Chi tiết Tailscale & Alpine
+      # Changelog
       # ------------------------------------------------------------------
       - name: Generate Changelog (Last 4 Releases in English)
         if: steps.check.outputs.update_needed == 'true'
@@ -506,6 +509,7 @@ jobs:
           NEW_ADDON_VER: ${{ steps.check.outputs.new_addon_ver }}
           TS_UPDATE: ${{ steps.check.outputs.ts_update }}
           ALPINE_UPDATE: ${{ steps.check.outputs.alpine_update }}
+          FORCE_MIGRATE: ${{ steps.check.outputs.force_migrate }}
         run: |
           FILE="tailscale/CHANGELOG.md"
 
@@ -519,6 +523,11 @@ jobs:
             echo "_Released: $(date -u +%Y-%m-%d)_"
             echo ""
             echo "### 📦 Component Updates"
+
+            if [ "$FORCE_MIGRATE" = "1" ]; then
+              echo "- **Addon Versioning:** Migrated from old style (\`${OLD_VER}\`) to new independent versioning (\`1.0.0\`)"
+            fi
+
             if [ "$TS_UPDATE" = "1" ]; then
               echo "- **Tailscale Engine (arm64 & amd64 verified):** Updated to **\`v${NEW_VER}\`**"
             else
@@ -582,6 +591,7 @@ jobs:
           NEW_BASE: ${{ steps.check.outputs.new_base }}
           TS_UPDATE: ${{ steps.check.outputs.ts_update }}
           ALPINE_UPDATE: ${{ steps.check.outputs.alpine_update }}
+          FORCE_MIGRATE: ${{ steps.check.outputs.force_migrate }}
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
@@ -596,7 +606,9 @@ jobs:
             exit 0
           fi
 
-          if [ "$TS_UPDATE" = "1" ] && [ "$ALPINE_UPDATE" = "1" ]; then
+          if [ "$FORCE_MIGRATE" = "1" ]; then
+            MSG="chore(tailscale): migrate to new versioning scheme v${NEW_ADDON_VER}"
+          elif [ "$TS_UPDATE" = "1" ] && [ "$ALPINE_UPDATE" = "1" ]; then
             MSG="chore(tailscale): bump to v${NEW_ADDON_VER} (Tailscale + Alpine)"
           elif [ "$TS_UPDATE" = "1" ]; then
             MSG="chore(tailscale): bump to v${NEW_ADDON_VER} (Tailscale update)"
