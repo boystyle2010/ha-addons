@@ -29,14 +29,15 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # ------------------------------------------------------------------
-      # Tự tạo các file còn thiếu & tạo CHANGELOG.md tiếng Anh (4 bản gần nhất)
+      # Tự tạo/cập nhật các file & đồng bộ các ô màu (Badges) trong README.md
       # ------------------------------------------------------------------
-      - name: Bootstrap missing add-on files & English Changelog
+      - name: Bootstrap missing add-on files, Badges & English Changelog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           D="tailscale"
-          VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' $D/config.yaml || echo "1.0.0")
+          VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' $D/config.yaml || echo "1.0.1")
+          CUR_TAG=$(grep -oP '^ARG TAILSCALE_VERSION=\K\S+' $D/Dockerfile || echo "v1.104.4")
           CUR_ALPINE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' $D/Dockerfile || echo "3.24")
 
           NEED_CHANGELOG=0
@@ -91,33 +92,43 @@ jobs:
             fi
           fi
 
-          if [ ! -f "$D/README.md" ]; then
-            echo "📝 Creating README.md"
-            cat > "$D/README.md" <<'EOF'
+          # Tạo hoặc nâng cấp README.md để luôn có đủ 6 ô màu (Badges): version, tailscale, alpine base, project stage, maintained, arch
+          if [ ! -f "$D/README.md" ] || ! grep -q "img.shields.io/badge/tailscale-" "$D/README.md" 2>/dev/null; then
+            echo "📝 Updating README.md with Tailscale & Alpine Base version badges..."
+            cat > "$D/README.md" <<EOF
           # Home Assistant App: Tailscale Pro
 
-          High-stability, upstream-synced Tailscale mesh VPN and Subnet Router for Home Assistant, tuned for Raspberry Pi 5.
+          ![Version](https://img.shields.io/badge/version-${VER}-blue.svg)
+          ![Tailscale](https://img.shields.io/badge/tailscale-${CUR_TAG}-0052CC.svg)
+          ![Alpine Base](https://img.shields.io/badge/alpine%20base-${CUR_ALPINE}-0D597F.svg)
+          ![Project Stage](https://img.shields.io/badge/project%20stage-stable-brightgreen.svg)
+          ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen.svg)
+          ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg)
+
+          Zero-config mesh VPN for building secure networks, tuned for Raspberry Pi 5.
+
+          ## About
+
+          Tailscale Pro connects your Home Assistant to your private Tailscale network in minutes. Reach your home from anywhere, share your local network as a subnet router, or route all your traffic through your home as an exit node.
+
+          This add-on tracks the official Tailscale releases and updates itself automatically after passing a series of safety checks.
 
           ## Features
 
-          - Always up to date: a bot checks for new official Tailscale releases and updates this add-on automatically
-          - Subnet router and exit node support
-          - Web UI integrated in the Home Assistant sidebar (Ingress)
+          - Subnet router and exit node
+          - Web UI in the Home Assistant sidebar (Ingress)
+          - Built-in health monitor with automatic recovery
+          - UDP GRO forwarding optimization for higher throughput
+          - Persistent login state, no need to sign in again after a restart
+          - AppArmor protection
+          - Automatic, verified updates from the official Tailscale repository
           - Taildrive & Taildrop built-in support
-          - Built-in health monitor: restarts the connection automatically if it becomes unstable
-          - UDP GRO forwarding optimization for better throughput
-          - Persistent state, so you do not need to log in again after a restart
-          - Supports aarch64
-
-          ## Installation
-
-          1. Add this repository to the Home Assistant Add-on Store
-          2. Install **Tailscale Pro**
-          3. Fill in the configuration (see the Documentation tab)
-          4. Start the add-on
-
-          See the **Documentation** tab for full setup instructions.
           EOF
+          else
+            # Đảm bảo số version trên các ô màu luôn khớp với config.yaml và Dockerfile hiện tại
+            sed -i "s|badge/version-[^-]*-blue.svg|badge/version-${VER}-blue.svg|g" "$D/README.md"
+            sed -i "s|badge/tailscale-[^-]*-0052CC.svg|badge/tailscale-${CUR_TAG}-0052CC.svg|g" "$D/README.md"
+            sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${CUR_ALPINE}-0D597F.svg|g" "$D/README.md"
           fi
 
           if [ ! -f "$D/DOCS.md" ]; then
@@ -274,7 +285,7 @@ jobs:
               echo "| **Alpine Base**          | \`${CURRENT_BASE}\`| \`${LATEST_BASE:-?}\` | $ALPINE_STATUS |"
               echo ""
               if [ "${update_needed:-false}" = "true" ]; then
-                echo "**Action:** Will update Dockerfile + config.yaml and commit"
+                echo "**Action:** Will update Dockerfile + config.yaml + README badges and commit"
               else
                 echo "**Action:** No changes needed – everything is up to date"
               fi
@@ -293,14 +304,14 @@ jobs:
           [ -n "$CURRENT_BASE" ] || fail "Cannot read BUILD_FROM in Dockerfile"
           echo "📌 Current Repo State: Addon=$CURRENT_VER | Tailscale=$CURRENT_TS | Alpine=$CURRENT_BASE"
 
-          # ---- Kiểm tra gói tarball hiện tại có tồn tại không (Self-Healing) ----
+          # ---- Kiểm tra gói cài đặt hiện tại có tồn tại không (Self-Healing) ----
           CURRENT_BROKEN=0
           if ! tarball_ok "$CURRENT_TAG"; then
-            warn "Current Dockerfile version ($CURRENT_TAG) tarball is missing on pkgs.tailscale.com! Activating self-healing..."
+            warn "Current Dockerfile version ($CURRENT_TAG) tarball is missing! Activating self-healing..."
             CURRENT_BROKEN=1
           fi
 
-          # ---- Lớp 1 -> 5: Quét các bản phát hành gần nhất từ GitHub & pkgs.tailscale.com ----
+          # ---- Lớp 1 -> 5: Quét các bản phát hành gần nhất ----
           RELEASES_JSON=$(retry curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/tailscale/tailscale/releases?per_page=8") \
             || skip "GitHub API unreachable, retrying next cycle"
@@ -323,7 +334,7 @@ jobs:
           done
 
           [ -n "$LATEST_TAG" ] || skip "No verified upstream release found with ready binaries"
-          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG (Git tag & official arm64/amd64 binaries ready on pkgs.tailscale.com)"
+          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG (Git tag & official arm64/amd64 binaries ready)"
 
           # ---- Lớp 6: Alpine base (độc lập) ----
           LATEST_BASE="$CURRENT_BASE"
@@ -373,12 +384,10 @@ jobs:
             ALPINE_STATUS="⬆️ UPDATE → $LATEST_BASE"
           fi
 
-          # ---- Ép migrate nếu đang dùng version kiểu cũ (1.104.x) ----
           if [[ "$CURRENT_VER" =~ ^1\.10[0-9] ]]; then
             FORCE_MIGRATE=1
             NEW_ADDON_VER="1.0.0"
             ADDON_STATUS="🚀 MIGRATE → 1.0.0 (old version style detected)"
-            echo "ℹ️ Old version style detected ($CURRENT_VER) → forcing migration to 1.0.0"
           fi
 
           if [ "$TS_UPDATE" -eq 0 ] && [ "$ALPINE_UPDATE" -eq 0 ] && [ "$FORCE_MIGRATE" -eq 0 ]; then
@@ -386,7 +395,6 @@ jobs:
             skip "Both Tailscale $CURRENT_TS and Alpine $CURRENT_BASE are already up to date and verified"
           fi
 
-          # ---- Logic version addon mới (khi không phải migrate) ----
           if [ "$FORCE_MIGRATE" -eq 0 ]; then
             CUR_MAJOR=$(echo "$CURRENT_VER" | cut -d. -f1)
             CUR_MINOR=$(echo "$CURRENT_VER" | cut -d. -f2)
@@ -420,22 +428,27 @@ jobs:
           print_summary_table
 
       # ------------------------------------------------------------------
-      # Cập nhật file
+      # Cập nhật Dockerfile, config.yaml VÀ các ô màu (Badges) trong README.md
       # ------------------------------------------------------------------
-      - name: Update Dockerfile and config.yaml
+      - name: Update Dockerfile, config.yaml and README Badges
         if: steps.check.outputs.update_needed == 'true'
         run: |
           NEW_TAG="${{ steps.check.outputs.new_tag }}"
           NEW_BASE="${{ steps.check.outputs.new_base }}"
           NEW_ADDON_VER="${{ steps.check.outputs.new_addon_ver }}"
 
-          echo "🛠️ Updating to Addon v${NEW_ADDON_VER}"
-          echo "   Tailscale → ${NEW_TAG}"
-          echo "   Alpine   → ${NEW_BASE}"
+          echo "🛠️ Updating to Addon v${NEW_ADDON_VER} (Tailscale ${NEW_TAG} | Alpine ${NEW_BASE})"
 
           sed -i "s|^ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|" tailscale/Dockerfile
           sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
           sed -i "s|^version:.*|version: \"${NEW_ADDON_VER}\"|" tailscale/config.yaml
+
+          # Đồng bộ trực tiếp các ô màu (Shields.io Badges) trong README.md
+          if [ -f "tailscale/README.md" ]; then
+            sed -i "s|badge/version-[^-]*-blue.svg|badge/version-${NEW_ADDON_VER}-blue.svg|g" tailscale/README.md
+            sed -i "s|badge/tailscale-[^-]*-0052CC.svg|badge/tailscale-${NEW_TAG}-0052CC.svg|g" tailscale/README.md
+            sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${NEW_BASE}-0D597F.svg|g" tailscale/README.md
+          fi
 
           git diff --stat
 
@@ -600,7 +613,7 @@ jobs:
           elif [ "$TS_UPDATE" = "1" ]; then
             MSG="chore(tailscale): bump to v${NEW_ADDON_VER} (Tailscale update)"
           else
-            MSG="chore(tailscale): bump to v${NEW_ADDON_VER} (Alpine ${NEW_BASE})"
+            MSG="chore(tailscale): bump to v${NEW_ADDON_VER} (Alpine ${NEW_BASE}) & sync badges"
           fi
 
           git commit -m "$MSG"
