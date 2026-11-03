@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses  uses: actions/checkout@v4
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -46,7 +46,6 @@ jobs:
           CURRENT_ADDON_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
           echo "Current Add-on version: $CURRENT_ADDON_VERSION"
 
-          # Get current Cloudflared version from CHANGELOG (fallback)
           CURRENT_CF=$(grep -oP 'Cloudflared Binary.*`\K[0-9.]+' cloudflared/CHANGELOG.md 2>/dev/null | head -1 || echo "2026.10.7")
           LATEST_CF=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name' | sed 's/^v//')
 
