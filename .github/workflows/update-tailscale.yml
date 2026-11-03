@@ -46,7 +46,7 @@ jobs:
           fi
 
           if [ ! -f "$D/CHANGELOG.md" ] || [ "$COUNT_VER" -lt 4 ]; then
-            echo "📝 Đang tổng hợp CHANGELOG.md với 4 bản phát hành gần nhất từ Tailscale & Alpine Base..."
+            echo "📝 Generating CHANGELOG.md with the 4 latest releases from Tailscale & Alpine Base..."
             RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/tailscale/tailscale/releases?per_page=4")
 
@@ -69,12 +69,12 @@ jobs:
                   fi
                   echo "_Released: ${DATE}_"
                   echo ""
-                  echo "### 📦 Thành phần hệ thống (System Components)"
+                  echo "### 📦 System Components"
                   echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${V}\`"
                   echo "- **Home Assistant Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
-                  echo "- **Nguồn phát hành chính thức:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Changelog](https://tailscale.com/changelog#client)"
+                  echo "- **Offical Release:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Changelog](https://tailscale.com/changelog#client)"
                   echo ""
-                  echo "### 🔄 Chi tiết thay đổi từ Tailscale (${TAG})"
+                  echo "### 🔄 What's changed in Tailscale (${TAG})"
                   echo "${BODY}"
                   echo ""
                   echo "---"
@@ -85,7 +85,7 @@ jobs:
           fi
 
           if [ ! -f "$D/README.md" ]; then
-            echo "📝 Tạo README.md"
+            echo "📝 Create README.md"
             cat > "$D/README.md" <<'EOF'
           # Home Assistant App: Tailscale Pro
 
@@ -114,7 +114,7 @@ jobs:
           fi
 
           if [ ! -f "$D/DOCS.md" ]; then
-            echo "📝 Tạo DOCS.md"
+            echo "📝 Create DOCS.md"
             cat > "$D/DOCS.md" <<'EOF'
           # Home Assistant App: Tailscale Pro
 
