@@ -351,12 +351,14 @@ jobs:
               echo "- **Official Release Source:** [GitHub Release ${NEW_CF}](https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF})"
               echo ""
 
-              LATEST_BODY=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-                "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" \
-                | jq -r '.body // empty' | sed '/SHA256 Checksums:/,$d' | sed '/^$/d' || true)
-              if [ -n "$LATEST_BODY" ]; then
+              LATEST_BODY=$(echo "$RELEASES" | jq -r --arg tag "${NEW_CF}" '.[] | select(.tag_name == $tag or .tag_name == "v" + $tag) | .body // empty' | sed '/SHA256 Checksums:/,$d' || true)
+              if [ -n "$LATEST_BODY" ] && [ "$LATEST_BODY" != "null" ]; then
                 echo "### 📝 Upstream Release Notes (${NEW_CF})"
                 echo "${LATEST_BODY}"
+                echo ""
+              else
+                echo "### 📝 Upstream Release Notes (${NEW_CF})"
+                echo "See official release notes at https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}"
                 echo ""
               fi
               echo "---"
@@ -376,7 +378,7 @@ jobs:
                   [ "$V" = "$NEW_CF" ] && continue
 
                   DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
-                  BODY=$(echo "$rel" | jq -r '.body // "Official Cloudflare release."' | sed '/SHA256 Checksums:/,$d' | sed '/^$/d')
+                  BODY=$(echo "$rel" | jq -r '.body // empty' | sed '/SHA256 Checksums:/,$d')
 
                   echo "## ${V}"
                   echo "_Released: ${DATE}_"
@@ -386,9 +388,15 @@ jobs:
                   echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\`"
                   echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/cloudflare/cloudflared/releases/tag/${TAG})"
                   echo ""
-                  echo "### 📝 Upstream Release Notes (${TAG})"
-                  echo "${BODY:-See official release notes on GitHub.}"
-                  echo ""
+                  if [ -n "$BODY" ] && [ "$BODY" != "null" ]; then
+                    echo "### 📝 Upstream Release Notes (${TAG})"
+                    echo "${BODY}"
+                    echo ""
+                  else
+                    echo "### 📝 Upstream Release Notes (${TAG})"
+                    echo "See official release notes at https://github.com/cloudflare/cloudflared/releases/tag/${TAG}"
+                    echo ""
+                  fi
                   echo "---"
                   echo ""
 
