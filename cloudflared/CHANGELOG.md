@@ -10,9 +10,7 @@ _Released: 2026-10-30_
 - **Official Release Source:** [GitHub Release 2026.10.7](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.7)
 
 ### 📝 Upstream Release Notes (2026.10.7)
-### SHA256 Checksums:
-```
-```
+- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.7`).
 
 ---
 
@@ -25,9 +23,7 @@ _Released: 2026-10-29_
 - **Official Release Source:** [GitHub Release 2026.10.6](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6)
 
 ### 📝 Upstream Release Notes (2026.10.6)
-### SHA256 Checksums:
-```
-```
+- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.6`).
 
 ---
 
@@ -40,9 +36,7 @@ _Released: 2026-10-27_
 - **Official Release Source:** [GitHub Release 2026.10.5](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.5)
 
 ### 📝 Upstream Release Notes (2026.10.5)
-### SHA256 Checksums:
-```
-```
+- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.5`).
 
 ---
 
@@ -55,9 +49,7 @@ _Released: 2026-10-26_
 - **Official Release Source:** [GitHub Release 2026.10.4](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.4)
 
 ### 📝 Upstream Release Notes (2026.10.4)
-### SHA256 Checksums:
-```
-```
+- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.4`).
 
 ---
 
