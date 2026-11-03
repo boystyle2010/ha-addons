@@ -1,20 +1,24 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.24
 FROM ${BUILD_FROM}
 
-ARG BUILD_VERSION
-ENV CLOUDFLARED_VERSION=${BUILD_VERSION}
+# Phiên bản Cloudflared thật (bot sẽ tự cập nhật dòng này)
+ARG CLOUDFLARED_VERSION=2026.10.7
 
-# Nâng cấp gói bảo mật Alpine và cài công cụ
-RUN apk update && apk upgrade --no-cache && apk add --no-cache curl ca-certificates tzdata jq
+# Cài đặt các gói cần thiết
+RUN apk update && apk upgrade --no-cache && \
+    apk add --no-cache curl ca-certificates tzdata jq
 
-# Tải trực tiếp binary cloudflared arm64 từ Cloudflare
-RUN VERSION_CLEAN=$(echo "${CLOUDFLARED_VERSION}" | cut -d'-' -f1) && curl -fL "https://github.com/cloudflare/cloudflared/releases/download/${VERSION_CLEAN}/cloudflared-linux-arm64" -o /usr/bin/cloudflared && chmod +x /usr/bin/cloudflared
+# Tải binary cloudflared arm64
+RUN curl -fL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-arm64" \
+    -o /usr/bin/cloudflared && \
+    chmod +x /usr/bin/cloudflared
 
 # Copy script khởi chạy
 COPY run.sh /
 RUN chmod a+x /run.sh
 
-# Kiểm tra sức khỏe đường hầm mỗi 30 giây
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 CMD pgrep cloudflared > /dev/null || exit 1
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD pgrep cloudflared > /dev/null || exit 1
 
 CMD [ "/run.sh" ]
