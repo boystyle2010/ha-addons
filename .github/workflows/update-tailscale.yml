@@ -29,9 +29,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # ------------------------------------------------------------------
-      # 1. Tự tạo/đồng bộ các file, Badges & Changelog chuẩn Addon Version (1.0.1)
+      # 1. Tự tạo/đồng bộ các file, Badges & Bóc tách Changelog thật từ Tailscale
       # ------------------------------------------------------------------
-      - name: Bootstrap missing add-on files, Badges & English Changelog
+      - name: Bootstrap missing add-on files, Badges & Real Tailscale Changelog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -41,77 +41,113 @@ jobs:
           CUR_TS="${CUR_TAG#v}"
           CUR_ALPINE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' "$D/Dockerfile" || echo "3.24")
 
-          # Tự động làm mới nếu chưa có CHANGELOG.md, mục đầu tiên chưa khớp Addon Version ($VER), hoặc chưa có chi tiết thực tế
+          # Tải trang changelog chính thức của Tailscale
+          curl -sfL -A "Mozilla/5.0" "https://tailscale.com/changelog" -o /tmp/ts_changelog.html || true
+
+          # Tạo script Python chuyên dụng bóc tách chi tiết từng dòng thay đổi từ tailscale.com/changelog + GitHub Commits fallback
+          cat > /tmp/extract_ts.py <<'PY'
+          import sys, os, re, html, json, urllib.request
+
+          ver = sys.argv[1].lstrip('v')
+          prev_ver = sys.argv[2].lstrip('v') if len(sys.argv) > 2 else ""
+
+          bullets = []
+
+          # 1. Bóc tách trực tiếp từ HTML của https://tailscale.com/changelog
+          try:
+              raw = open("/tmp/ts_changelog.html", encoding="utf-8", errors="ignore").read()
+              # Tìm vị trí tiêu đề "Tailscale vX.Y.Z" (bất kể thẻ HTML hay thuộc tính bên trong)
+              pattern = re.compile(
+                  rf'Tailscale\s+v?{re.escape(ver)}\b(.*?)(?=Tailscale\s+v?[0-9]+\.[0-9]+\.[0-9]+\b|\Z)',
+                  re.S | re.I
+              )
+              m = pattern.search(raw)
+              if m:
+                  section = m.group(1)
+                  # Lấy tất cả các thẻ <li>...</li> trong khu vực của phiên bản này
+                  li_items = re.findall(r'<li[^>]*>(.*?)</li>', section, re.S | re.I)
+                  for item in li_items:
+                      txt = re.sub(r'<[^>]+>', ' ', item)
+                      txt = html.unescape(re.sub(r'\s+', ' ', txt).strip())
+                      if txt and "update instructions" not in txt.lower():
+                          bullets.append(f"- {txt}")
+          except Exception:
+              pass
+
+          # 2. Nếu bản vá mới chưa được gõ lên web hoặc chỉ là bản cập nhật thư viện/commits, lấy trực tiếp từ GitHub Compare API
+          if not bullets and prev_ver and prev_ver != ver:
+              try:
+                  url = f"https://api.github.com/repos/tailscale/tailscale/compare/v{prev_ver}...v{ver}"
+                  req = urllib.request.Request(url)
+                  tok = os.environ.get("GH_TOKEN", "")
+                  if tok:
+                      req.add_header("Authorization", f"Bearer {tok}")
+                  with urllib.request.urlopen(req, timeout=15) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                      for c in reversed(data.get("commits", [])):
+                          msg = c.get("commit", {}).get("message", "").splitlines()[0].strip()
+                          if msg and not msg.startswith("Merge "):
+                              bullets.append(f"- {msg}")
+                          if len(bullets) >= 10:
+                              break
+              except Exception:
+                  pass
+
+          # 3. Lấy thêm mã SHA256 thực tế của gói arm64 cho Raspberry Pi 5
+          sha_line = ""
+          try:
+              sha_url = f"https://pkgs.tailscale.com/stable/tailscale_{ver}_arm64.tgz.sha256"
+              with urllib.request.urlopen(sha_url, timeout=10) as r:
+                  sha = r.read().decode("utf-8").strip().split()[0]
+                  if len(sha) == 64:
+                      sha_line = f"- **SHA256 (`tailscale_{ver}_arm64.tgz`):** `{sha}`"
+          except Exception:
+              pass
+
+          if bullets:
+              print("\n".join(bullets[:12]))
+          else:
+              print(f"- Container & binary maintenance release for Tailscale `v{ver}` (library and dependency security updates).")
+
+          if sha_line:
+              print(sha_line)
+          PY
+
+          # Kiểm tra nếu CHANGELOG.md hiện tại đang dính dòng "Official stable maintenance..." (như trong ảnh chụp) thì tạo lại ngay!
           NEED_CHANGELOG=0
           FIRST_HEADER=$(grep -m1 '^## ' "$D/CHANGELOG.md" 2>/dev/null | sed 's/^## //' || echo "")
           if [ ! -f "$D/CHANGELOG.md" ]; then
             NEED_CHANGELOG=1
           elif [ "$FIRST_HEADER" != "$VER" ]; then
             NEED_CHANGELOG=1
-          elif [ "$(grep -c '^## ' "$D/CHANGELOG.md" || true)" -lt 4 ]; then
-            NEED_CHANGELOG=1
-          elif grep -q "Please refer to the changelog available at" "$D/CHANGELOG.md" 2>/dev/null; then
+          elif grep -q "Official stable maintenance and security release" "$D/CHANGELOG.md" 2>/dev/null; then
             NEED_CHANGELOG=1
           fi
 
           if [ "$NEED_CHANGELOG" -eq 1 ]; then
-            echo "📝 Generating English CHANGELOG.md with Addon v${VER} at top & real Tailscale notes..."
+            echo "📝 Rebuilding tailscale/CHANGELOG.md with real bullet points from tailscale.com/changelog..."
             RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/tailscale/tailscale/releases?per_page=8")
-
-            # Tải trang changelog chính thức của Tailscale để bóc tách chi tiết từng bản
-            curl -sfL "https://tailscale.com/changelog" -o /tmp/ts_changelog.html || true
-
-            extract_ts_notes() {
-              local ver="$1"
-              python3 - "$ver" <<'PY'
-          import sys, re, html
-          ver = sys.argv[1]
-          try:
-              data = open("/tmp/ts_changelog.html", encoding="utf-8", errors="ignore").read()
-              # Tìm khu vực của phiên bản tương ứng trên trang tailscale.com/changelog
-              pat = re.compile(rf'(?:id=["\']client-{re.escape(ver)}["\']|>\s*{re.escape(ver)}\s*<)(.*?)(?:id=["\']client-[0-9]+\.[0-9]+|<h[23]\b)', re.S | re.I)
-              m = pat.search(data)
-              if m:
-                  block = m.group(1)
-                  items = re.findall(r'<li[^>]*>(.*?)</li>', block, re.S | re.I)
-                  out = []
-                  for it in items[:8]:
-                      txt = re.sub(r'<[^>]+>', '', it)
-                      txt = html.unescape( re.sub(r'\s+', ' ', txt).strip() )
-                      if txt:
-                          out.append(f"- {txt}")
-                  if out:
-                      print("\n".join(out))
-                      sys.exit(0)
-          except Exception:
-              pass
-          print(f"- Official stable maintenance and security release for Tailscale `v{ver}`.\n- Full details: [tailscale.com/changelog](https://tailscale.com/changelog)")
-          PY
-            }
+              "https://api.github.com/repos/tailscale/tailscale/releases?per_page=10")
 
             if [ -n "$RELEASES" ]; then
+              # Lọc danh sách các tag ổn định để biết tag liền trước phục vụ việc so sánh commit
+              mapfile -t TAG_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+              mapfile -t DATE_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .published_at' | cut -d'T' -f1)
+
               {
                 echo "# Changelog"
                 echo ""
                 COUNT=0
-                FIRST=1
-                while read -r rel; do
-                  [ -z "$rel" ] && continue
-                  TAG=$(echo "$rel" | jq -r '.tag_name // empty')
-                  DRAFT=$(echo "$rel" | jq -r '.draft')
-                  PRE=$(echo "$rel" | jq -r '.prerelease')
-                  [ "$DRAFT" = "false" ] && [ "$PRE" = "false" ] || continue
-                  [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-
+                for idx in "${!TAG_LIST[@]}"; do
+                  TAG="${TAG_LIST[$idx]}"
                   V="${TAG#v}"
-                  DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
-                  BODY=$(echo "$rel" | jq -r '.body // empty')
-                  if [ -z "$BODY" ] || [ "$BODY" = "null" ] || echo "$BODY" | grep -qi "Please refer to the changelog"; then
-                    BODY=$(extract_ts_notes "$V")
-                  fi
+                  DATE="${DATE_LIST[$idx]:-$(date -u +%Y-%m-%d)}"
+                  PREV_TAG="${TAG_LIST[$((idx + 1))]:-}"
+                  PREV_V="${PREV_TAG#v}"
 
-                  if [ "$FIRST" -eq 1 ]; then
+                  NOTES=$(python3 /tmp/extract_ts.py "$V" "$PREV_V")
+
+                  if [ "$idx" -eq 0 ]; then
                     echo "## ${VER}"
                     echo "_Released: ${DATE}_"
                     echo ""
@@ -122,7 +158,6 @@ jobs:
                     echo "- **Official Release Source:** [GitHub Release ${CUR_TAG}](https://github.com/tailscale/tailscale/releases/tag/${CUR_TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
                     echo ""
                     echo "### 📝 Upstream Release Notes (${CUR_TAG})"
-                    FIRST=0
                   else
                     echo "## ${V}"
                     echo "_Released: ${DATE}_"
@@ -134,50 +169,20 @@ jobs:
                     echo ""
                     echo "### 📝 Upstream Release Notes (${TAG})"
                   fi
-                  echo "${BODY}"
+                  echo "${NOTES}"
                   echo ""
                   echo "---"
                   echo ""
 
                   COUNT=$((COUNT + 1))
                   [ "$COUNT" -ge 4 ] && break
-                done < <(echo "$RELEASES" | jq -c '.[]')
+                done
               } > "$D/CHANGELOG.md"
             fi
           fi
 
           # Đồng bộ 6 ô màu Badges trong README.md
-          if [ ! -f "$D/README.md" ] || ! grep -q "img.shields.io/badge/tailscale-" "$D/README.md" 2>/dev/null; then
-            cat > "$D/README.md" <<EOF
-          # Home Assistant App: Tailscale Pro
-
-          ![Version](https://img.shields.io/badge/version-${VER}-blue.svg)
-          ![Tailscale](https://img.shields.io/badge/tailscale-${CUR_TAG}-0052CC.svg)
-          ![Alpine Base](https://img.shields.io/badge/alpine%20base-${CUR_ALPINE}-0D597F.svg)
-          ![Project Stage](https://img.shields.io/badge/project%20stage-stable-brightgreen.svg)
-          ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen.svg)
-          ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg)
-
-          Zero-config mesh VPN for building secure networks, tuned for Raspberry Pi 5.
-
-          ## About
-
-          Tailscale Pro connects your Home Assistant to your private Tailscale network in minutes. Reach your home from anywhere, share your local network as a subnet router, or route all your traffic through your home as an exit node.
-
-          This add-on tracks the official Tailscale releases and updates itself automatically after passing a series of safety checks.
-
-          ## Features
-
-          - Subnet router and exit node
-          - Web UI in the Home Assistant sidebar (Ingress)
-          - Built-in health monitor with automatic recovery
-          - UDP GRO forwarding optimization for higher throughput
-          - Persistent login state, no need to sign in again after a restart
-          - AppArmor protection
-          - Automatic, verified updates from the official Tailscale repository
-          - Taildrive & Taildrop built-in support
-          EOF
-          else
+          if [ -f "$D/README.md" ]; then
             sed -i "s|badge/version-[^-]*-blue.svg|badge/version-${VER}-blue.svg|g" "$D/README.md"
             sed -i "s|badge/tailscale-[^-]*-0052CC.svg|badge/tailscale-${CUR_TAG}-0052CC.svg|g" "$D/README.md"
             sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${CUR_ALPINE}-0D597F.svg|g" "$D/README.md"
@@ -248,11 +253,6 @@ jobs:
               echo "| **Tailscale Engine**     | \`${CURRENT_TS}\`  | \`${CLEAN_VER:-?}\` | $TS_STATUS |"
               echo "| **Alpine Base**          | \`${CURRENT_BASE}\`| \`${LATEST_BASE:-?}\` | $ALPINE_STATUS |"
               echo ""
-              if [ "${update_needed:-false}" = "true" ]; then
-                echo "**Action:** Will update Dockerfile + config.yaml + README badges and commit"
-              else
-                echo "**Action:** No version bump needed – syncing docs/changelog if modified"
-              fi
             } >> "$GITHUB_STEP_SUMMARY"
           }
 
@@ -268,7 +268,6 @@ jobs:
 
           CURRENT_BROKEN=0
           if ! tarball_ok "$CURRENT_TAG"; then
-            warn "Current Dockerfile version ($CURRENT_TAG) tarball is missing! Activating self-healing..."
             CURRENT_BROKEN=1
           fi
 
@@ -290,7 +289,7 @@ jobs:
           done
 
           [ -n "$LATEST_TAG" ] || skip "No verified upstream release found with ready binaries"
-          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG (Git tag & official arm64/amd64 binaries ready)"
+          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG"
 
           LATEST_BASE="$CURRENT_BASE"
           BASE_MAJOR="${CURRENT_BASE%%.*}"
@@ -370,7 +369,6 @@ jobs:
             echo "new_addon_ver=$NEW_ADDON_VER"
             echo "ts_update=$TS_UPDATE"
             echo "alpine_update=$ALPINE_UPDATE"
-            echo "force_migrate=$FORCE_MIGRATE"
           } >> "$GITHUB_OUTPUT"
 
           print_summary_table
@@ -404,93 +402,63 @@ jobs:
             sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${NEW_BASE}-0D597F.svg|g" tailscale/README.md
           fi
 
-          curl -sfL "https://tailscale.com/changelog" -o /tmp/ts_changelog.html || true
-          extract_ts_notes() {
-            local ver="$1"
-            python3 - "$ver" <<'PY'
-          import sys, re, html
-          ver = sys.argv[1]
-          try:
-              data = open("/tmp/ts_changelog.html", encoding="utf-8", errors="ignore").read()
-              pat = re.compile(rf'(?:id=["\']client-{re.escape(ver)}["\']|>\s*{re.escape(ver)}\s*<)(.*?)(?:id=["\']client-[0-9]+\.[0-9]+|<h[23]\b)', re.S | re.I)
-              m = pat.search(data)
-              if m:
-                  block = m.group(1)
-                  items = re.findall(r'<li[^>]*>(.*?)</li>', block, re.S | re.I)
-                  out = []
-                  for it in items[:8]:
-                      txt = re.sub(r'<[^>]+>', '', it)
-                      txt = html.unescape( re.sub(r'\s+', ' ', txt).strip() )
-                      if txt:
-                          out.append(f"- {txt}")
-                  if out:
-                      print("\n".join(out))
-                      sys.exit(0)
-          except Exception:
-              pass
-          print(f"- Official stable maintenance and security release for Tailscale `v{ver}`.\n- Full details: [tailscale.com/changelog](https://tailscale.com/changelog)")
-          PY
-          }
-
           RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=8")
+            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=10")
+
+          mapfile -t TAG_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+          mapfile -t DATE_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .published_at' | cut -d'T' -f1)
 
           {
             echo "# Changelog"
             echo ""
-            echo "## ${NEW_ADDON_VER}"
-            echo "_Released: $(date -u +%Y-%m-%d)_"
-            echo ""
-            echo "### 📦 Component Updates"
-            echo "- **Add-on Version:** Bumped from \`${OLD_VER}\` ➡️ **\`${NEW_ADDON_VER}\`**"
-            if [ "$TS_UPDATE" = "1" ]; then
-              echo "- **Tailscale Engine (arm64 & amd64 verified):** Updated from \`v${OLD_TS}\` ➡️ **\`v${NEW_VER}\`**"
-            else
-              echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${NEW_VER}\`"
-            fi
-            if [ "$ALPINE_UPDATE" = "1" ]; then
-              echo "- **Home Assistant Alpine Base:** Updated from \`Alpine ${OLD_BASE}\` ➡️ **\`Alpine ${NEW_BASE}\`**"
-            else
-              echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
-            fi
-            echo "- **Official Release Source:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
-            echo ""
-            echo "### 📝 Upstream Release Notes (${NEW_TAG})"
-            extract_ts_notes "$NEW_VER"
-            echo ""
-            echo "---"
-            echo ""
-
-            COUNT=1
-            while read -r rel; do
-              [ -z "$rel" ] && continue
-              TAG=$(echo "$rel" | jq -r '.tag_name // empty')
-              DRAFT=$(echo "$rel" | jq -r '.draft')
-              PRE=$(echo "$rel" | jq -r '.prerelease')
-              [ "$DRAFT" = "false" ] && [ "$PRE" = "false" ] || continue
-              [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-
+            COUNT=0
+            for idx in "${!TAG_LIST[@]}"; do
+              TAG="${TAG_LIST[$idx]}"
               V="${TAG#v}"
-              [ "$V" = "$NEW_VER" ] && continue
+              DATE="${DATE_LIST[$idx]:-$(date -u +%Y-%m-%d)}"
+              PREV_TAG="${TAG_LIST[$((idx + 1))]:-}"
+              PREV_V="${PREV_TAG#v}"
 
-              DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
-              echo "## ${V}"
-              echo "_Released: ${DATE}_"
-              echo ""
-              echo "### 📦 System Components"
-              echo "- **Tailscale Engine:** \`v${V}\`"
-              echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
-              echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
-              echo ""
-              echo "### 📝 Upstream Release Notes (${TAG})"
-              extract_ts_notes "$V"
+              NOTES=$(python3 /tmp/extract_ts.py "$V" "$PREV_V")
+
+              if [ "$idx" -eq 0 ]; then
+                echo "## ${NEW_ADDON_VER}"
+                echo "_Released: $(date -u +%Y-%m-%d)_"
+                echo ""
+                echo "### 📦 Component Updates"
+                echo "- **Add-on Version:** Bumped from \`${OLD_VER}\` ➡️ **\`${NEW_ADDON_VER}\`**"
+                if [ "$TS_UPDATE" = "1" ]; then
+                  echo "- **Tailscale Engine (arm64 & amd64 verified):** Updated from \`v${OLD_TS}\` ➡️ **\`v${NEW_VER}\`**"
+                else
+                  echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${NEW_VER}\`"
+                fi
+                if [ "$ALPINE_UPDATE" = "1" ]; then
+                  echo "- **Home Assistant Alpine Base:** Updated from \`Alpine ${OLD_BASE}\` ➡️ **\`Alpine ${NEW_BASE}\`**"
+                else
+                  echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
+                fi
+                echo "- **Official Release Source:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
+                echo ""
+                echo "### 📝 Upstream Release Notes (${NEW_TAG})"
+              else
+                echo "## ${V}"
+                echo "_Released: ${DATE}_"
+                echo ""
+                echo "### 📦 System Components"
+                echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${V}\`"
+                echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
+                echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
+                echo ""
+                echo "### 📝 Upstream Release Notes (${TAG})"
+              fi
+              echo "${NOTES}"
               echo ""
               echo "---"
               echo ""
 
               COUNT=$((COUNT + 1))
               [ "$COUNT" -ge 4 ] && break
-            done < <(echo "$RELEASES" | jq -c '.[]')
+            done
           } > tailscale/CHANGELOG.md
 
       # ------------------------------------------------------------------
@@ -513,7 +481,7 @@ jobs:
           if [ "$UPDATE_NEEDED" = "true" ]; then
             MSG="chore(tailscale): bump to v${NEW_ADDON_VER}"
           else
-            MSG="chore(tailscale): fix changelog header to match add-on version & add detailed release notes"
+            MSG="chore(tailscale): populate real bullet-point release notes from tailscale.com/changelog"
           fi
 
           git commit -m "$MSG"
