@@ -29,9 +29,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # ------------------------------------------------------------------
-      # Tự tạo các file còn thiếu & tự động nâng cấp CHANGELOG.md lên 4 bản gần nhất
+      # Tự tạo các file còn thiếu & tạo CHANGELOG.md tiếng Anh (4 bản gần nhất)
       # ------------------------------------------------------------------
-      - name: Bootstrap missing add-on files & 4-version Changelog
+      - name: Bootstrap missing add-on files & English Changelog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -39,53 +39,61 @@ jobs:
           VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' $D/config.yaml || echo "1.104.4")
           CUR_ALPINE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' $D/Dockerfile || echo "3.23")
 
-          # Kiểm tra nếu chưa có CHANGELOG.md hoặc CHANGELOG.md hiện tại có ít hơn 4 phiên bản thì tự tạo lại đủ 4 bản
-          COUNT_VER=0
-          if [ -f "$D/CHANGELOG.md" ]; then
-            COUNT_VER=$(grep -c '^## ' "$D/CHANGELOG.md" || true)
+          # Tự động làm mới nếu chưa có CHANGELOG.md, có ít hơn 4 bản, hoặc còn sót tiếng Việt cũ
+          NEED_CHANGELOG=0
+          if [ ! -f "$D/CHANGELOG.md" ]; then
+            NEED_CHANGELOG=1
+          elif [ "$(grep -c '^## ' "$D/CHANGELOG.md" || true)" -lt 4 ]; then
+            NEED_CHANGELOG=1
+          elif grep -q "Thành phần hệ thống\|Cập nhật hệ thống" "$D/CHANGELOG.md" 2>/dev/null; then
+            NEED_CHANGELOG=1
           fi
 
-          if [ ! -f "$D/CHANGELOG.md" ] || [ "$COUNT_VER" -lt 4 ]; then
-            echo "📝 Generating CHANGELOG.md with the 4 latest releases from Tailscale & Alpine Base..."
+          if [ "$NEED_CHANGELOG" -eq 1 ]; then
+            echo "📝 Generating English CHANGELOG.md with the last 4 verified releases..."
             RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/tailscale/tailscale/releases?per_page=4")
+              "https://api.github.com/repos/tailscale/tailscale/releases?per_page=6")
 
             if [ -n "$RELEASES" ]; then
               {
                 echo "# Changelog"
                 echo ""
-                FIRST=1
-                echo "$RELEASES" | jq -c '.[]' | while read -r rel; do
-                  TAG=$(echo "$rel" | jq -r '.tag_name')
+                COUNT=0
+                while read -r rel; do
+                  [ -z "$rel" ] && continue
+                  TAG=$(echo "$rel" | jq -r '.tag_name // empty')
+                  DRAFT=$(echo "$rel" | jq -r '.draft')
+                  PRE=$(echo "$rel" | jq -r '.prerelease')
+                  [ "$DRAFT" = "false" ] && [ "$PRE" = "false" ] || continue
+                  [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+
                   V="${TAG#v}"
                   DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
                   BODY=$(echo "$rel" | jq -r '.body // "See official release notes at https://tailscale.com/changelog"')
 
-                  if [ "$FIRST" -eq 1 ]; then
-                    echo "## ${VER}"
-                    FIRST=0
-                  else
-                    echo "## ${V}"
-                  fi
+                  echo "## ${V}"
                   echo "_Released: ${DATE}_"
                   echo ""
                   echo "### 📦 System Components"
                   echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${V}\`"
                   echo "- **Home Assistant Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
-                  echo "- **Offical Release:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Changelog](https://tailscale.com/changelog#client)"
+                  echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
                   echo ""
-                  echo "### 🔄 What's changed in Tailscale (${TAG})"
+                  echo "### 🔄 Upstream Release Notes (${TAG})"
                   echo "${BODY}"
                   echo ""
                   echo "---"
                   echo ""
-                done
+
+                  COUNT=$((COUNT + 1))
+                  [ "$COUNT" -ge 4 ] && break
+                done < <(echo "$RELEASES" | jq -c '.[]')
               } > "$D/CHANGELOG.md"
             fi
           fi
 
           if [ ! -f "$D/README.md" ]; then
-            echo "📝 Create README.md"
+            echo "📝 Creating README.md"
             cat > "$D/README.md" <<'EOF'
           # Home Assistant App: Tailscale Pro
 
@@ -114,7 +122,7 @@ jobs:
           fi
 
           if [ ! -f "$D/DOCS.md" ]; then
-            echo "📝 Create DOCS.md"
+            echo "📝 Creating DOCS.md"
             cat > "$D/DOCS.md" <<'EOF'
           # Home Assistant App: Tailscale Pro
 
@@ -132,7 +140,7 @@ jobs:
           fi
 
           if [ ! -f "$D/icon.png" ] || [ ! -f "$D/logo.png" ]; then
-            echo "🎨 Tạo icon.png / logo.png"
+            echo "🎨 Creating icon.png / logo.png"
             python3 -c "import PIL" 2>/dev/null || pip install --quiet pillow || pip install --quiet --break-system-packages pillow
             ICON_OUT="$D/icon.png" LOGO_OUT="$D/logo.png" python3 - <<'PY'
           import os
@@ -202,7 +210,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
-      # Kiểm tra nguồn gốc nhiều tầng (6 lớp bảo vệ an toàn)
+      # Kiểm tra nguồn gốc nhiều tầng + Tự động chữa lành nếu tag hiện tại bị lỗi
       # ------------------------------------------------------------------
       - name: Multi-layer upstream verification
         id: check
@@ -243,48 +251,84 @@ jobs:
           base_ok() {
             docker manifest inspect "ghcr.io/home-assistant/$1-base:$2" >/dev/null 2>&1
           }
+          docker_tag_ok() {
+            local tag="$1"
+            local m
+            m=$(docker manifest inspect "tailscale/tailscale:${tag}" 2>/dev/null) || return 1
+            for a in arm64 amd64; do
+              local d
+              d=$(echo "$m" | jq -r --arg arch "$a" '.manifests[]? | select(.platform.architecture == $arch and .platform.os == "linux") | .digest' | head -n1)
+              [ -n "$d" ] || return 1
+            done
+            return 0
+          }
           newer_or_equal() {
             [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
           }
 
-          echo "### 🔍 Kết quả kiểm tra" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 🔍 Verification Summary" >> "$GITHUB_STEP_SUMMARY"
 
           # ---- Đọc phiên bản hiện tại ----
           CURRENT_VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' tailscale/config.yaml || true)
+          CURRENT_TAG=$(grep -oP '^ARG TAILSCALE_VERSION=\K\S+' tailscale/Dockerfile || true)
           CURRENT_BASE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || true)
-          [ -n "$CURRENT_VER" ]  || fail "Không đọc được version trong config.yaml"
-          [ -n "$CURRENT_BASE" ] || fail "Không đọc được BUILD_FROM trong Dockerfile"
-          echo "📌 Hiện tại: Tailscale $CURRENT_VER | Alpine $CURRENT_BASE"
+          [ -n "$CURRENT_VER" ]  || fail "Cannot read version in config.yaml"
+          [ -n "$CURRENT_BASE" ] || fail "Cannot read BUILD_FROM in Dockerfile"
+          echo "📌 Current Repo State: config=$CURRENT_VER | Dockerfile=$CURRENT_TAG | Alpine=$CURRENT_BASE"
 
-          # ---- Lớp 1: Release hợp lệ ----
-          RELEASE_JSON=$(retry curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-            https://api.github.com/repos/tailscale/tailscale/releases/latest) \
-            || skip "Không gọi được GitHub API, thử lại chu kỳ sau"
+          # ---- Kiểm tra xem tag hiện tại trong Dockerfile có tồn tại trên Docker Hub không (Self-Healing) ----
+          CURRENT_BROKEN=0
+          if ! docker_tag_ok "$CURRENT_TAG"; then
+            warn "Current Dockerfile tag ($CURRENT_TAG) is missing on Docker Hub! Activating self-healing fallback..."
+            CURRENT_BROKEN=1
+          fi
 
-          IS_DRAFT=$(echo "$RELEASE_JSON" | jq -r '.draft')
-          IS_PRERELEASE=$(echo "$RELEASE_JSON" | jq -r '.prerelease')
-          LATEST_TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name // empty')
+          # ---- Lớp 1 -> 5: Quét các bản phát hành gần nhất để tìm bản MỚI NHẤT ĐÃ CÓ DOCKER IMAGE & TARBALL ----
+          RELEASES_JSON=$(retry curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=8") \
+            || skip "GitHub API unreachable, retrying next cycle"
 
-          [ -n "$LATEST_TAG" ] || skip "Release không có tag"
-          [ "$IS_DRAFT" = "false" ] || skip "Release $LATEST_TAG đang là draft"
-          [ "$IS_PRERELEASE" = "false" ] || skip "Release $LATEST_TAG là pre-release"
-          [[ "$LATEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || skip "Tag '$LATEST_TAG' không phải dạng vX.Y.Z ổn định"
-          CLEAN_VER="${LATEST_TAG#v}"
-          pass "Lớp 1: release $LATEST_TAG hợp lệ (không draft, không pre-release)"
+          LATEST_TAG=""
+          CLEAN_VER=""
+          for TAG_CAND in $(echo "$RELEASES_JSON" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name'); do
+            [[ "$TAG_CAND" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+            VER_CAND="${TAG_CAND#v}"
 
-          # ---- Lớp 2: Tag tồn tại thật trong repo gốc ----
-          retry git ls-remote --exit-code --tags https://github.com/tailscale/tailscale.git "refs/tags/${LATEST_TAG}" >/dev/null 2>&1 \
-            || skip "Tag $LATEST_TAG chưa tồn tại trong repo gốc"
-          pass "Lớp 2: tag $LATEST_TAG tồn tại trong repo gốc"
+            # Kiểm tra tag tồn tại trên git
+            git ls-remote --exit-code --tags https://github.com/tailscale/tailscale.git "refs/tags/${TAG_CAND}" >/dev/null 2>&1 || continue
 
-          # ---- Lớp 3: File gốc đã tải lên xong ----
-          for ARCH in arm64 amd64; do
-            URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_${ARCH}.tgz"
-            retry http_ok "$URL" || skip "File gốc ${ARCH} chưa sẵn sàng: $URL"
+            # Kiểm tra tarball arm64 + amd64
+            TARBALL_READY=1
+            for ARCH in arm64 amd64; do
+              http_ok "https://pkgs.tailscale.com/stable/tailscale_${VER_CAND}_${ARCH}.tgz" || { TARBALL_READY=0; break; }
+            done
+            [ "$TARBALL_READY" -eq 1 ] || { echo "⏳ $TAG_CAND tarballs not ready yet, checking previous..."; continue; }
+
+            # Kiểm tra Docker Hub image (linux/arm64 + linux/amd64)
+            if docker_tag_ok "$TAG_CAND"; then
+              LATEST_TAG="$TAG_CAND"
+              CLEAN_VER="$VER_CAND"
+              break
+            else
+              echo "⏳ $TAG_CAND Docker Hub image not published yet, checking previous..."
+            fi
           done
-          pass "Lớp 3: tarball gốc arm64 + amd64 đã có trên pkgs.tailscale.com"
 
-          # ---- Lớp 5: Alpine base (chỉ nâng khi gói apk tương thích hoàn toàn) ----
+          [ -n "$LATEST_TAG" ] || skip "No verified upstream release found with ready Docker images"
+          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG (Git tag, tarballs & Docker arm64/amd64 ready)"
+
+          # ---- Lớp 3: Chống hạ cấp (Trừ khi bản hiện tại trên repo đang bị lỗi Docker image) ----
+          if [ "$CURRENT_BROKEN" -eq 0 ]; then
+            newer_or_equal "$CLEAN_VER" "$CURRENT_VER" \
+              || skip "Latest verified release ($CLEAN_VER) is not newer than current ($CURRENT_VER), keeping current"
+            if [ "$CLEAN_VER" = "$CURRENT_VER" ]; then
+              skip "Tailscale $CURRENT_VER is already up to date and verified"
+            fi
+          else
+            pass "Self-healing: Repairing broken Dockerfile tag ($CURRENT_TAG -> $LATEST_TAG)"
+          fi
+
+          # ---- Lớp 6: Alpine base (chỉ nâng khi gói apk tương thích hoàn toàn) ----
           LATEST_BASE="$CURRENT_BASE"
           BASE_MAJOR="${CURRENT_BASE%%.*}"
           BASE_MINOR="${CURRENT_BASE#*.}"
@@ -295,17 +339,17 @@ jobs:
           done
 
           if [ "$CAND" = "$CURRENT_BASE" ]; then
-            echo "ℹ️ Chưa có Alpine mới hơn $CURRENT_BASE, giữ nguyên"
+            echo "ℹ️ Alpine $CURRENT_BASE is already the latest verified base"
           else
             PKGS=$(sed -n '/apk add/,/^$/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
             if [ -z "$PKGS" ]; then
-              warn "Lớp 5: không đọc được danh sách gói trong Dockerfile, giữ Alpine $CURRENT_BASE"
+              warn "Layer 6: Could not parse packages from Dockerfile, keeping Alpine $CURRENT_BASE"
             elif docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
                    -c "apk add --simulate --no-cache ${PKGS}" >/tmp/apk-test.log 2>&1; then
               LATEST_BASE="$CAND"
-              pass "Lớp 6: Alpine $CAND có đủ image và cài được các gói (${PKGS}), sẽ nâng $CURRENT_BASE -> $CAND"
+              pass "Layer 6: Alpine $CAND verified with all packages (${PKGS}), upgrading $CURRENT_BASE -> $CAND"
             else
-              warn "Lớp 5: Alpine $CAND chưa qua kiểm tra gói, giữ Alpine $CURRENT_BASE"
+              warn "Layer 6: Alpine $CAND failed package simulation, keeping Alpine $CURRENT_BASE"
               tail -n 5 /tmp/apk-test.log || true
             fi
           fi
@@ -329,7 +373,7 @@ jobs:
           NEW_VER="${{ steps.check.outputs.new_ver }}"
           NEW_BASE="${{ steps.check.outputs.new_base }}"
 
-          echo "🛠️ Đang cập nhật lên v${NEW_VER} (Base Alpine ${NEW_BASE})..."
+          echo "🛠️ Updating to Tailscale v${NEW_VER} (Alpine Base ${NEW_BASE})..."
           sed -i "s|^ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|" tailscale/Dockerfile
           sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
           sed -i "s|^version:.*|version: \"${NEW_VER}\"|" tailscale/config.yaml
@@ -351,38 +395,38 @@ jobs:
           grep -qx "ARG TAILSCALE_VERSION=${NEW_TAG}" tailscale/Dockerfile
           grep -qx "ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}" tailscale/Dockerfile
           grep -qx "version: \"${NEW_VER}\"" tailscale/config.yaml
-          echo "✅ Giá trị trong Dockerfile/config.yaml đúng"
+          echo "✅ Values in Dockerfile and config.yaml verified"
 
           grep -q '^FROM tailscale/tailscale:${TAILSCALE_VERSION}' tailscale/Dockerfile
           grep -q '^FROM ${BUILD_FROM}' tailscale/Dockerfile
-          echo "✅ Dockerfile còn nguyên cấu trúc FROM"
+          echo "✅ Dockerfile FROM structure intact"
 
           for f in $(grep -E '^COPY ' tailscale/Dockerfile | grep -v -- '--from' | awk '{print $2}'); do
-            [ -e "tailscale/$f" ] || { echo "❌ Dockerfile COPY $f nhưng file không tồn tại"; exit 1; }
+            [ -e "tailscale/$f" ] || { echo "❌ Dockerfile COPY $f does not exist"; exit 1; }
           done
-          echo "✅ Các file COPY đều tồn tại"
+          echo "✅ All COPY files exist"
 
           bash -n tailscale/run.sh
-          echo "✅ run.sh không lỗi cú pháp"
+          echo "✅ run.sh syntax verified"
 
           python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml || pip install --quiet --break-system-packages pyyaml
           python3 - <<'PY'
           import os, yaml
           c = yaml.safe_load(open("tailscale/config.yaml"))
-          assert str(c["version"]) == os.environ["NEW_VER"], "version không khớp"
+          assert str(c["version"]) == os.environ["NEW_VER"], "version mismatch"
           for k in ("name", "slug", "arch", "options", "schema"):
-              assert k in c, f"thiếu khóa {k}"
+              assert k in c, f"missing key {k}"
           extra = set(c["options"]) - set(c["schema"])
-          assert not extra, f"options không có trong schema: {extra}"
-          print("✅ config.yaml hợp lệ, options khớp schema")
+          assert not extra, f"options not in schema: {extra}"
+          print("✅ config.yaml schema verified")
           PY
 
-          echo "- ✅ Các file hợp lệ, sẵn sàng build" >> "$GITHUB_STEP_SUMMARY"
+          echo "- ✅ All files validated and ready to build" >> "$GITHUB_STEP_SUMMARY"
 
       # ------------------------------------------------------------------
-      # Changelog: Luôn hiển thị 4 phiên bản gần nhất + Chi tiết Tailscale & Alpine
+      # Changelog Tiếng Anh: Luôn hiển thị 4 phiên bản gần nhất + Chi tiết Tailscale & Alpine
       # ------------------------------------------------------------------
-      - name: Generate Changelog (Last 4 Releases + Alpine Info)
+      - name: Generate Changelog (Last 4 Releases in English)
         if: steps.check.outputs.update_needed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -395,46 +439,61 @@ jobs:
           FILE="tailscale/CHANGELOG.md"
 
           RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=4")
+            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=8")
 
           {
             echo "# Changelog"
             echo ""
             FIRST=1
-            echo "$RELEASES" | jq -c '.[]' | while read -r rel; do
-              TAG=$(echo "$rel" | jq -r '.tag_name')
+            COUNT=0
+            while read -r rel; do
+              [ -z "$rel" ] && continue
+              TAG=$(echo "$rel" | jq -r '.tag_name // empty')
+              DRAFT=$(echo "$rel" | jq -r '.draft')
+              PRE=$(echo "$rel" | jq -r '.prerelease')
+              [ "$DRAFT" = "false" ] && [ "$PRE" = "false" ] || continue
+              [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+
               V="${TAG#v}"
+              # Bỏ qua các tag mới hơn NEW_VER nhưng chưa có Docker image
+              if [ "$(printf '%s\n%s\n' "$V" "$NEW_VER" | sort -V | tail -n1)" = "$V" ] && [ "$V" != "$NEW_VER" ]; then
+                continue
+              fi
+
               DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
               BODY=$(echo "$rel" | jq -r '.body // "See official changelog at https://tailscale.com/changelog"')
 
               echo "## ${V}"
               echo "_Released: ${DATE}_"
               echo ""
-              echo "### 📦 Cập nhật hệ thống (Component Updates)"
+              echo "### 📦 Component Updates"
               if [ "$FIRST" -eq 1 ]; then
                 if [ "$NEW_VER" != "$OLD_VER" ]; then
-                  echo "- **Tailscale Engine (arm64 & amd64 verified):** Nâng cấp từ \`v${OLD_VER}\` ➡️ **\`v${NEW_VER}\`**"
+                  echo "- **Tailscale Engine (arm64 & amd64 verified):** Updated from \`v${OLD_VER}\` ➡️ **\`v${NEW_VER}\`**"
                 else
-                  echo "- **Tailscale Engine (arm64 & amd64 verified):** Giữ nguyên **\`v${NEW_VER}\`**"
+                  echo "- **Tailscale Engine (arm64 & amd64 verified):** Verified at **\`v${NEW_VER}\`**"
                 fi
                 if [ "$NEW_BASE" != "$OLD_BASE" ]; then
-                  echo "- **Home Assistant Alpine Base:** Nâng cấp từ \`Alpine ${OLD_BASE}\` ➡️ **\`Alpine ${NEW_BASE}\`**"
+                  echo "- **Home Assistant Alpine Base:** Updated from \`Alpine ${OLD_BASE}\` ➡️ **\`Alpine ${NEW_BASE}\`**"
                 else
-                  echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\` (Đã xác thực tương thích gói hệ thống)"
+                  echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\` (Verified package compatibility)"
                 fi
                 FIRST=0
               else
                 echo "- **Tailscale Engine:** \`v${V}\`"
                 echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
               fi
-              echo "- **Nguồn phát hành chính thức:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
+              echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
               echo ""
-              echo "### 📝 Ghi chú phát hành từ Tailscale (${TAG})"
+              echo "### 📝 Upstream Release Notes (${TAG})"
               echo "${BODY}"
               echo ""
               echo "---"
               echo ""
-            done
+
+              COUNT=$((COUNT + 1))
+              [ "$COUNT" -ge 4 ] && break
+            done < <(echo "$RELEASES" | jq -c '.[]')
           } > "$FILE"
 
           head -n 30 "$FILE"
@@ -454,17 +513,17 @@ jobs:
 
           if git diff --staged --quiet; then
             if [ "$UPDATE_NEEDED" == "true" ]; then
-              echo "❌ Không có file nào thay đổi dù cần cập nhật, kiểm tra lại pattern sed!"
-              exit 1
+              echo "✨ Files are already at the target version."
+              exit 0
             fi
-            echo "✨ Không có gì cần commit."
+            echo "✨ Nothing to commit."
             exit 0
           fi
 
           if [ "$UPDATE_NEEDED" == "true" ]; then
             MSG="chore(tailscale): update to v${NEW_VER} (base ${NEW_BASE})"
           else
-            MSG="chore(tailscale): update changelog to show last 4 releases & add-on docs"
+            MSG="chore(tailscale): update English changelog (last 4 releases) & add-on docs"
           fi
 
           git commit -m "$MSG"
@@ -475,14 +534,14 @@ jobs:
               OK=1
               break
             fi
-            echo "⚠️ Push lần $i thất bại, thử lại..."
+            echo "⚠️ Push attempt $i failed, retrying..."
             git rebase --abort 2>/dev/null || true
             sleep $((i * 10))
           done
-          [ "$OK" = "1" ] || { echo "❌ Push thất bại sau 3 lần"; exit 1; }
+          [ "$OK" = "1" ] || { echo "❌ Push failed after 3 attempts"; exit 1; }
 
           git fetch origin main
           [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
-            || { echo "❌ Sau push, main trên GitHub không khớp bản local"; exit 1; }
+            || { echo "❌ Remote main does not match local HEAD after push"; exit 1; }
 
-          echo "🚀 Đã commit và xác nhận push thành công: $MSG"
+          echo "🚀 Successfully committed and pushed: $MSG"
