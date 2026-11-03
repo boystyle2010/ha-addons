@@ -81,26 +81,29 @@ jobs:
           echo "=========================================================="
           echo "🏔️ [3/4] KIỂM TRA PHIÊN BẢN HOME ASSISTANT ALPINE BASE"
           echo "=========================================================="
-          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9]+\.[0-9]+' cloudflared/Dockerfile || echo "3.21")
-          LATEST_ALPINE=$(curl -s https://raw.githubusercontent.com/home-assistant/docker-base/master/alpine/build.yaml | grep -oP '[0-9]+\.[0-9]+' | sort -V | tail -n 1)
-          if [ -z "$LATEST_ALPINE" ]; then
-            LATEST_ALPINE=$(curl -s https://alpinelinux.org/releases.json | jq -r '.release_branches[0].rel_branch' | sed 's/^v//; s/-stable//')
-          fi
+          LATEST_BASE="$CURRENT_BASE"
+          BASE_MAJOR="${CURRENT_BASE%%.*}"
+          BASE_MINOR="${CURRENT_BASE#*.}"
+          CAND="$CURRENT_BASE"
+          for i in 1 2 3; do
+            NEXT="${BASE_MAJOR}.$((BASE_MINOR + i))"
+            if base_ok aarch64 "$NEXT"; then CAND="$NEXT"; else break; fi
+          done
 
-          echo "📌 Phiên bản Alpine hiện tại trong Dockerfile: $CURRENT_ALPINE"
-          echo "🌐 Phiên bản Alpine mới nhất từ hệ thống     : $LATEST_ALPINE"
-
-          if [ -z "$LATEST_ALPINE" ] || [ "$LATEST_ALPINE" == "null" ]; then
-            VERIFIED_ALPINE="$CURRENT_ALPINE"
-            ALPINE_STATUS="⚠️ Giữ nguyên ($CURRENT_ALPINE)"
-          elif [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ]; then
-            echo "🆕 Phát hiện bản cập nhật Alpine Base mới: $CURRENT_ALPINE ➔ $LATEST_ALPINE"
-            VERIFIED_ALPINE="$LATEST_ALPINE"
-            ALPINE_STATUS="🆕 Cập nhật mới ($CURRENT_ALPINE ➔ $LATEST_ALPINE)"
+          if [ "$CAND" = "$CURRENT_BASE" ]; then
+            echo "ℹ️ Alpine $CURRENT_BASE is already the latest verified base"
           else
-            echo "✅ Alpine Base đang ở phiên bản mới nhất ($CURRENT_ALPINE)."
-            VERIFIED_ALPINE="$CURRENT_ALPINE"
-            ALPINE_STATUS="✅ Đã mới nhất ($CURRENT_ALPINE)"
+            PKGS=$(sed -n '/apk add/,/^$/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
+            if [ -z "$PKGS" ]; then
+              warn "Layer 6: Could not parse packages from Dockerfile, keeping Alpine $CURRENT_BASE"
+            elif docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
+                   -c "apk add --simulate --no-cache ${PKGS}" >/tmp/apk-test.log 2>&1; then
+              LATEST_BASE="$CAND"
+              pass "Layer 6: Alpine $CAND verified with all packages (${PKGS}), upgrading $CURRENT_BASE -> $CAND"
+            else
+              warn "Layer 6: Alpine $CAND failed package simulation, keeping Alpine $CURRENT_BASE"
+              tail -n 5 /tmp/apk-test.log || true
+            fi
           fi
 
           echo "verified_cf=$VERIFIED_CF" >> $GITHUB_OUTPUT
