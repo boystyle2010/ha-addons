@@ -4,8 +4,8 @@
 _Released: 2026-11-03_
 
 ### 📦 Cập nhật hệ thống (Component Updates)
-- **Tailscale Engine (arm64 & amd64 verified):** Nâng cấp từ `v1.104.4` ➡️ **`v1.104.5`**
-- **Home Assistant Alpine Base:** Nâng cấp từ `Alpine 3.23` ➡️ **`Alpine 3.24`**
+- **Tailscale Engine (arm64 & amd64 verified):** Giữ nguyên **`v1.104.5`**
+- **Home Assistant Alpine Base:** `Alpine 3.24` (Đã xác thực tương thích gói hệ thống)
 - **Nguồn phát hành chính thức:** [GitHub Release v1.104.5](https://github.com/tailscale/tailscale/releases/tag/v1.104.5) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)
 
 ### 📝 Ghi chú phát hành từ Tailscale (v1.104.5)
