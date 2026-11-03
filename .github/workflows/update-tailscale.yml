@@ -37,7 +37,7 @@ jobs:
         run: |
           D="tailscale"
           VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' $D/config.yaml || echo "1.0.0")
-          CUR_ALPINE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' $D/Dockerfile || echo "3.23")
+          CUR_ALPINE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' $D/Dockerfile || echo "3.24")
 
           NEED_CHANGELOG=0
           if [ ! -f "$D/CHANGELOG.md" ]; then
@@ -251,14 +251,10 @@ jobs:
           base_ok() {
             docker manifest inspect "ghcr.io/home-assistant/$1-base:$2" >/dev/null 2>&1
           }
-          docker_tag_ok() {
-            local tag="$1"
-            local m
-            m=$(docker manifest inspect "tailscale/tailscale:${tag}" 2>/dev/null) || return 1
+          tarball_ok() {
+            local ver="${1#v}"
             for a in arm64 amd64; do
-              local d
-              d=$(echo "$m" | jq -r --arg arch "$a" '.manifests[]? | select(.platform.architecture == $arch and .platform.os == "linux") | .digest' | head -n1)
-              [ -n "$d" ] || return 1
+              http_ok "https://pkgs.tailscale.com/stable/tailscale_${ver}_${a}.tgz" || return 1
             done
             return 0
           }
@@ -297,14 +293,14 @@ jobs:
           [ -n "$CURRENT_BASE" ] || fail "Cannot read BUILD_FROM in Dockerfile"
           echo "📌 Current Repo State: Addon=$CURRENT_VER | Tailscale=$CURRENT_TS | Alpine=$CURRENT_BASE"
 
-          # ---- Kiểm tra tag hiện tại có bị lỗi không (Self-Healing) ----
+          # ---- Kiểm tra gói tarball hiện tại có tồn tại không (Self-Healing) ----
           CURRENT_BROKEN=0
-          if ! docker_tag_ok "$CURRENT_TAG"; then
-            warn "Current Dockerfile tag ($CURRENT_TAG) is missing on Docker Hub! Activating self-healing fallback..."
+          if ! tarball_ok "$CURRENT_TAG"; then
+            warn "Current Dockerfile version ($CURRENT_TAG) tarball is missing on pkgs.tailscale.com! Activating self-healing..."
             CURRENT_BROKEN=1
           fi
 
-          # ---- Lớp 1 -> 5: Quét các bản phát hành gần nhất ----
+          # ---- Lớp 1 -> 5: Quét các bản phát hành gần nhất từ GitHub & pkgs.tailscale.com ----
           RELEASES_JSON=$(retry curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/tailscale/tailscale/releases?per_page=8") \
             || skip "GitHub API unreachable, retrying next cycle"
@@ -317,23 +313,17 @@ jobs:
 
             git ls-remote --exit-code --tags https://github.com/tailscale/tailscale.git "refs/tags/${TAG_CAND}" >/dev/null 2>&1 || continue
 
-            TARBALL_READY=1
-            for ARCH in arm64 amd64; do
-              http_ok "https://pkgs.tailscale.com/stable/tailscale_${VER_CAND}_${ARCH}.tgz" || { TARBALL_READY=0; break; }
-            done
-            [ "$TARBALL_READY" -eq 1 ] || { echo "⏳ $TAG_CAND tarballs not ready yet, checking previous..."; continue; }
-
-            if docker_tag_ok "$TAG_CAND"; then
+            if tarball_ok "$VER_CAND"; then
               LATEST_TAG="$TAG_CAND"
               CLEAN_VER="$VER_CAND"
               break
             else
-              echo "⏳ $TAG_CAND Docker Hub image not published yet, checking previous..."
+              echo "⏳ $TAG_CAND tarballs not published on pkgs.tailscale.com yet, checking previous..."
             fi
           done
 
-          [ -n "$LATEST_TAG" ] || skip "No verified upstream release found with ready Docker images"
-          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG (Git tag, tarballs & Docker arm64/amd64 ready)"
+          [ -n "$LATEST_TAG" ] || skip "No verified upstream release found with ready binaries"
+          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG (Git tag & official arm64/amd64 binaries ready on pkgs.tailscale.com)"
 
           # ---- Lớp 6: Alpine base (độc lập) ----
           LATEST_BASE="$CURRENT_BASE"
@@ -348,7 +338,7 @@ jobs:
           if [ "$CAND" = "$CURRENT_BASE" ]; then
             echo "ℹ️ Alpine $CURRENT_BASE is already the latest verified base"
           else
-            PKGS=$(sed -n '/apk add/,/^$/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
+            PKGS=$(sed -n '/apk add/,/&&/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
             if [ -z "$PKGS" ]; then
               warn "Layer 6: Could not parse packages from Dockerfile, keeping Alpine $CURRENT_BASE"
             elif docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
@@ -403,12 +393,10 @@ jobs:
             CUR_PATCH=$(echo "$CURRENT_VER" | cut -d. -f3)
 
             if [ "$TS_UPDATE" -eq 1 ] && [ "$ALPINE_UPDATE" -eq 1 ]; then
-              # Cả 2 cùng update → nhảy major
               NEW_MAJOR=$((CUR_MAJOR + 1))
               NEW_ADDON_VER="${NEW_MAJOR}.0.0"
               ADDON_STATUS="🚀 MAJOR → $NEW_ADDON_VER (both components updated)"
             else
-              # Chỉ 1 cái update → tăng patch
               NEW_PATCH=$((CUR_PATCH + 1))
               NEW_ADDON_VER="${CUR_MAJOR}.${CUR_MINOR}.${NEW_PATCH}"
               ADDON_STATUS="⬆️ PATCH → $NEW_ADDON_VER"
@@ -468,7 +456,6 @@ jobs:
           grep -qx "version: \"${NEW_ADDON_VER}\"" tailscale/config.yaml
           echo "✅ Values in Dockerfile and config.yaml verified"
 
-          grep -q '^FROM tailscale/tailscale:${TAILSCALE_VERSION}' tailscale/Dockerfile
           grep -q '^FROM ${BUILD_FROM}' tailscale/Dockerfile
           echo "✅ Dockerfile FROM structure intact"
 
