@@ -1,4 +1,4 @@
-name: Auto Check Cloudflared & Alpine Base (Verified)
+name: Auto Check Cloudflared & Alpine Base
 
 on:
   schedule:
@@ -27,133 +27,123 @@ jobs:
 
       - name: Download Official Assets (Logo, Icon, DOCS)
         run: |
-          echo "🔍 [1/4] Checking UI assets (icon, logo, DOCS)..."
+          echo "🔍 Checking UI assets..."
           mkdir -p cloudflared
           if [ ! -f cloudflared/icon.png ]; then
             curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o cloudflared/icon.png
-            echo "  -> Downloaded icon.png"
           fi
           if [ ! -f cloudflared/logo.png ]; then
             curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o cloudflared/logo.png
-            echo "  -> Downloaded logo.png"
           fi
           if [ ! -f cloudflared/DOCS.md ]; then
             curl -sL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o cloudflared/DOCS.md
-            echo "  -> Downloaded DOCS.md"
           fi
-          echo "✅ UI assets are ready!"
+          echo "✅ UI assets ready"
 
-      - name: Check & Verify Cloudflared arm64 and Alpine Base
-        id: check_versions
+      - name: Check Cloudflared & Alpine versions
+        id: check
         run: |
           set -e
 
           echo "=========================================================="
-          echo "🚀 [2/4] CHECKING CLOUDFLARED VERSION (ARM64 - Raspberry Pi 5)"
+          echo "🚀 Checking Cloudflared (arm64)"
           echo "=========================================================="
 
-          CURRENT_VER_FULL=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml || echo "2026.10.7")
-          CURRENT_CF=$(echo "$CURRENT_VER_FULL" | cut -d'-' -f1)
+          CURRENT_ADDON_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
+          echo "Current Add-on version: $CURRENT_ADDON_VERSION"
+
+          # Get current Cloudflared version from Dockerfile or previous changelog
+          CURRENT_CF=$(grep -oP 'Cloudflared Binary.*`\K[0-9.]+' cloudflared/CHANGELOG.md 2>/dev/null | head -1 || echo "2026.10.7")
           LATEST_CF=$(curl -s https://api.github.com/repos/cloudflare/cloudflared/releases/latest | jq -r '.tag_name' | sed 's/^v//')
 
-          echo "📌 Current Cloudflared version in repo : $CURRENT_CF"
-          echo "🌐 Latest Cloudflared version on GitHub: $LATEST_CF"
+          echo "Current Cloudflared : $CURRENT_CF"
+          echo "Latest Cloudflared  : $LATEST_CF"
 
-          if [ -z "$LATEST_CF" ] || [ "$LATEST_CF" = "null" ]; then
-            echo "⚠️ Failed to fetch GitHub API, keeping current version: $CURRENT_CF"
-            VERIFIED_CF="$CURRENT_CF"
-            CF_STATUS="⚠️ API Error (Keeping $CURRENT_CF)"
-          elif [ "$LATEST_CF" != "$CURRENT_CF" ]; then
+          CF_UPDATED=false
+          if [ -n "$LATEST_CF" ] && [ "$LATEST_CF" != "null" ] && [ "$LATEST_CF" != "$CURRENT_CF" ]; then
             BINARY_URL="https://github.com/cloudflare/cloudflared/releases/download/${LATEST_CF}/cloudflared-linux-arm64"
             HTTP_STATUS=$(curl -sL -I -o /dev/null -w "%{http_code}" "$BINARY_URL")
             if [ "$HTTP_STATUS" -eq 200 ]; then
-              echo "✅ New version detected ($LATEST_CF) and arm64 binary verified (HTTP 200 OK)!"
+              echo "✅ New Cloudflared $LATEST_CF available and arm64 binary verified"
+              CF_UPDATED=true
               VERIFIED_CF="$LATEST_CF"
-              CF_STATUS="🆕 Updated ($CURRENT_CF → $LATEST_CF)"
             else
-              echo "⏳ New version available ($LATEST_CF) but arm64 binary not ready yet (HTTP $HTTP_STATUS). Keeping $CURRENT_CF."
+              echo "⏳ Cloudflared $LATEST_CF exists but arm64 binary not ready yet"
               VERIFIED_CF="$CURRENT_CF"
-              CF_STATUS="⏳ Waiting for arm64 binary (Keeping $CURRENT_CF)"
             fi
           else
-            echo "✅ Cloudflared is already at the latest version ($CURRENT_CF)."
             VERIFIED_CF="$CURRENT_CF"
-            CF_STATUS="✅ Up to date ($CURRENT_CF)"
+            echo "✅ Cloudflared is up to date"
           fi
 
           echo ""
           echo "=========================================================="
-          echo "🏔️ [3/4] CHECKING HOME ASSISTANT ALPINE BASE"
+          echo "🏔️ Checking Alpine Base"
           echo "=========================================================="
 
           CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' cloudflared/Dockerfile | head -1 || echo "3.22")
-          echo "📌 Current Alpine Base in Dockerfile: $CURRENT_ALPINE"
+          echo "Current Alpine: $CURRENT_ALPINE"
 
           CANDIDATES="3.24 3.23 3.22"
-
           VERIFIED_ALPINE="$CURRENT_ALPINE"
-          ALPINE_STATUS="✅ Up to date (Alpine $CURRENT_ALPINE)"
+          ALPINE_UPDATED=false
 
           for ver in $CANDIDATES; do
             if [ "$(printf '%s\n' "$ver" "$CURRENT_ALPINE" | sort -V | tail -1)" = "$ver" ] && [ "$ver" != "$CURRENT_ALPINE" ]; then
-              echo "🔍 Checking availability of aarch64-base:$ver ..."
               if docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${ver}" > /dev/null 2>&1; then
-                echo "✅ Found Alpine $ver (available on GHCR)!"
+                echo "✅ New Alpine $ver available"
                 VERIFIED_ALPINE="$ver"
-                ALPINE_STATUS="🆕 Updated (Alpine $CURRENT_ALPINE → $ver)"
+                ALPINE_UPDATED=true
                 break
-              else
-                echo "⏳ Tag $ver is not available yet."
               fi
             fi
           done
 
-          if [ "$VERIFIED_ALPINE" = "$CURRENT_ALPINE" ]; then
-            echo "ℹ️ Alpine $CURRENT_ALPINE is still the latest verified version."
+          if ! $ALPINE_UPDATED; then
+            echo "✅ Alpine is up to date"
           fi
 
+          echo "cf_updated=$CF_UPDATED" >> $GITHUB_OUTPUT
+          echo "alpine_updated=$ALPINE_UPDATED" >> $GITHUB_OUTPUT
           echo "verified_cf=$VERIFIED_CF" >> $GITHUB_OUTPUT
-          echo "current_cf=$CURRENT_CF" >> $GITHUB_OUTPUT
-          echo "cf_status=$CF_STATUS" >> $GITHUB_OUTPUT
           echo "verified_alpine=$VERIFIED_ALPINE" >> $GITHUB_OUTPUT
+          echo "current_cf=$CURRENT_CF" >> $GITHUB_OUTPUT
           echo "current_alpine=$CURRENT_ALPINE" >> $GITHUB_OUTPUT
-          echo "alpine_status=$ALPINE_STATUS" >> $GITHUB_OUTPUT
+          echo "current_addon_version=$CURRENT_ADDON_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Apply Updates & Generate Summary Report
+      - name: Apply updates and bump version
         run: |
           set -e
 
-          echo "=========================================================="
-          echo "⚙️ [4/4] APPLYING UPDATES & GENERATING REPORT"
-          echo "=========================================================="
+          CF_UPDATED=${{ steps.check.outputs.cf_updated }}
+          ALPINE_UPDATED=${{ steps.check.outputs.alpine_updated }}
+          NEW_CF="${{ steps.check.outputs.verified_cf }}"
+          NEW_ALPINE="${{ steps.check.outputs.verified_alpine }}"
+          CUR_CF="${{ steps.check.outputs.current_cf }}"
+          CUR_ALPINE="${{ steps.check.outputs.current_alpine }}"
+          CURRENT_ADDON_VERSION="${{ steps.check.outputs.current_addon_version }}"
 
-          NEW_CF="${{ steps.check_versions.outputs.verified_cf }}"
-          CUR_CF="${{ steps.check_versions.outputs.current_cf }}"
-          CF_STATUS="${{ steps.check_versions.outputs.cf_status }}"
-          NEW_ALPINE="${{ steps.check_versions.outputs.verified_alpine }}"
-          CUR_ALPINE="${{ steps.check_versions.outputs.current_alpine }}"
-          ALPINE_STATUS="${{ steps.check_versions.outputs.alpine_status }}"
+          echo "CF_UPDATED=$CF_UPDATED | ALPINE_UPDATED=$ALPINE_UPDATED"
 
-          CF_UPDATED=false
-          ALPINE_UPDATED=false
-
-          [ "$NEW_CF" != "$CUR_CF" ] && CF_UPDATED=true
-          [ "$NEW_ALPINE" != "$CUR_ALPINE" ] && ALPINE_UPDATED=true
-
-          # Determine final version
-          if $CF_UPDATED; then
-            FINAL_VERSION="${NEW_CF}"
-          elif $ALPINE_UPDATED; then
-            FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
+          # ==================== VERSION BUMP LOGIC ====================
+          # Independent versioning: 1.0.0 → 1.0.1 → 1.1.0 → 2.0.0 ...
+          if [ "$CF_UPDATED" = "true" ] || [ "$ALPINE_UPDATED" = "true" ]; then
+            # Simple and reliable: always bump patch version
+            # Example: 1.2.3 → 1.2.4
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_ADDON_VERSION"
+            PATCH=$((PATCH + 1))
+            FINAL_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+            echo "Version bumped: $CURRENT_ADDON_VERSION → $FINAL_VERSION"
           else
-            FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
+            FINAL_VERSION="$CURRENT_ADDON_VERSION"
+            echo "No update needed. Version remains $FINAL_VERSION"
           fi
 
-          # Update Dockerfile
+          # Update Dockerfile (Alpine)
           sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
           [ -f cloudflared/build.yaml ] && rm -f cloudflared/build.yaml
 
-          # Update version
+          # Update version in config.yaml
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
           # ==================== GENERATE CHANGELOG ====================
@@ -161,69 +151,68 @@ jobs:
 
           NEW_SECTION="# What's Changed in ${FINAL_VERSION}
 
-          * **Cloudflared Binary (arm64 verified):** \`${NEW_CF}\`
-          * **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\`
-          "
+* **Cloudflared Binary (arm64 verified):** \`${NEW_CF}\`
+* **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\`
+"
 
-          if $CF_UPDATED && $ALPINE_UPDATED; then
+          if [ "$CF_UPDATED" = "true" ] && [ "$ALPINE_UPDATED" = "true" ]; then
             NEW_SECTION+="
-          ### Changes in this release
-          - Updated Cloudflared to the latest version (\`${NEW_CF}\`)
-          - Upgraded Home Assistant Alpine Base to \`${NEW_ALPINE}\`
-          "
-          elif $CF_UPDATED; then
+### Changes in this release
+- Updated Cloudflared to \`${NEW_CF}\`
+- Upgraded Alpine Base to \`${NEW_ALPINE}\`
+"
+          elif [ "$CF_UPDATED" = "true" ]; then
             NEW_SECTION+="
-          ### Changes in this release
-          - Updated Cloudflared to the latest version (\`${NEW_CF}\`)
-          "
-          elif $ALPINE_UPDATED; then
+### Changes in this release
+- Updated Cloudflared to \`${NEW_CF}\`
+"
+          elif [ "$ALPINE_UPDATED" = "true" ]; then
             NEW_SECTION+="
-          ### Changes in this release
-          - Upgraded Home Assistant Alpine Base from \`${CUR_ALPINE}\` to \`${NEW_ALPINE}\`
-          - Cloudflared remains at version \`${NEW_CF}\`
-          "
+### Changes in this release
+- Upgraded Home Assistant Alpine Base from \`${CUR_ALPINE}\` to \`${NEW_ALPINE}\`
+"
           else
             NEW_SECTION+="
-          ### Current Version Information
-          - Cloudflared: \`${NEW_CF}\` (arm64 binary verified)
-          - Alpine Base: \`${NEW_ALPINE}\` (official Home Assistant base image)
-          - Optimized for Raspberry Pi 5 (aarch64)
-          "
+### Current Version Information
+- Cloudflared: \`${NEW_CF}\` (arm64 binary verified)
+- Alpine Base: \`${NEW_ALPINE}\` (official Home Assistant base)
+- Optimized for Raspberry Pi 5 (aarch64)
+"
           fi
 
-          # Cloudflare release notes
-          if $CF_UPDATED; then
+          # Add Cloudflare release notes
+          if [ "$CF_UPDATED" = "true" ]; then
             BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // empty' | sed '/SHA256 Checksums:/,$d' | sed '/^$/d')
             if [ -n "$BODY" ]; then
               NEW_SECTION+="
-          ---
-          ### Cloudflare Release Notes (${NEW_CF})
+---
+### Cloudflare Release Notes (${NEW_CF})
 
-          ${BODY}
-          "
+${BODY}
+"
             else
               NEW_SECTION+="
-          ---
-          ### Cloudflare Release Notes (${NEW_CF})
-          - Security updates and bug fixes.
-          - Full release notes: https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}
-          "
+---
+### Cloudflare Release Notes (${NEW_CF})
+- Security updates and bug fixes.
+- Full notes: https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}
+"
             fi
           else
             NEW_SECTION+="
-          ---
-          ### Cloudflare Release Notes (${NEW_CF})
-          - This is the current stable version.
-          - arm64 binary has been verified.
-          - Full release notes: https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}
-          "
+---
+### Cloudflare Release Notes (${NEW_CF})
+- Current stable version
+- arm64 binary verified
+- Full notes: https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}
+"
           fi
 
           NEW_SECTION+="
-          ---
-          "
+---
+"
 
-          # Keep maximum 2 previous versions (total 3)
+          # Keep last 2 previous versions (total 3)
           OLD_CONTENT=""
           if [ -f cloudflared/CHANGELOG.md ]; then
             OLD_CONTENT=$(awk '
@@ -238,21 +227,17 @@ jobs:
             ' cloudflared/CHANGELOG.md)
           fi
 
-          # Write final CHANGELOG
           {
             echo "$NEW_SECTION"
-            if [ -n "$OLD_CONTENT" ]; then
-              echo "$OLD_CONTENT"
-            fi
+            [ -n "$OLD_CONTENT" ] && echo "$OLD_CONTENT"
           } > cloudflared/CHANGELOG.md
 
-          # Keep-Alive (45 days)
+          # Keep-alive
           LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
           NOW_TS=$(date +%s)
           DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
 
           if [ "$DAYS_IDLE" -ge 45 ]; then
-            echo "💓 ${DAYS_IDLE} days without commit → Triggering Keep-Alive!"
             mkdir -p .github/workflows
             echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
           fi
@@ -263,25 +248,24 @@ jobs:
           git add -A
 
           if ! git diff --staged --quiet; then
-            git commit -m "chore(cloudflared): sync version v${FINAL_VERSION} (Alpine ${NEW_ALPINE})"
+            git commit -m "chore: release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
             git pull --rebase origin main
             git push
-            ACTION_TAKEN="🚀 **Pushed new version \`v${FINAL_VERSION}\`**"
-            echo "✅ Successfully committed and pushed v${FINAL_VERSION}"
+            echo "✅ Released v${FINAL_VERSION}"
           else
-            ACTION_TAKEN="💤 **No changes (still on \`v${FINAL_VERSION}\`)**"
-            echo "💤 Everything is already up to date."
+            echo "💤 No changes"
           fi
 
-          # Job Summary
+          # Summary
           cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ### 📊 Auto Update Report - Cloudflared Pro (Pi 5)
-          | Component | Current Version | Latest Version | Status |
-          | :--- | :---: | :---: | :--- |
-          | **Cloudflared (arm64)** | \`${CUR_CF}\` | \`${NEW_CF}\` | ${CF_STATUS} |
-          | **Alpine Base Image** | \`Alpine ${CUR_ALPINE}\` | \`Alpine ${NEW_ALPINE}\` | ${ALPINE_STATUS} |
+          ### Auto Update Report - Cloudflared Pro
 
-          * **Current Add-on Version:** \`${FINAL_VERSION}\`
-          * **Idle Time:** \`${DAYS_IDLE} / 45 days\`
-          * **Result:** ${ACTION_TAKEN}
+          | Component              | Version          |
+          |------------------------|------------------|
+          | **Add-on Version**     | \`${FINAL_VERSION}\` |
+          | **Cloudflared**        | \`${NEW_CF}\` |
+          | **Alpine Base**        | \`${NEW_ALPINE}\` |
+
+          - Cloudflared updated: \`${CF_UPDATED}\`
+          - Alpine updated: \`${ALPINE_UPDATED}\`
           EOF
