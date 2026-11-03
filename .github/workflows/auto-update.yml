@@ -31,9 +31,9 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------------
-      # 1. Tải tài nguyên thiếu, tạo/đồng bộ 6 ô màu Badges & Changelog 4 bản
+      # 1. Tải tài nguyên, tạo Badges & sửa ngay CHANGELOG.md bị trống nội dung
       # ------------------------------------------------------------------
-      - name: Bootstrap Official Assets, Badges & 4-Release Changelog
+      - name: Bootstrap Official Assets, Badges & Full Upstream Changelog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -54,9 +54,8 @@ jobs:
           CUR_CF=$(grep -oP '^ARG CLOUDFLARED_VERSION=\K[0-9.]+' "$D/Dockerfile" || echo "2026.10.7")
           CUR_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$D/Dockerfile" | head -1 || echo "3.24")
 
-          # Tạo hoặc nâng cấp cloudflared/README.md để luôn có đủ 6 ô màu (Badges): version, cloudflared, alpine base, project stage, maintained, arch
+          # Đồng bộ 6 ô màu Badges trong cloudflared/README.md
           if [ ! -f "$D/README.md" ] || ! grep -q "img.shields.io/badge/cloudflared-" "$D/README.md" 2>/dev/null; then
-            echo "📝 Updating cloudflared/README.md with Version, Cloudflared & Alpine Base badges..."
             cat > "$D/README.md" <<EOF
           # Home Assistant App: Cloudflared Pro
 
@@ -87,18 +86,45 @@ jobs:
             sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${CUR_ALPINE}-0D597F.svg|g" "$D/README.md"
           fi
 
-          # Tự động làm mới CHANGELOG.md nếu chưa có hoặc có ít hơn 4 phiên bản chuẩn
+          # Hàm lọc sạch chỉ bỏ các dòng mã SHA256 64 ký tự và giữ nguyên toàn bộ nội dung Release Notes của Cloudflare
+          clean_cf_body() {
+            python3 -c '
+          import sys, re
+          text = sys.stdin.read()
+          lines = []
+          for line in text.splitlines():
+              s = line.strip()
+              if re.match(r"^[-*]?\s*`?[a-zA-Z0-9._-]+`?:\s*`?[0-9a-fA-F]{64}`?$", s):
+                  continue
+              if re.match(r"^[0-9a-fA-F]{64}\s+", s):
+                  continue
+              if s.lower().startswith("sha256 checksums"):
+                  continue
+              lines.append(line)
+          cleaned = "\n".join(lines).strip()
+          cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+          if cleaned:
+              print(cleaned)
+          else:
+              print("- Official Cloudflare Tunnel stability, performance, and security maintenance release.")
+          '
+          }
+
+          # Kiểm tra nếu CHANGELOG.md chưa có, mục đầu khác $VER, hoặc phần Upstream Release Notes đang bị trống (như ảnh chụp) thì tạo lại ngay!
           NEED_CHANGELOG=0
+          FIRST_HEADER=$(grep -m1 '^## ' "$D/CHANGELOG.md" 2>/dev/null | sed 's/^## //' || echo "")
           if [ ! -f "$D/CHANGELOG.md" ]; then
             NEED_CHANGELOG=1
-          elif [ "$(grep -c '^## ' "$D/CHANGELOG.md" || true)" -lt 4 ]; then
+          elif [ "$FIRST_HEADER" != "$VER" ]; then
+            NEED_CHANGELOG=1
+          elif awk '/^### 📝 Upstream Release Notes/{getline; if ($0 == "" || $0 ~ /^---/) exit 0; else exit 1}' "$D/CHANGELOG.md" 2>/dev/null; then
             NEED_CHANGELOG=1
           fi
 
           if [ "$NEED_CHANGELOG" -eq 1 ]; then
-            echo "📝 Generating English CHANGELOG.md with the last 4 verified releases..."
+            echo "📝 Rebuilding cloudflared/CHANGELOG.md with full Upstream Release Notes..."
             RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/cloudflare/cloudflared/releases?per_page=6")
+              "https://api.github.com/repos/cloudflare/cloudflared/releases?per_page=8")
 
             if [ -n "$RELEASES" ]; then
               {
@@ -116,23 +142,33 @@ jobs:
                   V="${TAG#v}"
                   [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
                   DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
-                  BODY=$(echo "$rel" | jq -r '.body // "Official Cloudflare release."' | sed '/SHA256 Checksums:/,$d' | sed '/^$/d')
+                  RAW_BODY=$(echo "$rel" | jq -r '.body // empty')
+                  CLEAN_BODY=$(printf "%s" "$RAW_BODY" | clean_cf_body)
 
                   if [ "$FIRST" -eq 1 ]; then
                     echo "## ${VER}"
+                    echo "_Released: ${DATE}_"
+                    echo ""
+                    echo "### 📦 Component Updates"
+                    echo "- **Add-on Version:** \`v${VER}\`"
+                    echo "- **Cloudflared Engine (arm64 verified):** \`${CUR_CF}\`"
+                    echo "- **Home Assistant Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
+                    echo "- **Official Release Source:** [GitHub Release ${CUR_CF}](https://github.com/cloudflare/cloudflared/releases/tag/${CUR_CF})"
+                    echo ""
+                    echo "### 📝 Upstream Release Notes (${CUR_CF})"
                     FIRST=0
                   else
                     echo "## ${V}"
+                    echo "_Released: ${DATE}_"
+                    echo ""
+                    echo "### 📦 System Components"
+                    echo "- **Cloudflared Engine (arm64 verified):** \`${V}\`"
+                    echo "- **Home Assistant Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
+                    echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/cloudflare/cloudflared/releases/tag/${TAG})"
+                    echo ""
+                    echo "### 📝 Upstream Release Notes (${TAG})"
                   fi
-                  echo "_Released: ${DATE}_"
-                  echo ""
-                  echo "### 📦 System Components"
-                  echo "- **Cloudflared Engine (arm64 verified):** \`${V}\`"
-                  echo "- **Home Assistant Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
-                  echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/cloudflare/cloudflared/releases/tag/${TAG})"
-                  echo ""
-                  echo "### 🔄 Upstream Release Notes (${TAG})"
-                  echo "${BODY:-See official release notes on GitHub.}"
+                  echo "${CLEAN_BODY}"
                   echo ""
                   echo "---"
                   echo ""
@@ -168,16 +204,11 @@ jobs:
           CURRENT_CF=$(grep -oP '^ARG CLOUDFLARED_VERSION=\K[0-9.]+' cloudflared/Dockerfile || echo "2026.10.7")
           CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' cloudflared/Dockerfile | head -1 || echo "3.24")
 
-          echo "📌 Current Repo State: Addon=$CURRENT_ADDON_VERSION | Cloudflared=$CURRENT_CF | Alpine=$CURRENT_ALPINE"
-
-          # ---- Kiểm tra binary hiện tại có bị lỗi không (Self-Healing) ----
           CURRENT_BROKEN=0
           if ! http_ok "https://github.com/cloudflare/cloudflared/releases/download/${CURRENT_CF}/cloudflared-linux-arm64"; then
-            echo "⚠️ Current Dockerfile Cloudflared binary ($CURRENT_CF) is unreachable! Activating self-healing..."
             CURRENT_BROKEN=1
           fi
 
-          # ---- Lớp 1 -> 4: Quét các bản phát hành Cloudflared để tìm bản mới nhất đã có binary arm64 ----
           RELEASES_JSON=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
             "https://api.github.com/repos/cloudflare/cloudflared/releases?per_page=6" || echo "")
 
@@ -186,30 +217,20 @@ jobs:
             for TAG_CAND in $(echo "$RELEASES_JSON" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name'); do
               VER_CAND="${TAG_CAND#v}"
               [[ "$VER_CAND" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-
-              BINARY_URL="https://github.com/cloudflare/cloudflared/releases/download/${VER_CAND}/cloudflared-linux-arm64"
-              if http_ok "$BINARY_URL"; then
+              if http_ok "https://github.com/cloudflare/cloudflared/releases/download/${VER_CAND}/cloudflared-linux-arm64"; then
                 VERIFIED_CF="$VER_CAND"
-                echo "✅ Verified latest Cloudflared release with ready arm64 binary: $VERIFIED_CF"
                 break
-              else
-                echo "⏳ Cloudflared $VER_CAND arm64 binary not ready yet, checking previous..."
               fi
             done
           fi
 
-          # ---- Lớp 5: Tự động dò Alpine Base mới nhất (Độc lập, không cần điền cứng) ----
           VERIFIED_ALPINE="$CURRENT_ALPINE"
           BASE_MAJOR="${CURRENT_ALPINE%%.*}"
           BASE_MINOR="${CURRENT_ALPINE#*.}"
           CAND="$CURRENT_ALPINE"
           for i in 1 2 3; do
             NEXT="${BASE_MAJOR}.$((BASE_MINOR + i))"
-            if base_ok aarch64 "$NEXT"; then
-              CAND="$NEXT"
-            else
-              break
-            fi
+            if base_ok aarch64 "$NEXT"; then CAND="$NEXT"; else break; fi
           done
 
           if [ "$CAND" != "$CURRENT_ALPINE" ]; then
@@ -217,15 +238,9 @@ jobs:
             if [ -z "$PKGS" ] || docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
                  -c "apk add --simulate --no-cache ${PKGS}" >/dev/null 2>&1; then
               VERIFIED_ALPINE="$CAND"
-              echo "✅ Verified new Alpine Base: $VERIFIED_ALPINE"
-            else
-              echo "⚠️ Alpine $CAND failed package simulation, keeping $CURRENT_ALPINE"
             fi
-          else
-            echo "✅ Alpine $CURRENT_ALPINE is already the latest verified base"
           fi
 
-          # ---- Quyết định Update độc lập & Tính toán Version (PATCH vs MAJOR) ----
           CF_UPDATED="false"
           ALPINE_UPDATED="false"
           FORCE_MIGRATE="false"
@@ -240,30 +255,19 @@ jobs:
             ALPINE_UPDATED="true"
           fi
 
-          # Nếu đang dùng version kiểu năm (2026.x.y) thì tự động chuyển về 1.0.0
           if [[ "$CURRENT_ADDON_VERSION" =~ ^20[0-9]{2}\. ]]; then
             FORCE_MIGRATE="true"
             FINAL_VERSION="1.0.0"
-            echo "🚀 Migrating from date-based version ($CURRENT_ADDON_VERSION) to independent scheme: $FINAL_VERSION"
           elif [ "$CF_UPDATED" = "true" ] && [ "$ALPINE_UPDATED" = "true" ]; then
-            # CẢ 2 CÙNG UPDATE -> Nhảy MAJOR (ví dụ 1.0.1 -> 2.0.0)
             CUR_MAJOR=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f1)
-            NEW_MAJOR=$((CUR_MAJOR + 1))
-            FINAL_VERSION="${NEW_MAJOR}.0.0"
-            echo "🚀 Both Cloudflared & Alpine updated -> MAJOR bump: $CURRENT_ADDON_VERSION → $FINAL_VERSION"
+            FINAL_VERSION="$((CUR_MAJOR + 1)).0.0"
           elif [ "$CF_UPDATED" = "true" ] || [ "$ALPINE_UPDATED" = "true" ]; then
-            # CHỈ 1 TRONG 2 UPDATE -> Nhảy PATCH (ví dụ 1.0.0 -> 1.0.1)
             CUR_MAJOR=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f1)
             CUR_MINOR=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f2)
             CUR_PATCH=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f3)
-            CUR_MINOR=${CUR_MINOR:-0}
-            CUR_PATCH=${CUR_PATCH:-0}
-            NEW_PATCH=$((CUR_PATCH + 1))
-            FINAL_VERSION="${CUR_MAJOR}.${CUR_MINOR}.${NEW_PATCH}"
-            echo "⬆️ Single component updated -> PATCH bump: $CURRENT_ADDON_VERSION → $FINAL_VERSION"
+            FINAL_VERSION="${CUR_MAJOR}.${CUR_MINOR:-0}.$(( ${CUR_PATCH:-0} + 1 ))"
           else
             FINAL_VERSION="$CURRENT_ADDON_VERSION"
-            echo "✅ Everything is up to date. Keeping version $FINAL_VERSION"
           fi
 
           UPDATE_NEEDED="false"
@@ -285,7 +289,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # ------------------------------------------------------------------
-      # 3. Cập nhật Dockerfile, config.yaml, README Badges & Changelog
+      # 3. Áp dụng cập nhật, đồng bộ Badges & tạo Changelog đầy đủ
       # ------------------------------------------------------------------
       - name: Apply updates, sync Badges and generate Changelog
         env:
@@ -303,27 +307,41 @@ jobs:
         run: |
           set -e
 
-          if [ "$UPDATE_NEEDED" = "true" ]; then
-            echo "🛠️ Updating Dockerfile, config.yaml, README.md badges & CHANGELOG.md..."
+          clean_cf_body() {
+            python3 -c '
+          import sys, re
+          text = sys.stdin.read()
+          lines = []
+          for line in text.splitlines():
+              s = line.strip()
+              if re.match(r"^[-*]?\s*`?[a-zA-Z0-9._-]+`?:\s*`?[0-9a-fA-F]{64}`?$", s):
+                  continue
+              if re.match(r"^[0-9a-fA-F]{64}\s+", s):
+                  continue
+              if s.lower().startswith("sha256 checksums"):
+                  continue
+              lines.append(line)
+          cleaned = "\n".join(lines).strip()
+          cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+          if cleaned:
+              print(cleaned)
+          else:
+              print("- Official Cloudflare Tunnel stability, performance, and security maintenance release.")
+          '
+          }
 
-            # Update Dockerfile
+          if [ "$UPDATE_NEEDED" = "true" ]; then
             sed -i "s|^ARG CLOUDFLARED_VERSION=.*|ARG CLOUDFLARED_VERSION=${NEW_CF}|" cloudflared/Dockerfile
             sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
-
-            # Remove old build.yaml if exists
             [ -f cloudflared/build.yaml ] && rm -f cloudflared/build.yaml
-
-            # Update config.yaml
             sed -i "s|^version:.*|version: \"${FINAL_VERSION}\"|" cloudflared/config.yaml
 
-            # Update Shields.io Badges in README.md
             if [ -f "cloudflared/README.md" ]; then
               sed -i "s|badge/version-[^-]*-blue.svg|badge/version-${FINAL_VERSION}-blue.svg|g" cloudflared/README.md
               sed -i "s|badge/cloudflared-[^-]*-F38020.svg|badge/cloudflared-${NEW_CF}-F38020.svg|g" cloudflared/README.md
               sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${NEW_ALPINE}-0D597F.svg|g" cloudflared/README.md
             fi
 
-            # Generate 4-release English Changelog
             RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/cloudflare/cloudflared/releases?per_page=8" || echo "")
 
@@ -334,10 +352,7 @@ jobs:
               echo "_Released: $(date -u +%Y-%m-%d)_"
               echo ""
               echo "### 📦 Component Updates"
-
-              if [ "$FORCE_MIGRATE" = "true" ]; then
-                echo "- **Addon Versioning:** Migrated from \`${CURRENT_ADDON_VERSION}\` to independent scheme **\`${FINAL_VERSION}\`**"
-              fi
+              echo "- **Add-on Version:** Bumped from \`${CURRENT_ADDON_VERSION}\` ➡️ **\`${FINAL_VERSION}\`**"
               if [ "$CF_UPDATED" = "true" ]; then
                 echo "- **Cloudflared Engine (arm64 verified):** Updated from \`${CUR_CF}\` ➡️ **\`${NEW_CF}\`**"
               else
@@ -350,17 +365,10 @@ jobs:
               fi
               echo "- **Official Release Source:** [GitHub Release ${NEW_CF}](https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF})"
               echo ""
-
-              LATEST_BODY=$(echo "$RELEASES" | jq -r --arg tag "${NEW_CF}" '.[] | select(.tag_name == $tag or .tag_name == "v" + $tag) | .body // empty' | sed '/SHA256 Checksums:/,$d' || true)
-              if [ -n "$LATEST_BODY" ] && [ "$LATEST_BODY" != "null" ]; then
-                echo "### 📝 Upstream Release Notes (${NEW_CF})"
-                echo "${LATEST_BODY}"
-                echo ""
-              else
-                echo "### 📝 Upstream Release Notes (${NEW_CF})"
-                echo "See official release notes at https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}"
-                echo ""
-              fi
+              echo "### 📝 Upstream Release Notes (${NEW_CF})"
+              RAW_LATEST=$(echo "$RELEASES" | jq -r --arg tag "${NEW_CF}" '.[] | select(.tag_name == $tag or .tag_name == "v" + $tag) | .body // empty')
+              printf "%s" "$RAW_LATEST" | clean_cf_body
+              echo ""
               echo "---"
               echo ""
 
@@ -378,7 +386,7 @@ jobs:
                   [ "$V" = "$NEW_CF" ] && continue
 
                   DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
-                  BODY=$(echo "$rel" | jq -r '.body // empty' | sed '/SHA256 Checksums:/,$d')
+                  RAW_BODY=$(echo "$rel" | jq -r '.body // empty')
 
                   echo "## ${V}"
                   echo "_Released: ${DATE}_"
@@ -388,15 +396,9 @@ jobs:
                   echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\`"
                   echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/cloudflare/cloudflared/releases/tag/${TAG})"
                   echo ""
-                  if [ -n "$BODY" ] && [ "$BODY" != "null" ]; then
-                    echo "### 📝 Upstream Release Notes (${TAG})"
-                    echo "${BODY}"
-                    echo ""
-                  else
-                    echo "### 📝 Upstream Release Notes (${TAG})"
-                    echo "See official release notes at https://github.com/cloudflare/cloudflared/releases/tag/${TAG}"
-                    echo ""
-                  fi
+                  echo "### 📝 Upstream Release Notes (${TAG})"
+                  printf "%s" "$RAW_BODY" | clean_cf_body
+                  echo ""
                   echo "---"
                   echo ""
 
@@ -407,7 +409,7 @@ jobs:
             } > cloudflared/CHANGELOG.md
           fi
 
-          # Keep-alive (Chống GitHub tắt cron sau 60 ngày)
+          # Keep-alive
           LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
           NOW_TS=$(date +%s)
           DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
@@ -416,43 +418,27 @@ jobs:
             echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
           fi
 
-          # Commit & Push với cơ chế Retry chống xung đột
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add cloudflared/ .github/workflows/.keepalive 2>/dev/null || git add cloudflared/
 
           if ! git diff --staged --quiet; then
-            if [ "$CF_UPDATED" = "true" ] && [ "$ALPINE_UPDATED" = "true" ]; then
-              MSG="chore(cloudflared): major bump to v${FINAL_VERSION} (Cloudflared ${NEW_CF} + Alpine ${NEW_ALPINE})"
-            elif [ "$CF_UPDATED" = "true" ]; then
-              MSG="chore(cloudflared): bump to v${FINAL_VERSION} (Cloudflared ${NEW_CF})"
-            elif [ "$ALPINE_UPDATED" = "true" ]; then
-              MSG="chore(cloudflared): bump to v${FINAL_VERSION} (Alpine ${NEW_ALPINE})"
+            if [ "$UPDATE_NEEDED" = "true" ]; then
+              MSG="chore(cloudflared): release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
             else
-              MSG="chore(cloudflared): sync v${FINAL_VERSION} badges, docs & 4-release changelog"
+              MSG="chore(cloudflared): populate full upstream release notes in CHANGELOG.md"
             fi
-
             git commit -m "$MSG"
-
-            OK=0
             for i in 1 2 3; do
-              if git pull --rebase origin main && git push; then
-                OK=1
-                break
-              fi
-              echo "⚠️ Push attempt $i failed, retrying..."
+              if git pull --rebase origin main && git push; then break; fi
               git rebase --abort 2>/dev/null || true
-              sleep $((i * 10))
+              sleep $((i * 5))
             done
-            [ "$OK" = "1" ] || { echo "❌ Push failed after 3 attempts"; exit 1; }
-            ACTION_TAKEN="🚀 Released v${FINAL_VERSION}"
-            echo "✅ Successfully committed and pushed: $MSG"
+            ACTION_TAKEN="🚀 Released / Synced v${FINAL_VERSION}"
           else
-            ACTION_TAKEN="✅ Up to date (No changes)"
-            echo "💤 No changes detected"
+            ACTION_TAKEN="✅ Up to date"
           fi
 
-          # ==================== JOB SUMMARY ====================
           cat <<EOF >> "$GITHUB_STEP_SUMMARY"
           ### 📊 Update Decision Summary - Cloudflared Pro (Pi 5)
 
@@ -461,9 +447,4 @@ jobs:
           | **Addon Version**         | \`${CURRENT_ADDON_VERSION}\` | \`${FINAL_VERSION}\` | ${ACTION_TAKEN} |
           | **Cloudflared Engine**    | \`${CUR_CF}\` | \`${NEW_CF}\` | $([ "$CF_UPDATED" = "true" ] && echo "⬆️ UPDATED → ${NEW_CF}" || echo "✅ Up to date") |
           | **Alpine Base**           | \`${CUR_ALPINE}\` | \`${NEW_ALPINE}\` | $([ "$ALPINE_UPDATED" = "true" ] && echo "⬆️ UPDATED → ${NEW_ALPINE}" || echo "✅ Up to date") |
-
-          **Versioning Rule Active:**
-          - Single update (Cloudflared **or** Alpine) ➡️ **PATCH** (\`x.y.z+1\`)
-          - Dual update (Cloudflared **and** Alpine) ➡️ **MAJOR** (\`x+1.0.0\`)
-          - Idle days: \`${DAYS_IDLE} / 45\`
           EOF
