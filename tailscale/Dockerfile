@@ -1,9 +1,9 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.24
 ARG TAILSCALE_VERSION=v1.104.4
 
-FROM tailscale/tailscale:${TAILSCALE_VERSION} AS tailscale-upstream
-
 FROM ${BUILD_FROM}
+
+ARG TAILSCALE_VERSION
 
 RUN apk add --no-cache \
     ca-certificates \
@@ -12,16 +12,20 @@ RUN apk add --no-cache \
     iproute2 \
     ethtool \
     nginx \
+    curl \
     jq \
-    bash
-
-COPY --from=tailscale-upstream /usr/local/bin/tailscale /usr/bin/tailscale
-COPY --from=tailscale-upstream /usr/local/bin/tailscaled /usr/bin/tailscaled
+    bash \
+    && TS_VER="${TAILSCALE_VERSION#v}" \
+    && curl -sfL "https://pkgs.tailscale.com/stable/tailscale_${TS_VER}_arm64.tgz" \
+       | tar -xzf - -C /tmp \
+    && mv "/tmp/tailscale_${TS_VER}_arm64/tailscale" /usr/bin/tailscale \
+    && mv "/tmp/tailscale_${TS_VER}_arm64/tailscaled" /usr/bin/tailscaled \
+    && chmod a+x /usr/bin/tailscale /usr/bin/tailscaled \
+    && rm -rf /tmp/tailscale_*
 
 COPY run.sh /
 RUN chmod a+x /run.sh
 
-# Kiểm tra sức khỏe đường truyền VÀ kiểm tra cổng Web UI 5252 luôn sống
 HEALTHCHECK --interval=60s --timeout=10s --start-period=45s --retries=3 \
     CMD tailscale --socket=/var/run/tailscale/tailscaled.sock status --json | jq -e '.BackendState == "Running" or .BackendState == "NeedsLogin"' >/dev/null || exit 1
 
