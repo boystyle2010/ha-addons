@@ -1,5 +1,5 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.24
-ARG TAILSCALE_VERSION=v1.104.5
+ARG TAILSCALE_VERSION=v1.104.4
 
 FROM tailscale/tailscale:${TAILSCALE_VERSION} AS tailscale-upstream
 
