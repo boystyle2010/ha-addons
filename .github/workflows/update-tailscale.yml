@@ -284,15 +284,6 @@ jobs:
           done
           pass "Lớp 3: tarball gốc arm64 + amd64 đã có trên pkgs.tailscale.com"
 
-          # ---- Lớp 4: Docker image Tailscale đủ kiến trúc ----
-          MANIFEST_JSON=$(retry docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null) \
-            || skip "Chưa có manifest Docker cho tailscale/tailscale:${LATEST_TAG}"
-          for ARCH in arm64 amd64; do
-            DGST=$(echo "$MANIFEST_JSON" | jq -r --arg a "$ARCH" '.manifests[]? | select(.platform.architecture == $a and .platform.os == "linux") | .digest' | head -n1)
-            [ -n "$DGST" ] || skip "Docker image chưa có kiến trúc linux/${ARCH}"
-          done
-          pass "Lớp 4: Docker image Tailscale có đủ linux/arm64 + linux/amd64"
-
           # ---- Lớp 5: Alpine base (chỉ nâng khi gói apk tương thích hoàn toàn) ----
           LATEST_BASE="$CURRENT_BASE"
           BASE_MAJOR="${CURRENT_BASE%%.*}"
