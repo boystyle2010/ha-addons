@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:edge
+ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:edgeedge
 FROM ${BUILD_FROM}
 
 ARG BUILD_VERSION
