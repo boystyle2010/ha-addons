@@ -277,33 +277,23 @@ jobs:
             || skip "Tag $LATEST_TAG chưa tồn tại trong repo gốc"
           pass "Lớp 2: tag $LATEST_TAG tồn tại trong repo gốc"
 
-          # ---- Lớp 3: Chống hạ cấp ----
-          newer_or_equal "$CLEAN_VER" "$CURRENT_VER" \
-            || skip "Bản mới nhất ($CLEAN_VER) không cao hơn bản hiện tại ($CURRENT_VER), giữ nguyên"
-          pass "Lớp 3: không hạ cấp ($CURRENT_VER -> $CLEAN_VER)"
-
-          # ---- Không có bản Tailscale mới thì dừng ----
-          if [ "$CLEAN_VER" = "$CURRENT_VER" ]; then
-            skip "Tailscale $CURRENT_VER đã là bản mới nhất"
-          fi
-
-          # ---- Lớp 4: File gốc đã tải lên xong ----
+          # ---- Lớp 3: File gốc đã tải lên xong ----
           for ARCH in arm64 amd64; do
             URL="https://pkgs.tailscale.com/stable/tailscale_${CLEAN_VER}_${ARCH}.tgz"
             retry http_ok "$URL" || skip "File gốc ${ARCH} chưa sẵn sàng: $URL"
           done
-          pass "Lớp 4: tarball gốc arm64 + amd64 đã có trên pkgs.tailscale.com"
+          pass "Lớp 3: tarball gốc arm64 + amd64 đã có trên pkgs.tailscale.com"
 
-          # ---- Lớp 5: Docker image Tailscale đủ kiến trúc ----
+          # ---- Lớp 4: Docker image Tailscale đủ kiến trúc ----
           MANIFEST_JSON=$(retry docker manifest inspect "tailscale/tailscale:${LATEST_TAG}" 2>/dev/null) \
             || skip "Chưa có manifest Docker cho tailscale/tailscale:${LATEST_TAG}"
           for ARCH in arm64 amd64; do
             DGST=$(echo "$MANIFEST_JSON" | jq -r --arg a "$ARCH" '.manifests[]? | select(.platform.architecture == $a and .platform.os == "linux") | .digest' | head -n1)
             [ -n "$DGST" ] || skip "Docker image chưa có kiến trúc linux/${ARCH}"
           done
-          pass "Lớp 5: Docker image Tailscale có đủ linux/arm64 + linux/amd64"
+          pass "Lớp 4: Docker image Tailscale có đủ linux/arm64 + linux/amd64"
 
-          # ---- Lớp 6: Alpine base (chỉ nâng khi gói apk tương thích hoàn toàn) ----
+          # ---- Lớp 5: Alpine base (chỉ nâng khi gói apk tương thích hoàn toàn) ----
           LATEST_BASE="$CURRENT_BASE"
           BASE_MAJOR="${CURRENT_BASE%%.*}"
           BASE_MINOR="${CURRENT_BASE#*.}"
@@ -318,13 +308,13 @@ jobs:
           else
             PKGS=$(sed -n '/apk add/,/^$/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
             if [ -z "$PKGS" ]; then
-              warn "Lớp 6: không đọc được danh sách gói trong Dockerfile, giữ Alpine $CURRENT_BASE"
+              warn "Lớp 5: không đọc được danh sách gói trong Dockerfile, giữ Alpine $CURRENT_BASE"
             elif docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
                    -c "apk add --simulate --no-cache ${PKGS}" >/tmp/apk-test.log 2>&1; then
               LATEST_BASE="$CAND"
               pass "Lớp 6: Alpine $CAND có đủ image và cài được các gói (${PKGS}), sẽ nâng $CURRENT_BASE -> $CAND"
             else
-              warn "Lớp 6: Alpine $CAND chưa qua kiểm tra gói, giữ Alpine $CURRENT_BASE"
+              warn "Lớp 5: Alpine $CAND chưa qua kiểm tra gói, giữ Alpine $CURRENT_BASE"
               tail -n 5 /tmp/apk-test.log || true
             fi
           fi
