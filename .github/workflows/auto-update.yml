@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------------
-      # 1. Tải tài nguyên, tạo Badges & sửa ngay CHANGELOG.md bị trống nội dung
+      # 1. Tải tài nguyên, tạo Badges & sửa ngay CHANGELOG.md bị lỗi SHA256 trống
       # ------------------------------------------------------------------
       - name: Bootstrap Official Assets, Badges & Full Upstream Changelog
         env:
@@ -86,43 +86,72 @@ jobs:
             sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${CUR_ALPINE}-0D597F.svg|g" "$D/README.md"
           fi
 
-          # Hàm lọc sạch chỉ bỏ các dòng mã SHA256 64 ký tự và giữ nguyên toàn bộ nội dung Release Notes của Cloudflare
-          clean_cf_body() {
-            python3 -c '
+          # Tải file CHANGES.md chính thức từ repo Cloudflare để lấy chi tiết thay đổi nếu Release body chỉ có SHA256
+          curl -sfL "https://raw.githubusercontent.com/cloudflare/cloudflared/master/CHANGES.md" -o /tmp/cf_changes.md || true
+
+          # Hàm Python thông minh: Bóc tách ghi chú thực tế + giữ lại đúng mã SHA256 của bản linux-arm64 (xóa sạch dòng SHA256 Checksums: trống)
+          format_cf_notes() {
+            local ver="$1"
+            python3 - "$ver" <<'PY'
           import sys, re
-          text = sys.stdin.read()
-          lines = []
-          for line in text.splitlines():
+
+          ver = sys.argv[1]
+          raw_body = sys.stdin.read()
+
+          arm64_sha = ""
+          note_lines = []
+
+          for line in raw_body.splitlines():
               s = line.strip()
-              if re.match(r"^[-*]?\s*`?[a-zA-Z0-9._-]+`?:\s*`?[0-9a-fA-F]{64}`?$", s):
+              # Bắt mã SHA256 của riêng bản cloudflared-linux-arm64 (không lấy fips hay deb/rpm)
+              m_sha = re.search(r'cloudflared-linux-arm64`?\s*:\s*`?([0-9a-fA-F]{64})', s)
+              if m_sha and "fips" not in s.lower() and "." not in s.split(":")[0]:
+                  arm64_sha = m_sha.group(1)
                   continue
-              if re.match(r"^[0-9a-fA-F]{64}\s+", s):
+              # Bỏ qua mọi dòng tiêu đề SHA256 Checksums (kể cả có ** hoặc ###)
+              if "sha256 checksum" in s.lower():
                   continue
-              if s.lower().startswith("sha256 checksums"):
+              # Bỏ qua tất cả các dòng liệt kê hash 64 ký tự khác
+              if re.search(r'\b[0-9a-fA-F]{64}\b', s):
                   continue
-              lines.append(line)
-          cleaned = "\n".join(lines).strip()
-          cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-          if cleaned:
-              print(cleaned)
-          else:
-              print("- Official Cloudflare Tunnel stability, performance, and security maintenance release.")
-          '
+              note_lines.append(line)
+
+          cleaned_notes = "\n".join(note_lines).strip()
+          cleaned_notes = re.sub(r'\n{3,}', '\n\n', cleaned_notes)
+
+          # Nếu sau khi lọc bảng SHA256 mà trống (hoặc không có chữ), lấy từ CHANGES.md của Cloudflare
+          if not cleaned_notes:
+              try:
+                  changes_txt = open("/tmp/cf_changes.md", encoding="utf-8", errors="ignore").read()
+                  pat = re.compile(rf'(?:^|\n)##?\s*v?{re.escape(ver)}\b[^\n]*\n(.*?)(?=\n##?\s*v?[0-9]{4}\.|\Z)', re.S)
+                  m = pat.search(changes_txt)
+                  if m and m.group(1).strip():
+                      cleaned_notes = m.group(1).strip()
+              except Exception:
+                  pass
+
+          if not cleaned_notes:
+              cleaned_notes = f"- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v{ver}`)."
+
+          print(cleaned_notes)
+          if arm64_sha:
+              print(f"- **SHA256 (`cloudflared-linux-arm64`):** `{arm64_sha}`")
+          PY
           }
 
-          # Kiểm tra nếu CHANGELOG.md chưa có, mục đầu khác $VER, hoặc phần Upstream Release Notes đang bị trống (như ảnh chụp) thì tạo lại ngay!
+          # Kiểm tra nếu CHANGELOG.md chưa có, hoặc đang bị dính dòng "SHA256 Checksums:" trống như trong ảnh chụp thì tạo lại ngay!
           NEED_CHANGELOG=0
           FIRST_HEADER=$(grep -m1 '^## ' "$D/CHANGELOG.md" 2>/dev/null | sed 's/^## //' || echo "")
           if [ ! -f "$D/CHANGELOG.md" ]; then
             NEED_CHANGELOG=1
           elif [ "$FIRST_HEADER" != "$VER" ]; then
             NEED_CHANGELOG=1
-          elif awk '/^### 📝 Upstream Release Notes/{getline; if ($0 == "" || $0 ~ /^---/) exit 0; else exit 1}' "$D/CHANGELOG.md" 2>/dev/null; then
+          elif grep -qi "SHA256 Checksums:" "$D/CHANGELOG.md" 2>/dev/null; then
             NEED_CHANGELOG=1
           fi
 
           if [ "$NEED_CHANGELOG" -eq 1 ]; then
-            echo "📝 Rebuilding cloudflared/CHANGELOG.md with full Upstream Release Notes..."
+            echo "📝 Rebuilding cloudflared/CHANGELOG.md with real release notes & arm64 SHA256..."
             RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/cloudflare/cloudflared/releases?per_page=8")
 
@@ -143,7 +172,7 @@ jobs:
                   [[ "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
                   DATE=$(echo "$rel" | jq -r '.published_at' | cut -d'T' -f1)
                   RAW_BODY=$(echo "$rel" | jq -r '.body // empty')
-                  CLEAN_BODY=$(printf "%s" "$RAW_BODY" | clean_cf_body)
+                  CLEAN_BODY=$(printf "%s" "$RAW_BODY" | format_cf_notes "$V")
 
                   if [ "$FIRST" -eq 1 ]; then
                     echo "## ${VER}"
@@ -307,27 +336,51 @@ jobs:
         run: |
           set -e
 
-          clean_cf_body() {
-            python3 -c '
+          curl -sfL "https://raw.githubusercontent.com/cloudflare/cloudflared/master/CHANGES.md" -o /tmp/cf_changes.md || true
+
+          format_cf_notes() {
+            local ver="$1"
+            python3 - "$ver" <<'PY'
           import sys, re
-          text = sys.stdin.read()
-          lines = []
-          for line in text.splitlines():
+
+          ver = sys.argv[1]
+          raw_body = sys.stdin.read()
+
+          arm64_sha = ""
+          note_lines = []
+
+          for line in raw_body.splitlines():
               s = line.strip()
-              if re.match(r"^[-*]?\s*`?[a-zA-Z0-9._-]+`?:\s*`?[0-9a-fA-F]{64}`?$", s):
+              m_sha = re.search(r'cloudflared-linux-arm64`?\s*:\s*`?([0-9a-fA-F]{64})', s)
+              if m_sha and "fips" not in s.lower() and "." not in s.split(":")[0]:
+                  arm64_sha = m_sha.group(1)
                   continue
-              if re.match(r"^[0-9a-fA-F]{64}\s+", s):
+              if "sha256 checksum" in s.lower():
                   continue
-              if s.lower().startswith("sha256 checksums"):
+              if re.search(r'\b[0-9a-fA-F]{64}\b', s):
                   continue
-              lines.append(line)
-          cleaned = "\n".join(lines).strip()
-          cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-          if cleaned:
-              print(cleaned)
-          else:
-              print("- Official Cloudflare Tunnel stability, performance, and security maintenance release.")
-          '
+              note_lines.append(line)
+
+          cleaned_notes = "\n".join(note_lines).strip()
+          cleaned_notes = re.sub(r'\n{3,}', '\n\n', cleaned_notes)
+
+          if not cleaned_notes:
+              try:
+                  changes_txt = open("/tmp/cf_changes.md", encoding="utf-8", errors="ignore").read()
+                  pat = re.compile(rf'(?:^|\n)##?\s*v?{re.escape(ver)}\b[^\n]*\n(.*?)(?=\n##?\s*v?[0-9]{4}\.|\Z)', re.S)
+                  m = pat.search(changes_txt)
+                  if m and m.group(1).strip():
+                      cleaned_notes = m.group(1).strip()
+              except Exception:
+                  pass
+
+          if not cleaned_notes:
+              cleaned_notes = f"- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v{ver}`)."
+
+          print(cleaned_notes)
+          if arm64_sha:
+              print(f"- **SHA256 (`cloudflared-linux-arm64`):** `{arm64_sha}`")
+          PY
           }
 
           if [ "$UPDATE_NEEDED" = "true" ]; then
@@ -367,7 +420,7 @@ jobs:
               echo ""
               echo "### 📝 Upstream Release Notes (${NEW_CF})"
               RAW_LATEST=$(echo "$RELEASES" | jq -r --arg tag "${NEW_CF}" '.[] | select(.tag_name == $tag or .tag_name == "v" + $tag) | .body // empty')
-              printf "%s" "$RAW_LATEST" | clean_cf_body
+              printf "%s" "$RAW_LATEST" | format_cf_notes "$NEW_CF"
               echo ""
               echo "---"
               echo ""
@@ -397,7 +450,7 @@ jobs:
                   echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/cloudflare/cloudflared/releases/tag/${TAG})"
                   echo ""
                   echo "### 📝 Upstream Release Notes (${TAG})"
-                  printf "%s" "$RAW_BODY" | clean_cf_body
+                  printf "%s" "$RAW_BODY" | format_cf_notes "$V"
                   echo ""
                   echo "---"
                   echo ""
@@ -426,7 +479,7 @@ jobs:
             if [ "$UPDATE_NEEDED" = "true" ]; then
               MSG="chore(cloudflared): release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
             else
-              MSG="chore(cloudflared): populate full upstream release notes in CHANGELOG.md"
+              MSG="chore(cloudflared): replace empty SHA256 header with real release notes & arm64 checksum"
             fi
             git commit -m "$MSG"
             for i in 1 2 3; do
