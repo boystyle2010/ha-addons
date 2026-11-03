@@ -86,19 +86,15 @@ jobs:
           echo "🏔️ [3/4] KIỂM TRA PHIÊN BẢN HOME ASSISTANT ALPINE BASE"
           echo "=========================================================="
 
-          # Lấy phiên bản Alpine hiện tại từ Dockerfile
           CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' cloudflared/Dockerfile | head -1 || echo "3.22")
           echo "📌 Alpine Base hiện tại trong Dockerfile: $CURRENT_ALPINE"
 
-          # Danh sách các bản Alpine được Home Assistant hỗ trợ (mới → cũ)
-          # Có thể mở rộng thêm 3.25, 3.26... khi HA hỗ trợ
           CANDIDATES="3.24 3.23 3.22"
 
           VERIFIED_ALPINE="$CURRENT_ALPINE"
           ALPINE_STATUS="✅ Đã mới nhất (Alpine $CURRENT_ALPINE)"
 
           for ver in $CANDIDATES; do
-            # So sánh version đơn giản (3.24 > 3.23 > 3.22)
             if [ "$(printf '%s\n' "$ver" "$CURRENT_ALPINE" | sort -V | tail -1)" = "$ver" ] && [ "$ver" != "$CURRENT_ALPINE" ]; then
               echo "🔍 Đang kiểm tra sự tồn tại của aarch64-base:$ver ..."
               if docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${ver}" > /dev/null 2>&1; then
@@ -138,30 +134,115 @@ jobs:
           CUR_ALPINE="${{ steps.check_versions.outputs.current_alpine }}"
           ALPINE_STATUS="${{ steps.check_versions.outputs.alpine_status }}"
 
-          # Quyết định version cuối cùng của add-on
-          if [ "$NEW_CF" != "$CUR_CF" ]; then
+          CF_UPDATED=false
+          ALPINE_UPDATED=false
+
+          [ "$NEW_CF" != "$CUR_CF" ] && CF_UPDATED=true
+          [ "$NEW_ALPINE" != "$CUR_ALPINE" ] && ALPINE_UPDATED=true
+
+          # Quyết định version cuối cùng
+          if $CF_UPDATED; then
             FINAL_VERSION="${NEW_CF}"
-          elif [ "$NEW_ALPINE" != "$CUR_ALPINE" ]; then
+          elif $ALPINE_UPDATED; then
             FINAL_VERSION="${NEW_CF}-alpine${NEW_ALPINE}"
           else
             FINAL_VERSION=$(grep -oP '^version:\s*"\K[^"]+' cloudflared/config.yaml)
           fi
 
-          # Cập nhật Dockerfile (Alpine base)
+          # Cập nhật Dockerfile
           sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
-
-          # Xóa build.yaml nếu còn sót
           [ -f cloudflared/build.yaml ] && rm -f cloudflared/build.yaml
 
-          # Cập nhật version trong config.yaml
+          # Cập nhật version
           sed -i "s/^version: \".*\"/version: \"${FINAL_VERSION}\"/" cloudflared/config.yaml
 
-          # Tạo / cập nhật CHANGELOG
-          if [ "$NEW_CF" != "$CUR_CF" ] || [ "$NEW_ALPINE" != "$CUR_ALPINE" ] || [ ! -f cloudflared/CHANGELOG.md ] || grep -q "SHA256 Checksums" cloudflared/CHANGELOG.md 2>/dev/null; then
-            echo "📝 Đang tạo mới file CHANGELOG.md..."
-            BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // "Routine security update."' | sed '/SHA256 Checksums:/,$d')
-            printf "# What's Changed in %s\n\n* **Cloudflared Binary (arm64 verified):** \`%s\`\n* **Home Assistant Alpine Base:** \`Alpine %s\`\n\n---\n### Cloudflare Release Notes (%s):\n%s\n" \
-              "$FINAL_VERSION" "$NEW_CF" "$NEW_ALPINE" "$NEW_CF" "$BODY" > cloudflared/CHANGELOG.md
+          # ==================== TẠO CHANGELOG (GIỮ 3 BẢN GẦN NHẤT) ====================
+          if $CF_UPDATED || $ALPINE_UPDATED || [ ! -f cloudflared/CHANGELOG.md ]; then
+            echo "📝 Đang tạo CHANGELOG.md (giữ tối đa 3 phiên bản gần nhất)..."
+
+            # Tạo phần changelog của bản mới
+            NEW_SECTION=$(cat <<EOF
+          # What's Changed in ${FINAL_VERSION}
+
+          * **Cloudflared Binary (arm64 verified):** \`${NEW_CF}\`
+          * **Home Assistant Alpine Base:** \`Alpine ${NEW_ALPINE}\`
+
+          EOF
+          )
+
+            if $CF_UPDATED && $ALPINE_UPDATED; then
+              NEW_SECTION+=$(cat <<EOF
+
+          ### Cập nhật lần này
+          - Nâng cấp Cloudflared lên phiên bản mới nhất
+          - Nâng cấp Alpine Base Image lên ${NEW_ALPINE}
+
+          EOF
+          )
+            elif $CF_UPDATED; then
+              NEW_SECTION+=$(cat <<EOF
+
+          ### Cập nhật lần này
+          - Nâng cấp Cloudflared lên phiên bản mới nhất
+
+          EOF
+          )
+            elif $ALPINE_UPDATED; then
+              NEW_SECTION+=$(cat <<EOF
+
+          ### Cập nhật lần này
+          - Nâng cấp Home Assistant Alpine Base từ \`${CUR_ALPINE}\` lên \`${NEW_ALPINE}\`
+          - Giữ nguyên phiên bản Cloudflared \`${NEW_CF}\`
+
+          EOF
+          )
+            fi
+
+            # Lấy release notes của Cloudflare nếu có update
+            if $CF_UPDATED; then
+              BODY=$(curl -s "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${NEW_CF}" | jq -r '.body // empty' | sed '/SHA256 Checksums:/,$d')
+              if [ -n "$BODY" ]; then
+                NEW_SECTION+=$(cat <<EOF
+
+          ---
+          ### Cloudflare Release Notes (${NEW_CF}):
+
+          ${BODY}
+
+          EOF
+          )
+              fi
+            fi
+
+            NEW_SECTION+=$'\n---\n'
+
+            # Lấy các phần changelog cũ (bỏ phần đầu tiên nếu trùng version)
+            OLD_CONTENT=""
+            if [ -f cloudflared/CHANGELOG.md ]; then
+              # Tách các section theo dòng bắt đầu bằng "# What's Changed"
+              # Giữ tối đa 2 section cũ (cộng với bản mới = 3)
+              OLD_CONTENT=$(awk '
+                BEGIN { section=0; print_section=0 }
+                /^# What'\''s Changed in / {
+                  section++
+                  if (section == 1) { print_section=0; next }
+                  if (section <= 3) { print_section=1 }
+                  else { print_section=0 }
+                }
+                print_section { print }
+              ' cloudflared/CHANGELOG.md)
+            fi
+
+            # Ghi file mới: bản mới nhất + tối đa 2 bản cũ
+            {
+              echo "$NEW_SECTION"
+              if [ -n "$OLD_CONTENT" ]; then
+                echo "$OLD_CONTENT"
+              fi
+            } > cloudflared/CHANGELOG.md
+
+            # Đảm bảo file kết thúc bằng dòng trống
+            echo "" >> cloudflared/CHANGELOG.md
           fi
 
           # Keep-Alive 45 ngày
@@ -170,7 +251,7 @@ jobs:
           DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
 
           if [ "$DAYS_IDLE" -ge 45 ]; then
-            echo "💓 Đã $DAYS_IDLE ngày không có commit mới -> Kích hoạt Keep-Alive Heartbeat!"
+            echo "💓 Đã $DAYS_IDLE ngày không có commit mới -> Kích hoạt Keep-Alive!"
             mkdir -p .github/workflows
             echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
           fi
@@ -188,10 +269,10 @@ jobs:
             echo "✅ Đã commit và push bản cập nhật v${FINAL_VERSION} thành công!"
           else
             ACTION_TAKEN="💤 **Không có thay đổi (Giữ nguyên \`v${FINAL_VERSION}\`)**"
-            echo "💤 Mọi thứ đều đã ở bản mới nhất, không cần tạo commit mới."
+            echo "💤 Mọi thứ đều đã ở bản mới nhất."
           fi
 
-          # Báo cáo Job Summary
+          # Job Summary
           cat <<EOF >> $GITHUB_STEP_SUMMARY
           ### 📊 Báo cáo Kiểm tra Tự động Cloudflared Pro (Pi 5)
           | Thành phần | Phiên bản đang cài | Phiên bản mới nhất | Trạng thái xử lý |
@@ -200,6 +281,6 @@ jobs:
           | **Alpine Base Image** | \`Alpine ${CUR_ALPINE}\` | \`Alpine ${NEW_ALPINE}\` | ${ALPINE_STATUS} |
 
           * **Phiên bản Add-on hiện hành:** \`${FINAL_VERSION}\`
-          * **Thời gian không hoạt động (Idle):** \`${DAYS_IDLE} / 45 ngày\` (Keep-Alive Bảo vệ chống tắt bot)
+          * **Thời gian không hoạt động (Idle):** \`${DAYS_IDLE} / 45 ngày\`
           * **Kết quả thực thi:** ${ACTION_TAKEN}
           EOF
