@@ -3,53 +3,85 @@
 ## 1.0.0
 _Released: 2026-10-30_
 
-### 📦 Component Updates
-- **Add-on Version:** `v1.0.0`
-- **Cloudflared Engine (arm64 verified):** `2026.10.7`
-- **Home Assistant Alpine Base Image:** `Alpine 3.24`
-- **Official Release Source:** [GitHub Release 2026.10.7](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.7)
+### 📦 Component & Version Matrix
+- **Add-on Release:** `v1.0.0`
+- **Cloudflared Engine:** `2026.10.7` *(arm64 binary verified)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Official Links:** [GitHub Release 2026.10.7](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.7) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
-### 📝 Upstream Release Notes (2026.10.7)
-- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.7`).
+### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+- **Binary:** `cloudflared-linux-arm64`
+- **SHA256:** `3df43aedc9ff291d1735b5cb576cb97e0b157488796db2e32b28aecabb445775`
+
+### 🚀 What's Changed in Cloudflared 2026.10.7
+- Release 2026.10.7
+- TUN-11058: Fix regression on max concurrent streams over http2 introduced by go1.27
+- TUN-10904: Stop advertising legacy default features to the edge
 
 ---
 
 ## 2026.10.6
 _Released: 2026-10-29_
 
-### 📦 System Components
-- **Cloudflared Engine (arm64 verified):** `2026.10.6`
-- **Home Assistant Alpine Base Image:** `Alpine 3.24`
-- **Official Release Source:** [GitHub Release 2026.10.6](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6)
+### 📦 Component & Version Matrix
+- **Cloudflared Engine:** `2026.10.6` *(arm64 binary verified)*
+- **Alpine Base Image:** `Alpine 3.24`
+- **Official Links:** [GitHub Release 2026.10.6](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
-### 📝 Upstream Release Notes (2026.10.6)
-- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.6`).
+### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+- **Binary:** `cloudflared-linux-arm64`
+- **SHA256:** `0ae0e179475b2c77651a718d2b376e0151f4fca5954702a84f02843a4d5fcac0`
+
+### 🚀 What's Changed in Cloudflared 2026.10.6
+- Release 2026.10.6
+- TUN-11051: Disable autoupdate in container images via NO_AUTOUPDATE
+- TUN-11048: Randomize and enable the cloudflared update timer
+- VULN-184686: Bump github.com/go-jose/go-jose/v4 to v4.1.6
+- TUN-11048: Keep package-manager marker across RPM upgrades
+- Remove unnecessary comment
+- ci: enable in-build container scanning
+- TUN-11018: Align prechecks with regular cloudflare connection
 
 ---
 
 ## 2026.10.5
 _Released: 2026-10-27_
 
-### 📦 System Components
-- **Cloudflared Engine (arm64 verified):** `2026.10.5`
-- **Home Assistant Alpine Base Image:** `Alpine 3.24`
-- **Official Release Source:** [GitHub Release 2026.10.5](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.5)
+### 📦 Component & Version Matrix
+- **Cloudflared Engine:** `2026.10.5` *(arm64 binary verified)*
+- **Alpine Base Image:** `Alpine 3.24`
+- **Official Links:** [GitHub Release 2026.10.5](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.5) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
-### 📝 Upstream Release Notes (2026.10.5)
-- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.5`).
+### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+- **Binary:** `cloudflared-linux-arm64`
+- **SHA256:** `72e0d05a67e09da87cf495e409a28c3cc5994dd23fc66a982eebea6a55923b7d`
+
+### 🚀 What's Changed in Cloudflared 2026.10.5
+- Release 2026.10.5
+- TUN-10996: Allow for validating config from stdin
+- TUN-11015: Ignore unchanged fields in QUIC MetricsUpdated events
+- VULN-183456: Bump github.com/go-chi/chi/v5 to v5.5.0
 
 ---
 
 ## 2026.10.4
 _Released: 2026-10-26_
 
-### 📦 System Components
-- **Cloudflared Engine (arm64 verified):** `2026.10.4`
-- **Home Assistant Alpine Base Image:** `Alpine 3.24`
-- **Official Release Source:** [GitHub Release 2026.10.4](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.4)
+### 📦 Component & Version Matrix
+- **Cloudflared Engine:** `2026.10.4` *(arm64 binary verified)*
+- **Alpine Base Image:** `Alpine 3.24`
+- **Official Links:** [GitHub Release 2026.10.4](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.4) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
-### 📝 Upstream Release Notes (2026.10.4)
-- Official Cloudflare Tunnel stability, performance, and security maintenance release (`v2026.10.4`).
+### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+- **Binary:** `cloudflared-linux-arm64`
+- **SHA256:** `2b7203b4fb0ba28a0c1e12f8855ce2c25f76d266a8d5edafac5540b6812acff6`
+
+### 🚀 What's Changed in Cloudflared 2026.10.4
+- Release 2026.10.4
+- VULN-176088: Allowlist debug endpoints on the metrics server
+- TUN-11024: Build with the exact Go version from go.mod
+- AUTH-9347 do not require the --fedramp flag in access commands
+- chore: Bump github.com/klauspost/compress to v1.20.3
 
 ---
 
