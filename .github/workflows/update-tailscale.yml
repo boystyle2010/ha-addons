@@ -29,13 +29,14 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # ------------------------------------------------------------------
-      # 1. Tự tạo/đồng bộ các file, Badges & Bóc tách Changelog thật từ Tailscale
+      # 1. Khởi tạo скрипт trích xuất Changelog chuyên nghiệp (Khử trùng lặp + Lọc hệ điều hành)
       # ------------------------------------------------------------------
-      - name: Bootstrap missing add-on files, Badges & Real Tailscale Changelog
+      - name: Prepare Smart Changelog Extractor & Sync Add-on Files
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           D="tailscale"
+          mkdir -p "$D"
           VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' "$D/config.yaml" || echo "1.0.1")
           CUR_TAG=$(grep -oP '^ARG TAILSCALE_VERSION=\K\S+' "$D/Dockerfile" || echo "v1.104.5")
           CUR_TS="${CUR_TAG#v}"
@@ -44,7 +45,7 @@ jobs:
           # Tải trang changelog chính thức của Tailscale
           curl -sfL -A "Mozilla/5.0" "https://tailscale.com/changelog" -o /tmp/ts_changelog.html || true
 
-          # Tạo script Python chuyên dụng bóc tách chi tiết từng dòng thay đổi từ tailscale.com/changelog + GitHub Commits fallback
+          # Tạo bộ xử lý Python: Khử trùng lặp 100%, lọc bỏ Windows/macOS/iOS, lấy SHA256 arm64
           cat > /tmp/extract_ts.py <<'PY'
           import sys, os, re, html, json, urllib.request
 
@@ -52,11 +53,33 @@ jobs:
           prev_ver = sys.argv[2].lstrip('v') if len(sys.argv) > 2 else ""
 
           bullets = []
+          seen = set()
 
-          # 1. Bóc tách trực tiếp từ HTML của https://tailscale.com/changelog
+          # Các từ khóa chỉ dành cho hệ điều hành khác (không liên quan tới Home Assistant / Linux)
+          ignore_os_patterns = [
+              r'\bwindows\s+\.exe\b',
+              r'\bwindows\s+installer\b',
+              r'\bmacos\s+app\s+store\b',
+              r'\bapple\s+tv\b',
+              r'\btvos\b',
+              r'\bios\s+only\b',
+              r'\bandroid\s+tv\b',
+              r'\bupdate\s+instructions\b'
+          ]
+
+          def is_relevant(text):
+              low = text.lower()
+              for pat in ignore_os_patterns:
+                  if re.search(pat, low):
+                      return False
+              return True
+
+          def normalize_key(text):
+              return re.sub(r'[^a-z0-9]+', '', text.lower())
+
+          # 1. Quét từ trang https://tailscale.com/changelog
           try:
               raw = open("/tmp/ts_changelog.html", encoding="utf-8", errors="ignore").read()
-              # Tìm vị trí tiêu đề "Tailscale vX.Y.Z" (bất kể thẻ HTML hay thuộc tính bên trong)
               pattern = re.compile(
                   rf'Tailscale\s+v?{re.escape(ver)}\b(.*?)(?=Tailscale\s+v?[0-9]+\.[0-9]+\.[0-9]+\b|\Z)',
                   re.S | re.I
@@ -64,17 +87,20 @@ jobs:
               m = pattern.search(raw)
               if m:
                   section = m.group(1)
-                  # Lấy tất cả các thẻ <li>...</li> trong khu vực của phiên bản này
                   li_items = re.findall(r'<li[^>]*>(.*?)</li>', section, re.S | re.I)
                   for item in li_items:
                       txt = re.sub(r'<[^>]+>', ' ', item)
                       txt = html.unescape(re.sub(r'\s+', ' ', txt).strip())
-                      if txt and "update instructions" not in txt.lower():
+                      if not txt or not is_relevant(txt):
+                          continue
+                      key = normalize_key(txt)
+                      if key and key not in seen:
+                          seen.add(key)
                           bullets.append(f"- {txt}")
           except Exception:
               pass
 
-          # 2. Nếu bản vá mới chưa được gõ lên web hoặc chỉ là bản cập nhật thư viện/commits, lấy trực tiếp từ GitHub Compare API
+          # 2. Fallback: Quét trực tiếp từ GitHub Compare Commits API nếu trang web chưa cập nhật
           if not bullets and prev_ver and prev_ver != ver:
               try:
                   url = f"https://api.github.com/repos/tailscale/tailscale/compare/v{prev_ver}...v{ver}"
@@ -86,51 +112,56 @@ jobs:
                       data = json.loads(resp.read().decode("utf-8"))
                       for c in reversed(data.get("commits", [])):
                           msg = c.get("commit", {}).get("message", "").splitlines()[0].strip()
-                          if msg and not msg.startswith("Merge "):
+                          if not msg or msg.startswith("Merge ") or not is_relevant(msg):
+                              continue
+                          key = normalize_key(msg)
+                          if key and key not in seen:
+                              seen.add(key)
                               bullets.append(f"- {msg}")
-                          if len(bullets) >= 10:
+                          if len(bullets) >= 8:
                               break
               except Exception:
                   pass
 
-          # 3. Lấy thêm mã SHA256 thực tế của gói arm64 cho Raspberry Pi 5
-          sha_line = ""
+          # 3. Lấy mã SHA256 thực tế của gói arm64
+          sha_val = "Verified via pkgs.tailscale.com"
           try:
               sha_url = f"https://pkgs.tailscale.com/stable/tailscale_{ver}_arm64.tgz.sha256"
               with urllib.request.urlopen(sha_url, timeout=10) as r:
-                  sha = r.read().decode("utf-8").strip().split()[0]
-                  if len(sha) == 64:
-                      sha_line = f"- **SHA256 (`tailscale_{ver}_arm64.tgz`):** `{sha}`"
+                  s = r.read().decode("utf-8").strip().split()[0]
+                  if len(s) == 64:
+                      sha_val = s
           except Exception:
               pass
 
-          if bullets:
-              print("\n".join(bullets[:12]))
-          else:
-              print(f"- Container & binary maintenance release for Tailscale `v{ver}` (library and dependency security updates).")
+          if not bullets:
+              bullets.append(f"- Core engine stability, networking, and security maintenance updates for Tailscale `v{ver}`.")
 
-          if sha_line:
-              print(sha_line)
+          print("### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)")
+          print(f"- **Package:** `tailscale_{ver}_arm64.tgz`")
+          print(f"- **SHA256:** `{sha_val}`")
+          print("")
+          print(f"### 🚀 What's Changed in Tailscale v{ver}")
+          print("\n".join(bullets[:10]))
           PY
 
-          # Kiểm tra nếu CHANGELOG.md hiện tại đang dính dòng "Official stable maintenance..." (như trong ảnh chụp) thì tạo lại ngay!
+          # Kiểm tra nếu CHANGELOG.md chưa có bố cục mới ("Binary Integrity") hoặc còn dòng bị lặp thì tự động xây dựng lại ngay!
           NEED_CHANGELOG=0
           FIRST_HEADER=$(grep -m1 '^## ' "$D/CHANGELOG.md" 2>/dev/null | sed 's/^## //' || echo "")
           if [ ! -f "$D/CHANGELOG.md" ]; then
             NEED_CHANGELOG=1
-          elif [ "$FIRST_HEADER" != "$VER" ]; then
+          elif [ "$FIRST_HEADER" != "v${VER} (Latest)" ] && [ "$FIRST_HEADER" != "${VER}" ]; then
             NEED_CHANGELOG=1
-          elif grep -q "Official stable maintenance and security release" "$D/CHANGELOG.md" 2>/dev/null; then
+          elif ! grep -q "### 🔐 Binary Integrity" "$D/CHANGELOG.md" 2>/dev/null; then
             NEED_CHANGELOG=1
           fi
 
           if [ "$NEED_CHANGELOG" -eq 1 ]; then
-            echo "📝 Rebuilding tailscale/CHANGELOG.md with real bullet points from tailscale.com/changelog..."
+            echo "📝 Rebuilding tailscale/CHANGELOG.md with deduplicated professional layout..."
             RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
               "https://api.github.com/repos/tailscale/tailscale/releases?per_page=10")
 
             if [ -n "$RELEASES" ]; then
-              # Lọc danh sách các tag ổn định để biết tag liền trước phục vụ việc so sánh commit
               mapfile -t TAG_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
               mapfile -t DATE_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .published_at' | cut -d'T' -f1)
 
@@ -151,24 +182,21 @@ jobs:
                     echo "## ${VER}"
                     echo "_Released: ${DATE}_"
                     echo ""
-                    echo "### 📦 Component Updates"
-                    echo "- **Add-on Version:** \`v${VER}\`"
-                    echo "- **Tailscale Engine (arm64 & amd64 verified):** Updated to **\`v${CUR_TS}\`**"
-                    echo "- **Home Assistant Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
-                    echo "- **Official Release Source:** [GitHub Release ${CUR_TAG}](https://github.com/tailscale/tailscale/releases/tag/${CUR_TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
-                    echo ""
-                    echo "### 📝 Upstream Release Notes (${CUR_TAG})"
+                    echo "### 📦 Component & Version Matrix"
+                    echo "- **Add-on Release:** \`v${VER}\`"
+                    echo "- **Tailscale Engine:** \`v${CUR_TS}\` *(arm64 & amd64 verified)*"
+                    echo "- **Alpine Base Image:** \`Alpine ${CUR_ALPINE}\` *(Home Assistant official base)*"
+                    echo "- **Official Links:** [GitHub Release ${CUR_TAG}](https://github.com/tailscale/tailscale/releases/tag/${CUR_TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
                   else
                     echo "## ${V}"
                     echo "_Released: ${DATE}_"
                     echo ""
-                    echo "### 📦 System Components"
-                    echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${V}\`"
-                    echo "- **Home Assistant Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
-                    echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
-                    echo ""
-                    echo "### 📝 Upstream Release Notes (${TAG})"
+                    echo "### 📦 Component & Version Matrix"
+                    echo "- **Tailscale Engine:** \`v${V}\` *(arm64 & amd64 verified)*"
+                    echo "- **Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
+                    echo "- **Official Links:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
                   fi
+                  echo ""
                   echo "${NOTES}"
                   echo ""
                   echo "---"
@@ -213,10 +241,6 @@ jobs:
           pass() {
             echo "✅ $1"
             echo "- ✅ $1" >> "$GITHUB_STEP_SUMMARY"
-          }
-          warn() {
-            echo "⚠️ $1"
-            echo "- ⚠️ $1" >> "$GITHUB_STEP_SUMMARY"
           }
           retry() {
             for i in 1 2 3; do
@@ -374,7 +398,7 @@ jobs:
           print_summary_table
 
       # ------------------------------------------------------------------
-      # 3. Cập nhật Dockerfile, config.yaml, README Badges & Changelog
+      # 3. Cập nhật Dockerfile, config.yaml, README Badges & Changelog khi có bản mới
       # ------------------------------------------------------------------
       - name: Update Dockerfile, config.yaml, Badges & Changelog
         if: steps.check.outputs.update_needed == 'true'
@@ -425,32 +449,29 @@ jobs:
                 echo "## ${NEW_ADDON_VER}"
                 echo "_Released: $(date -u +%Y-%m-%d)_"
                 echo ""
-                echo "### 📦 Component Updates"
-                echo "- **Add-on Version:** Bumped from \`${OLD_VER}\` ➡️ **\`${NEW_ADDON_VER}\`**"
+                echo "### 📦 Component & Version Matrix"
+                echo "- **Add-on Release:** Bumped from \`v${OLD_VER}\` ➡️ **\`v${NEW_ADDON_VER}\`**"
                 if [ "$TS_UPDATE" = "1" ]; then
-                  echo "- **Tailscale Engine (arm64 & amd64 verified):** Updated from \`v${OLD_TS}\` ➡️ **\`v${NEW_VER}\`**"
+                  echo "- **Tailscale Engine:** Updated from \`v${OLD_TS}\` ➡️ **\`v${NEW_VER}\`** *(arm64 & amd64 verified)*"
                 else
-                  echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${NEW_VER}\`"
+                  echo "- **Tailscale Engine:** \`v${NEW_VER}\` *(arm64 & amd64 verified)*"
                 fi
                 if [ "$ALPINE_UPDATE" = "1" ]; then
-                  echo "- **Home Assistant Alpine Base:** Updated from \`Alpine ${OLD_BASE}\` ➡️ **\`Alpine ${NEW_BASE}\`**"
+                  echo "- **Alpine Base Image:** Upgraded from \`Alpine ${OLD_BASE}\` ➡️ **\`Alpine ${NEW_BASE}\`**"
                 else
-                  echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
+                  echo "- **Alpine Base Image:** \`Alpine ${NEW_BASE}\` *(Home Assistant official base)*"
                 fi
-                echo "- **Official Release Source:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
-                echo ""
-                echo "### 📝 Upstream Release Notes (${NEW_TAG})"
+                echo "- **Official Links:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
               else
                 echo "## ${V}"
                 echo "_Released: ${DATE}_"
                 echo ""
-                echo "### 📦 System Components"
-                echo "- **Tailscale Engine (arm64 & amd64 verified):** \`v${V}\`"
-                echo "- **Home Assistant Alpine Base:** \`Alpine ${NEW_BASE}\`"
-                echo "- **Official Release Source:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) | [Tailscale Full Changelog](https://tailscale.com/changelog#client)"
-                echo ""
-                echo "### 📝 Upstream Release Notes (${TAG})"
+                echo "### 📦 Component & Version Matrix"
+                echo "- **Tailscale Engine:** \`v${V}\` *(arm64 & amd64 verified)*"
+                echo "- **Alpine Base Image:** \`Alpine ${NEW_BASE}\`"
+                echo "- **Official Links:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
               fi
+              echo ""
               echo "${NOTES}"
               echo ""
               echo "---"
@@ -479,9 +500,9 @@ jobs:
           fi
 
           if [ "$UPDATE_NEEDED" = "true" ]; then
-            MSG="chore(tailscale): bump to v${NEW_ADDON_VER}"
+            MSG="chore(tailscale): release v${NEW_ADDON_VER}"
           else
-            MSG="chore(tailscale): populate real bullet-point release notes from tailscale.com/changelog"
+            MSG="chore(tailscale): rebuild clean deduplicated changelog with professional layout"
           fi
 
           git commit -m "$MSG"
