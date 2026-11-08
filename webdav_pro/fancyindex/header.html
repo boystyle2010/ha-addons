@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>WebDAV Server Pro</title>
+<style>
+:root{
+  --bg:#000; --card:#1c1c1e; --hl:#2c2c2e; --sep:#38383a;
+  --text:#fff; --muted:#8e8e93; --blue:#0a84ff;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg);min-height:100%}
+body{
+  margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding:0 16px max(28px,env(safe-area-inset-bottom));
+  -webkit-text-size-adjust:100%;
+}
+.container{max-width:720px;margin:0 auto;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.container>h1{display:none}
+
+/* Navigation bar */
+.nav{
+  position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;
+  height:48px;margin:0 -16px;padding:0 16px;background:rgba(0,0,0,.94);
+}
+.back{
+  display:inline-flex;align-items:center;gap:4px;color:var(--blue);text-decoration:none;
+  font-size:17px;visibility:hidden;max-width:60%;
+}
+.back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sort{
+  -webkit-appearance:none;appearance:none;height:32px;border:0;border-radius:16px;
+  background:var(--card);color:var(--blue);font-size:15px;padding:0 14px;outline:none;
+}
+.title{
+  font-size:30px;font-weight:700;letter-spacing:-.02em;margin:4px 2px 2px;word-break:break-word;
+}
+.crumbs{
+  display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 2px 12px;
+  font-size:13px;color:var(--muted);word-break:break-all;
+}
+.crumbs a{color:var(--blue);text-decoration:none}
+.crumbs b{color:var(--muted);font-weight:500}
+.crumbs .sep{opacity:.6}
+.search{
+  -webkit-appearance:none;appearance:none;width:100%;height:36px;margin:0 0 16px;
+  border:0;border-radius:10px;outline:none;font-size:17px;color:var(--text);
+  padding:0 12px 0 34px;background:var(--card) no-repeat 10px 50%;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M20 20l-4.8-4.8'/%3E%3C/svg%3E");
+}
+.search::placeholder{color:var(--muted)}
+
+/* List (iOS grouped style) */
+table#list,#list tbody{display:block;width:100%;border:0}
+#list thead,#list tr.parent{display:none}
+#list tbody{background:var(--card);border-radius:12px;overflow:hidden}
+#list tr{
+  position:relative;display:grid;grid-template-columns:auto 1fr;
+  grid-template-areas:"name name" "size date";row-gap:2px;padding:10px 36px 10px 14px;
+}
+#list tr:active{background:var(--hl)}
+#list tr:not(:last-child)::before{
+  content:"";position:absolute;left:58px;right:0;bottom:0;height:.5px;background:var(--sep);
+}
+#list tr.dir::after{
+  content:"";position:absolute;right:16px;top:calc(50% - 4px);width:8px;height:8px;
+  border-top:2px solid #5a5a5e;border-right:2px solid #5a5a5e;transform:rotate(45deg);
+}
+#list td{display:block;padding:0;border:0;background:none}
+#list td.link{grid-area:name;min-width:0}
+#list td.link a{
+  display:flex;align-items:center;gap:12px;color:var(--text);text-decoration:none;
+  font-size:17px;min-height:32px;
+}
+#list td.link a .nm{min-width:0;word-break:break-word}
+#list td.size,#list td.date{font-size:13px;color:var(--muted);white-space:nowrap}
+#list td.size{grid-area:size;padding-left:44px}
+#list td.size::after{content:"·";margin:0 6px}
+#list td.date{grid-area:date}
+#list tr.dir td.size{display:none}
+#list tr.dir td.date{grid-area:2/1/3/3;padding-left:44px}
+
+/* Icons */
+.ic{
+  width:32px;height:32px;flex:none;border-radius:8px;display:grid;place-items:center;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18);
+}
+.ic svg{width:19px;height:19px}
+.ic.folder{background:none;box-shadow:none;border-radius:0}
+.ic.folder svg{width:32px;height:27px}
+.t-img{background:linear-gradient(180deg,#ff7eb3,#ff2d92)}
+.t-vid{background:linear-gradient(180deg,#bf5af2,#8944e0)}
+.t-aud{background:linear-gradient(180deg,#ff5e6c,#ff2d55)}
+.t-pdf{background:linear-gradient(180deg,#ff6961,#ff3b30)}
+.t-doc{background:linear-gradient(180deg,#4da3ff,#0a6cff)}
+.t-xls{background:linear-gradient(180deg,#4cd964,#22b14c)}
+.t-ppt{background:linear-gradient(180deg,#ffb340,#ff8a00)}
+.t-txt{background:linear-gradient(180deg,#a1a1a6,#7c7c80)}
+.t-zip{background:linear-gradient(180deg,#c8a26b,#a07b45)}
+.t-cfg{background:linear-gradient(180deg,#8e8e93,#636366)}
+.t-code{background:linear-gradient(180deg,#64d2c8,#30b0a5)}
+.t-file{background:linear-gradient(180deg,#7d8aa1,#5b6678)}
+
+.stat{text-align:center;color:var(--muted);font-size:13px;margin:14px 0 0}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="nav">
+  <a id="back" class="back" href="../">
+    <svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span>Back</span>
+  </a>
+  <select id="sort" class="sort" aria-label="Sort">
+    <option value="C=N&amp;O=A">Name A–Z</option>
+    <option value="C=N&amp;O=D">Name Z–A</option>
+    <option value="C=M&amp;O=D">Newest</option>
+    <option value="C=M&amp;O=A">Oldest</option>
+    <option value="C=S&amp;O=D">Largest</option>
+  </select>
+</div>
+<div id="title" class="title">WebDAV Server Pro</div>
+<nav id="crumbs" class="crumbs"></nav>
+<input id="q" class="search" type="search" placeholder="Search" autocomplete="off">
