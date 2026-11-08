@@ -1,3 +1,6 @@
+## [2.0.2] - 2026-11-08
+- **Maintenance & Improvements:** Add files via upload
+
 ## [2.0.1] - 2026-11-08
 - **Maintenance & Improvements:** Update config.yaml
 
