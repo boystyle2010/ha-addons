@@ -15,9 +15,9 @@ panel_icon: "mdi:folder-network"
 panel_title: "WebDAV Pro"
 watchdog: "tcp://[HOST]:[PORT:8080]"
 ports:
-  8080/tcp: 8080
+  8090/tcp: 8090
 ports_description:
-  8080/tcp: "WebDAV Server Port (iOS/macOS/Windows/Cloudflare Tunnel)"
+  8090/tcp: "WebDAV Server Port (iOS/macOS/Windows/Cloudflare Tunnel)"
 map:
   - homeassistant_config:rw
   - all_addon_configs:rw
