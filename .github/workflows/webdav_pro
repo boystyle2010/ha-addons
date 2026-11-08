@@ -1,0 +1,143 @@
+name: WebDAV Pro - Auto Update & Verify
+
+on:
+  schedule:
+    # Tự động kiểm tra bản mới vào 07:00 UTC hàng ngày
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "webdav_pro/**"
+      - ".github/workflows/webdav_pro.yaml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: webdav_pro_workflow
+  cancel-in-progress: false
+
+jobs:
+  update_and_verify:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 2. Kiểm tra phiên bản Alpine Base & Nginx Upstream mới nhất
+        id: check_upstream
+        run: |
+          set -e
+          CONFIG_FILE="webdav_pro/config.yaml"
+          BUILD_FILE="webdav_pro/build.yaml"
+
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1)
+          CURRENT_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1)
+
+          echo "🔹 Alpine hiện tại: $CURRENT_ALPINE"
+          echo "🔹 Nginx hiện tại:  $CURRENT_NGINX"
+
+          # 1. Lấy phiên bản Alpine mới nhất từ kho Alpine chính thức
+          LATEST_ALPINE=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/latest-releases.yaml" | grep -oP 'version:\s*\K[0-9]+\.[0-9]+' | head -n1 || echo "$CURRENT_ALPINE")
+          if [ -z "$LATEST_ALPINE" ]; then LATEST_ALPINE="$CURRENT_ALPINE"; fi
+
+          # Kiểm tra xem ghcr.io/home-assistant/aarch64-base:<LATEST_ALPINE> đã tồn tại chưa
+          if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" >/dev/null 2>&1; then
+            echo "⚠️ Home Assistant chưa phát hành base image cho Alpine ${LATEST_ALPINE}, giữ nguyên ${CURRENT_ALPINE}"
+            LATEST_ALPINE="$CURRENT_ALPINE"
+          fi
+
+          # 2. Lấy phiên bản gói Nginx mới nhất trong nhánh Alpine đó
+          LATEST_NGINX=$(docker run --rm "ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" sh -c "apk update >/dev/null 2>&1 && apk info -v nginx 2>/dev/null | sed 's/^nginx-//'" || echo "$CURRENT_NGINX")
+          if [ -z "$LATEST_NGINX" ]; then LATEST_NGINX="$CURRENT_NGINX"; fi
+
+          echo "🔸 Alpine mới nhất: $LATEST_ALPINE"
+          echo "🔸 Nginx mới nhất:  $LATEST_NGINX"
+
+          echo "latest_alpine=$LATEST_ALPINE" >> $GITHUB_OUTPUT
+          echo "latest_nginx=$LATEST_NGINX" >> $GITHUB_OUTPUT
+
+          if [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ] || [ "$LATEST_NGINX" != "$CURRENT_NGINX" ]; then
+            echo "upstream_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "upstream_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 3. Tính toán Version (Major cho Upstream / Patch cho Local Edit)
+        id: calc_version
+        run: |
+          set -e
+          CONFIG_FILE="webdav_pro/config.yaml"
+          BUILD_FILE="webdav_pro/build.yaml"
+          CHANGELOG_FILE="webdav_pro/CHANGELOG.md"
+
+          CURRENT_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VER"
+
+          UPSTREAM_CHANGED="${{ steps.check_upstream.outputs.upstream_changed }}"
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          NEED_COMMIT="false"
+
+          if [ "$UPSTREAM_CHANGED" = "true" ]; then
+            # Nâng Major Version khi có bản cập nhật Nginx hoặc Alpine mới (VD: 1.0.1 -> 2.0.0)
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_VER="${NEW_MAJOR}.0.0"
+            NEED_COMMIT="true"
+
+            sed -i "s/aarch64-base:[0-9.]\+/aarch64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/amd64-base:[0-9.]\+/amd64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/NGINX_VERSION: \".*\"/NGINX_VERSION: \"${LATEST_NGINX}\"/g" "$BUILD_FILE"
+            sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Cập nhật Upstream:** Nâng cấp Nginx lên phiên bản \`${LATEST_NGINX}\` (Alpine Base \`${LATEST_ALPINE}\`).\n- Cập nhật các bản vá bảo mật cho module \`dav-ext\` và \`fancyindex\`.\n"
+            awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+            echo "✅ Đã nâng Major Version lên ${NEW_VER} (Upstream Update)"
+
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Kiểm tra xem người dùng đã tự tăng version trong commit vừa push chưa
+            PREV_VER=$(git show HEAD~1:webdav_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+            if [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ]; then
+              # Người dùng sửa code nhưng chưa đổi version -> Tự động tăng Patch Version (VD: 1.0.0 -> 1.0.1)
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VER="${MAJOR}.${MINOR}.${NEW_PATCH}"
+              NEED_COMMIT="true"
+
+              COMMIT_MSG=$(git log -1 --pretty=%B | head -n1)
+              sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Cập nhật cấu hình/mã nguồn:** ${COMMIT_MSG}\n"
+              awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+              echo "✅ Đã tự động nâng Patch Version lên ${NEW_VER} (Local Change)"
+            fi
+          fi
+
+          echo "need_commit=$NEED_COMMIT" >> $GITHUB_OUTPUT
+
+      - name: 4. Build thử nghiệm Dockerfile để đảm bảo không lỗi trước khi Commit
+        run: |
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          docker build \
+            --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" \
+            --build-arg NGINX_VERSION="${LATEST_NGINX}" \
+            -t webdav-pro-verify:latest \
+            ./webdav_pro
+
+      - name: 5. Commit & Push thay đổi lên nhánh Main
+        if: steps.calc_version.outputs.need_commit == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          git add webdav_pro/config.yaml webdav_pro/build.yaml webdav_pro/CHANGELOG.md
+          NEW_VER=$(grep -oP '^version:\s*"\K[0-9.]+' webdav_pro/config.yaml)
+          git commit -m "chore(webdav_pro): release version ${NEW_VER} [skip ci]"
+          git push origin HEAD:main
