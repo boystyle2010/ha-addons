@@ -1,3 +1,6 @@
+## [2.0.16] - 2026-11-08
+- **Maintenance & Improvements:** Update apparmor.txt
+
 ## [2.0.15] - 2026-11-08
 - **Maintenance & Improvements:** Rename AppArmor.txt to apparmor.txt
 

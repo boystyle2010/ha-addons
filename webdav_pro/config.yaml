@@ -1,5 +1,5 @@
 name: "WebDAV Server Pro"
-version: "2.0.15"
+version: "2.0.16"
 slug: "webdav_pro"
 description: "High-performance, security-hardened WebDAV server with FancyIndex Dark UI, Ingress, and multi-user permissions for Home Assistant."
 url: "https://github.com/boystyle2010/ha-addons"
