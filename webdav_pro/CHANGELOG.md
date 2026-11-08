@@ -1,3 +1,6 @@
+## [2.0.7] - 2026-11-08
+- **Maintenance & Improvements:** Update run.sh
+
 ## [2.0.6] - 2026-11-08
 - **Maintenance & Improvements:** Update Dockerfile
 
