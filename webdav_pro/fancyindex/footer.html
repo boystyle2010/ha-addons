@@ -2,7 +2,20 @@
   <div id="empty" class="empty">No matching items found</div>
   <div id="stat" class="stat"></div>
 
-  <!-- Thanh nổi Paste Here khi Copy / Cut -->
+  <!-- Thanh tác vụ hàng loạt khi bật chế độ Select -->
+  <div id="batchBar" class="batch-bar">
+    <div class="clip-info">
+      <b>BATCH SELECTION</b>
+      <span id="batchCount">0 items selected</span>
+    </div>
+    <div class="clip-btns">
+      <button id="btnBatchCopy" class="clip-btn paste" type="button">Copy</button>
+      <button id="btnBatchMove" class="clip-btn cancel" type="button">Move</button>
+      <button id="btnBatchDel" class="clip-btn danger" type="button">Delete</button>
+    </div>
+  </div>
+
+  <!-- Thanh nổi Paste Here khi Copy / Move -->
   <div id="clipBar" class="clip-bar">
     <div class="clip-info">
       <b id="clipMode">COPIED</b>
@@ -19,10 +32,12 @@
   <div id="sheet" class="sheet">
     <div class="sheet-group">
       <div id="sheetTitle" class="sheet-head">filename.yaml</div>
-      <button id="actEdit" class="sheet-btn" type="button"><span>Edit in Code Editor</span><span>✏️</span></button>
+      <button id="actEdit" class="sheet-btn" type="button"><span>Open in Code Editor</span><span>✏️</span></button>
       <button id="actCopy" class="sheet-btn" type="button"><span>Copy</span><span>📋</span></button>
       <button id="actCut" class="sheet-btn" type="button"><span>Move (Cut)</span><span>✂️</span></button>
+      <button id="actDup" class="sheet-btn" type="button"><span>Duplicate</span><span>📑</span></button>
       <button id="actRename" class="sheet-btn" type="button"><span>Rename</span><span>🏷️</span></button>
+      <button id="actCopyPath" class="sheet-btn" type="button"><span>Copy Full Path</span><span>🔗</span></button>
       <button id="actDownload" class="sheet-btn" type="button"><span>Download</span><span>⬇️</span></button>
       <button id="actDelete" class="sheet-btn danger" type="button"><span>Delete</span><span>🗑️</span></button>
     </div>
@@ -31,23 +46,32 @@
     </div>
   </div>
 
-  <!-- Trình sửa Code & Xem Media toàn màn hình (Code Editor Modal) -->
+  <!-- FULLSCREEN CODE EDITOR (Syntax Highlighting + Markdown Live Preview + Media Viewer) -->
   <div id="editorModal" class="editor-modal">
     <div class="ed-top">
-      <button id="edClose" class="ed-btn close" type="button">Close</button>
-      <div id="edTitle" class="ed-title">configuration.yaml</div>
+      <button id="edClose" class="ed-btn close" type="button">Done</button>
+      <div class="ed-title-wrap">
+        <div id="edTitle" class="ed-title">configuration.yaml</div>
+        <div id="edLang" class="ed-lang-badge">YAML</div>
+      </div>
+      <button id="edMdToggle" class="ed-btn md-toggle" type="button">👁️ Preview</button>
       <button id="edSave" class="ed-btn save" type="button">Save</button>
     </div>
     <div id="edSubbar" class="ed-subbar">
-      <span id="edStatus">UTF-8 • Ready</span>
       <div class="ed-tools">
-        <button id="edTab" class="ed-chip" type="button">Insert Tab (2 spaces)</button>
-        <button id="edWrap" class="ed-chip" type="button">Word Wrap</button>
+        <button id="edUndo" class="ed-chip" type="button" title="Undo">↶ Undo</button>
+        <button id="edRedo" class="ed-chip" type="button" title="Redo">↷ Redo</button>
+        <button id="edFind" class="ed-chip" type="button" title="Find & Replace">🔍 Find</button>
+        <button id="edTab" class="ed-chip" type="button">⇥ Tab</button>
+        <button id="edComment" class="ed-chip" type="button"># Toggle</button>
+        <button id="edWrap" class="ed-chip" type="button">↵ Wrap</button>
       </div>
+      <span id="edStatus" class="ed-status">UTF-8</span>
     </div>
     <div class="ed-body">
-      <div id="edLines" class="ed-lines">1</div>
-      <textarea id="edArea" class="ed-textarea" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+      <div id="aceContainer"></div>
+      <textarea id="edArea" class="ed-textarea" spellcheck="false"></textarea>
+      <div id="mdView" class="md-view"></div>
       <div id="edPreview" class="ed-preview"></div>
     </div>
   </div>
@@ -64,29 +88,40 @@
     txt:'<path d="M5 7h14M5 11h14M5 15h14M5 19h8"/>',
     zip:'<path d="M3.5 8h17v11.5h-17zM3 4.5h18V8H3zM10 12h4"/>',
     cfg:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
-    code:'<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>'
+    code:'<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>',
+    md:'<path d="M4 7h16v10H4z"/><path d="M7 14V10l2 2 2-2v4M15 14v-4M13.5 12.5L15 14l1.5-1.5"/>'
   };
   var T = [
     ['img','img','jpg jpeg png gif webp heic bmp svg ico'],
     ['vid','vid','mp4 mkv mov avi webm m4v'],
     ['aud','aud','mp3 flac wav m4a ogg aac'],
     ['pdf','doc','pdf'],
+    ['md','md','md markdown'],
     ['doc','doc','doc docx odt rtf pages'],
     ['xls','doc','xls xlsx csv ods numbers'],
     ['ppt','doc','ppt pptx key'],
-    ['txt','txt','txt md log'],
+    ['txt','txt','txt log'],
     ['zip','zip','zip tar gz tgz rar 7z xz'],
     ['cfg','cfg','yaml yml json conf cfg ini toml env lock'],
-    ['code','code','py js ts sh html css xml php sql']
+    ['code','code','py js ts sh html css xml php sql dockerfile']
   ];
-  var EDITABLE_EXT = /^(yaml|yml|json|conf|cfg|ini|toml|env|lock|txt|md|log|py|js|ts|sh|html|css|xml|php|sql|gitignore|dockerignore|htaccess)$/i;
+  var EDITABLE_EXT = /^(yaml|yml|json|conf|cfg|ini|toml|env|lock|txt|md|markdown|log|py|js|ts|sh|bash|html|htm|css|xml|php|sql|csv|gitignore|dockerignore|htaccess)$/i;
   var IMG_EXT = /^(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i;
   var VID_EXT = /^(mp4|webm|mov|m4v)$/i;
+  var AUD_EXT = /^(mp3|wav|m4a|ogg|aac|flac)$/i;
+
+  var ACE_MODES = {
+    yaml: 'yaml', yml: 'yaml', json: 'json', py: 'python', sh: 'sh', bash: 'sh',
+    js: 'javascript', ts: 'typescript', html: 'html', htm: 'html', css: 'css',
+    php: 'php', xml: 'xml', sql: 'sql', md: 'markdown', markdown: 'markdown',
+    ini: 'ini', conf: 'sh', cfg: 'ini', toml: 'toml', dockerfile: 'dockerfile'
+  };
 
   var MAP = {};
   T.forEach(function (t) { t[2].split(' ').forEach(function (e) { MAP[e] = [t[0], t[1]]; }); });
 
   var FOLDER = '<span class="ic folder"><svg viewBox="0 0 36 30"><path fill="#0a84ff" d="M2 5.5A3.5 3.5 0 0 1 5.5 2h7.6a3.5 3.5 0 0 1 2.7 1.3l1.5 1.8a3.5 3.5 0 0 0 2.7 1.3H30.5A3.5 3.5 0 0 1 34 9.9v14.6A3.5 3.5 0 0 1 30.5 28h-25A3.5 3.5 0 0 1 2 24.5z"/><path fill="#5ac8fa" d="M2 10.5A3.5 3.5 0 0 1 5.5 7h25A3.5 3.5 0 0 1 34 10.5v14A3.5 3.5 0 0 1 30.5 28h-25A3.5 3.5 0 0 1 2 24.5z"/></svg></span>';
+  var CHECK_ICON = '<span class="sel-chk"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>';
 
   function fileIcon(name) {
     var m = /\.([a-z0-9]+)$/i.exec(name);
@@ -137,7 +172,7 @@
   injectTopBarIcon();
   setTimeout(injectTopBarIcon, 400);
 
-  // 2. Xử lý đường dẫn Ingress & WebDAV Root
+  // 2. Đường dẫn Ingress & WebDAV
   var ingressMatch = location.pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
   var ingressPrefix = ingressMatch ? ingressMatch[1] : '';
   var p = location.pathname.replace(/^\/api\/hassio_ingress\/[^\/]+/, '') || '/';
@@ -151,7 +186,6 @@
     if (relPath.indexOf('/') === 0) return ingressPrefix + relPath;
     return location.pathname.replace(/\/?$/, '/') + relPath;
   }
-  // Header Destination cho lệnh COPY/MOVE của Nginx cần đường dẫn nội bộ (không gồm ingressPrefix)
   function buildDestinationHeader(targetInternalPath) {
     return location.origin + targetInternalPath;
   }
@@ -181,13 +215,36 @@
     var b = e.target.closest('b[data-copy]');
     if (b && navigator.clipboard) {
       navigator.clipboard.writeText(b.getAttribute('data-copy'));
-      showToast('Copied path: ' + b.getAttribute('data-copy'));
+      showToast('🔗 Copied path: ' + b.getAttribute('data-copy'));
     }
   });
 
-  // 4. Chuẩn hóa danh sách hàng & Thêm nút ••• cho mỗi mục
+  // 4. Chuẩn hóa danh sách & Chế độ chọn nhiều mục (Multi-Select)
   var rows = [].slice.call(document.querySelectorAll('#list tbody tr'));
   var nd = 0, nf = 0;
+  var selectMode = false;
+  var selectedSet = [];
+  var btnSelectMode = document.getElementById('btnSelectMode');
+  var batchBar = document.getElementById('batchBar');
+  var batchCountEl = document.getElementById('batchCount');
+
+  function updateBatchUI() {
+    batchCountEl.textContent = plural(selectedSet.length, 'item') + ' selected';
+    batchBar.classList.toggle('show', selectMode && selectedSet.length > 0);
+  }
+
+  btnSelectMode.addEventListener('click', function () {
+    selectMode = !selectMode;
+    document.body.classList.toggle('select-mode', selectMode);
+    btnSelectMode.classList.toggle('active', selectMode);
+    btnSelectMode.textContent = selectMode ? 'Done' : 'Select';
+    if (!selectMode) {
+      selectedSet = [];
+      rows.forEach(function (r) { r.classList.remove('selected'); });
+    }
+    updateBatchUI();
+  });
+
   rows.forEach(function (tr) {
     var a = tr.querySelector('td.link a');
     if (!a) return;
@@ -197,114 +254,176 @@
     var isDir = /\/$/.test(href);
     var label = name.replace(/\/$/, '');
     if (isDir) { tr.classList.add('dir'); nd++; } else { nf++; }
-    a.innerHTML = (isDir ? FOLDER : fileIcon(label)) + '<span class="nm">' + esc(label) + '</span>';
+    a.innerHTML = CHECK_ICON + (isDir ? FOLDER : fileIcon(label)) + '<span class="nm">' + esc(label) + '</span>';
     tr.setAttribute('data-n', label.toLowerCase());
 
-    // Thêm nút ••• mở menu thao tác
+    var itemObj = {
+      name: label,
+      href: href,
+      isDir: isDir,
+      internalPath: p + encodeURIComponent(label) + (isDir ? '/' : '')
+    };
+
     var moreBtn = document.createElement('button');
     moreBtn.type = 'button';
     moreBtn.className = 'more-btn';
-    moreBtn.title = 'Actions';
     moreBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
     moreBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       e.preventDefault();
-      openActionSheet(label, href, isDir);
+      openActionSheet(itemObj);
     });
     tr.appendChild(moreBtn);
 
-    // Bấm vào dòng: Nếu là Folder thì mở Folder, nếu là File code/ảnh thì mở Code Editor / Preview
     tr.addEventListener('click', function (e) {
       if (e.target.closest('.more-btn')) return;
       e.preventDefault();
+      if (selectMode) {
+        var idx = selectedSet.indexOf(itemObj);
+        if (idx === -1) { selectedSet.push(itemObj); tr.classList.add('selected'); }
+        else { selectedSet.splice(idx, 1); tr.classList.remove('selected'); }
+        updateBatchUI();
+        return;
+      }
       if (isDir) {
         location.href = href;
       } else {
-        var extMatch = /\.([a-z0-9]+)$/i.exec(label);
-        var ext = extMatch ? extMatch[1].toLowerCase() : '';
-        if (EDITABLE_EXT.test(ext) || EDITABLE_EXT.test(label) || !ext) {
-          openCodeEditor(label, href, 'code');
-        } else if (IMG_EXT.test(ext)) {
-          openCodeEditor(label, href, 'img');
-        } else if (VID_EXT.test(ext)) {
-          openCodeEditor(label, href, 'vid');
-        } else {
-          openActionSheet(label, href, false);
-        }
+        openSmartViewer(itemObj);
       }
     });
   });
-  document.getElementById('stat').textContent = plural(nd, 'folder') + ' • ' + plural(nf, 'file');
 
-  // 5. Trình sửa Code (Code Editor) & Xem Ảnh/Video
+  var summaryText = plural(nd, 'folder') + ' • ' + plural(nf, 'file');
+  document.getElementById('stat').textContent = summaryText;
+  document.getElementById('subStat').textContent = (segs.length ? '/' + segs.join('/') : 'Root Directory') + ' • ' + summaryText;
+
+  // 5. Trình sửa Code (Ace IDE + Tô màu cú pháp + Markdown Preview)
   var editorModal = document.getElementById('editorModal');
   var edTitle = document.getElementById('edTitle');
+  var edLang = document.getElementById('edLang');
+  var aceContainer = document.getElementById('aceContainer');
   var edArea = document.getElementById('edArea');
-  var edLines = document.getElementById('edLines');
+  var mdView = document.getElementById('mdView');
   var edPreview = document.getElementById('edPreview');
   var edSave = document.getElementById('edSave');
+  var edMdToggle = document.getElementById('edMdToggle');
   var edSubbar = document.getElementById('edSubbar');
   var edStatus = document.getElementById('edStatus');
+  var aceEditor = null;
   var currentEditHref = '';
+  var isMarkdownFile = false;
+  var mdPreviewActive = false;
 
-  function updateLineNumbers() {
-    var count = edArea.value.split('\n').length;
-    var arr = [];
-    for (var i = 1; i <= count; i++) arr.push(i);
-    edLines.innerHTML = arr.join('<br>');
+  function initAce() {
+    if (aceEditor || !window.ace) return;
+    ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/');
+    aceEditor = ace.edit('aceContainer');
+    aceEditor.setTheme('ace/theme/one_dark');
+    aceEditor.setOptions({
+      fontSize: '14px',
+      fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace',
+      showPrintMargin: false,
+      tabSize: 2,
+      useSoftTabs: true,
+      wrap: false,
+      scrollPastEnd: 0.3
+    });
+    aceEditor.commands.addCommand({
+      name: 'saveFile',
+      bindKey: { win: 'Ctrl-S', mac: 'Command-S' },
+      exec: function () { saveCurrentFile(); }
+    });
   }
-  edArea.addEventListener('input', updateLineNumbers);
-  edArea.addEventListener('scroll', function () { edLines.scrollTop = edArea.scrollTop; });
-  edArea.addEventListener('keydown', function (e) {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      var start = this.selectionStart, end = this.selectionEnd;
-      this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
-      this.selectionStart = this.selectionEnd = start + 2;
-      updateLineNumbers();
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-      e.preventDefault();
-      saveCurrentFile();
+
+  function getEditorContent() {
+    return aceEditor ? aceEditor.getValue() : edArea.value;
+  }
+  function setEditorContent(val, ext) {
+    initAce();
+    if (aceEditor) {
+      aceContainer.style.display = 'block';
+      edArea.style.display = 'none';
+      var mode = ACE_MODES[ext] || 'yaml';
+      aceEditor.session.setMode('ace/mode/' + mode);
+      aceEditor.setValue(val, -1);
+      aceEditor.resize();
+    } else {
+      aceContainer.style.display = 'none';
+      edArea.style.display = 'block';
+      edArea.value = val;
     }
-  });
+  }
 
-  document.getElementById('edTab').addEventListener('click', function () {
-    var start = edArea.selectionStart, end = edArea.selectionEnd;
-    edArea.value = edArea.value.substring(0, start) + '  ' + edArea.value.substring(end);
-    edArea.selectionStart = edArea.selectionEnd = start + 2;
-    edArea.focus();
-    updateLineNumbers();
-  });
-  document.getElementById('edWrap').addEventListener('click', function () {
-    var wrapped = edArea.style.whiteSpace === 'pre-wrap';
-    edArea.style.whiteSpace = wrapped ? 'pre' : 'pre-wrap';
-    showToast(wrapped ? 'Word Wrap: Off' : 'Word Wrap: On');
-  });
+  function toggleMarkdownPreview(forceState) {
+    mdPreviewActive = typeof forceState === 'boolean' ? forceState : !mdPreviewActive;
+    edMdToggle.classList.toggle('active', mdPreviewActive);
+    edMdToggle.textContent = mdPreviewActive ? '✏️ Edit Code' : '👁️ Preview';
+    if (mdPreviewActive) {
+      var rawMd = getEditorContent();
+      mdView.innerHTML = window.marked ? marked.parse(rawMd) : '<pre>' + esc(rawMd) + '</pre>';
+      mdView.style.display = 'block';
+      aceContainer.style.display = 'none';
+      edArea.style.display = 'none';
+    } else {
+      mdView.style.display = 'none';
+      if (aceEditor) { aceContainer.style.display = 'block'; aceEditor.resize(); }
+      else edArea.style.display = 'block';
+    }
+  }
+  edMdToggle.addEventListener('click', function () { toggleMarkdownPreview(); });
 
-  function openCodeEditor(label, href, mode) {
+  function openSmartViewer(item) {
+    var label = item.name;
+    var href = item.href;
+    var extMatch = /\.([a-z0-9]+)$/i.exec(label);
+    var ext = extMatch ? extMatch[1].toLowerCase() : '';
+
+    if (IMG_EXT.test(ext)) { openMediaModal(label, href, 'img', ext); return; }
+    if (VID_EXT.test(ext)) { openMediaModal(label, href, 'vid', ext); return; }
+    if (AUD_EXT.test(ext)) { openMediaModal(label, href, 'aud', ext); return; }
+    if (ext === 'pdf') { openMediaModal(label, href, 'pdf', ext); return; }
+
+    if (EDITABLE_EXT.test(ext) || EDITABLE_EXT.test(label) || !ext) {
+      openCodeEditor(label, href, ext || 'yaml');
+    } else {
+      openActionSheet(item);
+    }
+  }
+
+  function openMediaModal(label, href, type, ext) {
+    edTitle.textContent = label;
+    edLang.textContent = ext.toUpperCase() + ' PREVIEW';
+    editorModal.classList.add('show');
+    aceContainer.style.display = 'none';
+    edArea.style.display = 'none';
+    mdView.style.display = 'none';
+    edSubbar.style.display = 'none';
+    edSave.style.display = 'none';
+    edMdToggle.style.display = 'none';
+    edPreview.style.display = 'grid';
+
+    if (type === 'img') edPreview.innerHTML = '<img src="' + href + '" alt="' + esc(label) + '">';
+    else if (type === 'vid') edPreview.innerHTML = '<video src="' + href + '" controls autoplay playsinline></video>';
+    else if (type === 'aud') edPreview.innerHTML = '<audio src="' + href + '" controls autoplay></audio>';
+    else if (type === 'pdf') edPreview.innerHTML = '<iframe src="' + href + '"></iframe>';
+  }
+
+  function openCodeEditor(label, href, ext) {
     currentEditHref = href;
     edTitle.textContent = label;
+    isMarkdownFile = /^(md|markdown)$/i.test(ext);
+    edLang.textContent = (ext || 'TEXT').toUpperCase() + (isMarkdownFile ? ' • MARKDOWN' : '');
     editorModal.classList.add('show');
-
-    if (mode === 'img' || mode === 'vid') {
-      edArea.style.display = 'none';
-      edLines.style.display = 'none';
-      edSubbar.style.display = 'none';
-      edSave.style.display = 'none';
-      edPreview.style.display = 'grid';
-      edPreview.innerHTML = mode === 'img'
-        ? '<img src="' + href + '" alt="' + esc(label) + '">'
-        : '<video src="' + href + '" controls autoplay playsinline></video>';
-      return;
-    }
 
     edPreview.style.display = 'none';
     edPreview.innerHTML = '';
-    edArea.style.display = 'block';
-    edLines.style.display = 'block';
+    mdView.style.display = 'none';
     edSubbar.style.display = 'flex';
     edSave.style.display = 'inline-flex';
-    edArea.value = 'Loading file content...';
+    edMdToggle.style.display = isMarkdownFile ? 'inline-flex' : 'none';
+    mdPreviewActive = false;
+    edMdToggle.classList.remove('active');
+    edMdToggle.textContent = '👁️ Preview';
     edStatus.textContent = 'Loading...';
 
     fetch(href, { cache: 'no-store' })
@@ -313,14 +432,13 @@
         return r.text();
       })
       .then(function (txt) {
-        edArea.value = txt;
-        updateLineNumbers();
+        setEditorContent(txt, ext);
         edStatus.textContent = 'UTF-8 • ' + txt.split('\n').length + ' lines';
+        if (isMarkdownFile) toggleMarkdownPreview(true);
       })
-      .catch(function (err) {
-        edArea.value = '';
-        edStatus.textContent = 'New or empty file (' + err.message + ')';
-        updateLineNumbers();
+      .catch(function () {
+        setEditorContent('', ext);
+        edStatus.textContent = 'New File';
       });
   }
 
@@ -331,19 +449,19 @@
     fetch(currentEditHref, {
       method: 'PUT',
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      body: edArea.value
+      body: getEditorContent()
     }).then(function (r) {
       edSave.disabled = false;
       if (r.ok || r.status === 201 || r.status === 204) {
-        edStatus.textContent = 'Saved at ' + new Date().toLocaleTimeString();
-        showToast('✅ File saved successfully');
+        edStatus.textContent = 'Saved ' + new Date().toLocaleTimeString();
+        showToast('✅ Saved ' + edTitle.textContent);
+        if (isMarkdownFile && mdPreviewActive) toggleMarkdownPreview(true);
       } else {
         throw new Error('HTTP ' + r.status);
       }
     }).catch(function (err) {
       edSave.disabled = false;
-      edStatus.textContent = 'Save failed!';
-      alert('Failed to save file: ' + err.message);
+      alert('Save error: ' + err.message);
     });
   }
 
@@ -353,15 +471,30 @@
     edPreview.innerHTML = '';
   });
 
-  // 6. Các nút Tạo File mới, Tạo Folder mới, Upload File
+  // Các nút thanh công cụ Code Editor trên di động
+  document.getElementById('edUndo').addEventListener('click', function () { if (aceEditor) aceEditor.undo(); });
+  document.getElementById('edRedo').addEventListener('click', function () { if (aceEditor) aceEditor.redo(); });
+  document.getElementById('edFind').addEventListener('click', function () { if (aceEditor) aceEditor.execCommand('find'); });
+  document.getElementById('edTab').addEventListener('click', function () { if (aceEditor) aceEditor.indent(); });
+  document.getElementById('edComment').addEventListener('click', function () { if (aceEditor) aceEditor.toggleCommentLines(); });
+  document.getElementById('edWrap').addEventListener('click', function () {
+    if (aceEditor) {
+      var w = aceEditor.session.getUseWrapMode();
+      aceEditor.session.setUseWrapMode(!w);
+      showToast(!w ? 'Word Wrap: On' : 'Word Wrap: Off');
+    }
+  });
+
+  // 6. Tạo File mới, Tạo Folder mới & Upload có thanh phần trăm (%)
   document.getElementById('btnNewFile').addEventListener('click', function () {
-    var name = prompt('Enter new file name (e.g. script.yaml, notes.txt):');
+    var name = prompt('Enter new file name (e.g. script.yaml, README.md):');
     if (!name || !name.trim()) return;
     var clean = name.trim().replace(/^\/+/, '');
-    var url = buildWebdavUrl(encodeURIComponent(clean));
-    fetch(url, { method: 'PUT', body: '' }).then(function (r) {
+    var extMatch = /\.([a-z0-9]+)$/i.exec(clean);
+    var ext = extMatch ? extMatch[1].toLowerCase() : 'yaml';
+    fetch(buildWebdavUrl(encodeURIComponent(clean)), { method: 'PUT', body: '' }).then(function (r) {
       if (r.ok || r.status === 201 || r.status === 204) {
-        openCodeEditor(clean, encodeURIComponent(clean), 'code');
+        openCodeEditor(clean, encodeURIComponent(clean), ext);
       } else {
         alert('Could not create file (HTTP ' + r.status + ')');
       }
@@ -372,8 +505,7 @@
     var name = prompt('Enter new folder name:');
     if (!name || !name.trim()) return;
     var clean = name.trim().replace(/^\/+|\/+$/g, '');
-    var url = buildWebdavUrl(encodeURIComponent(clean) + '/');
-    fetch(url, { method: 'MKCOL' }).then(function (r) {
+    fetch(buildWebdavUrl(encodeURIComponent(clean) + '/'), { method: 'MKCOL' }).then(function (r) {
       if (r.ok || r.status === 201) {
         showToast('📁 Folder created');
         setTimeout(function () { location.reload(); }, 400);
@@ -384,39 +516,50 @@
   });
 
   var fileInput = document.getElementById('fileInput');
+  var uploadProg = document.getElementById('uploadProg');
+  var uploadText = document.getElementById('uploadText');
+  var progBar = document.getElementById('progBar');
+
   document.getElementById('btnUpload').addEventListener('click', function () { fileInput.click(); });
   fileInput.addEventListener('change', function () {
     var files = [].slice.call(this.files);
     if (!files.length) return;
-    showToast('⏳ Uploading ' + files.length + ' file(s)...');
-    Promise.all(files.map(function (f) {
-      return fetch(buildWebdavUrl(encodeURIComponent(f.name)), {
-        method: 'PUT',
-        body: f
-      });
-    })).then(function () {
-      showToast('✅ Upload complete!');
-      setTimeout(function () { location.reload(); }, 500);
-    }).catch(function (err) {
-      alert('Upload error: ' + err.message);
-    });
+    uploadProg.classList.add('show');
+    var idx = 0;
+
+    function next() {
+      if (idx >= files.length) {
+        showToast('✅ Uploaded ' + files.length + ' file(s)!');
+        setTimeout(function () { location.reload(); }, 400);
+        return;
+      }
+      var f = files[idx++];
+      var xhr = new XMLHttpRequest();
+      xhr.open('PUT', buildWebdavUrl(encodeURIComponent(f.name)), true);
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable) {
+          var pct = Math.round((e.loaded / e.total) * 100);
+          uploadText.textContent = 'Uploading ' + f.name + ' (' + pct + '%)';
+          progBar.style.width = pct + '%';
+        }
+      };
+      xhr.onload = function () { next(); };
+      xhr.onerror = function () { alert('Failed uploading ' + f.name); next(); };
+      xhr.send(f);
+    }
+    next();
   });
 
-  // 7. Menu thao tác iOS Action Sheet (Copy, Cut, Rename, Delete, Download)
+  // 7. iOS Action Sheet (•••)
   var backdrop = document.getElementById('backdrop');
   var sheet = document.getElementById('sheet');
   var selectedItem = null;
 
-  function openActionSheet(name, href, isDir) {
-    selectedItem = {
-      name: name,
-      href: href,
-      isDir: isDir,
-      internalPath: p + encodeURIComponent(name) + (isDir ? '/' : '')
-    };
-    document.getElementById('sheetTitle').textContent = name + (isDir ? '/' : '');
-    document.getElementById('actEdit').style.display = isDir ? 'none' : 'flex';
-    document.getElementById('actDownload').style.display = isDir ? 'none' : 'flex';
+  function openActionSheet(item) {
+    selectedItem = item;
+    document.getElementById('sheetTitle').textContent = item.name + (item.isDir ? '/' : '');
+    document.getElementById('actEdit').style.display = item.isDir ? 'none' : 'flex';
+    document.getElementById('actDownload').style.display = item.isDir ? 'none' : 'flex';
     backdrop.classList.add('show');
     sheet.classList.add('show');
   }
@@ -430,7 +573,16 @@
   document.getElementById('actEdit').addEventListener('click', function () {
     if (!selectedItem) return;
     closeActionSheet();
-    openCodeEditor(selectedItem.name, selectedItem.href, 'code');
+    var extMatch = /\.([a-z0-9]+)$/i.exec(selectedItem.name);
+    openCodeEditor(selectedItem.name, selectedItem.href, extMatch ? extMatch[1].toLowerCase() : 'yaml');
+  });
+
+  document.getElementById('actCopyPath').addEventListener('click', function () {
+    if (!selectedItem) return;
+    closeActionSheet();
+    var cleanPath = decodeURIComponent(selectedItem.internalPath);
+    if (navigator.clipboard) navigator.clipboard.writeText(cleanPath);
+    showToast('🔗 Copied: ' + cleanPath);
   });
 
   document.getElementById('actDownload').addEventListener('click', function () {
@@ -444,6 +596,24 @@
     link.remove();
   });
 
+  document.getElementById('actDup').addEventListener('click', function () {
+    if (!selectedItem) return;
+    var item = selectedItem;
+    closeActionSheet();
+    var dupName = prompt('Duplicate "' + item.name + '" as:', 'copy_' + item.name);
+    if (!dupName || !dupName.trim()) return;
+    var destInternal = p + encodeURIComponent(dupName.trim()) + (item.isDir ? '/' : '');
+    fetch(buildWebdavUrl(item.href), {
+      method: 'COPY',
+      headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' }
+    }).then(function (r) {
+      if (r.ok || r.status === 201 || r.status === 204) {
+        showToast('📑 Duplicated successfully');
+        setTimeout(function () { location.reload(); }, 400);
+      } else alert('Duplicate failed (HTTP ' + r.status + ')');
+    });
+  });
+
   document.getElementById('actRename').addEventListener('click', function () {
     if (!selectedItem) return;
     var item = selectedItem;
@@ -453,17 +623,12 @@
     var destInternal = p + encodeURIComponent(newName.trim()) + (item.isDir ? '/' : '');
     fetch(buildWebdavUrl(item.href), {
       method: 'MOVE',
-      headers: {
-        'Destination': buildDestinationHeader(destInternal),
-        'Overwrite': 'T'
-      }
+      headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' }
     }).then(function (r) {
       if (r.ok || r.status === 201 || r.status === 204) {
         showToast('🏷️ Renamed successfully');
         setTimeout(function () { location.reload(); }, 400);
-      } else {
-        alert('Rename failed (HTTP ' + r.status + ')');
-      }
+      } else alert('Rename failed (HTTP ' + r.status + ')');
     });
   });
 
@@ -471,18 +636,16 @@
     if (!selectedItem) return;
     var item = selectedItem;
     closeActionSheet();
-    if (!confirm('Are you sure you want to delete "' + item.name + '"?')) return;
+    if (!confirm('Delete "' + item.name + '" permanently?')) return;
     fetch(buildWebdavUrl(item.href), { method: 'DELETE' }).then(function (r) {
       if (r.ok || r.status === 200 || r.status === 204) {
         showToast('🗑️ Deleted "' + item.name + '"');
         setTimeout(function () { location.reload(); }, 400);
-      } else {
-        alert('Delete failed (HTTP ' + r.status + ')');
-      }
+      } else alert('Delete failed (HTTP ' + r.status + ')');
     });
   });
 
-  // 8. Hệ thống Clipboard (Copy / Move / Paste giữa các thư mục)
+  // 8. Hệ thống Clipboard (Đơn lẻ & Hàng loạt)
   var clipBar = document.getElementById('clipBar');
   var clipModeEl = document.getElementById('clipMode');
   var clipNameEl = document.getElementById('clipName');
@@ -493,36 +656,54 @@
       if (!raw) { clipBar.classList.remove('show'); return; }
       var clip = JSON.parse(raw);
       clipModeEl.textContent = clip.mode === 'MOVE' ? '✂️ READY TO MOVE' : '📋 COPIED TO CLIPBOARD';
-      clipNameEl.textContent = clip.name + ' (from ' + clip.srcInternal + ')';
+      clipNameEl.textContent = clip.items.length === 1 ? clip.items[0].name : clip.items.length + ' items';
       clipBar.classList.add('show');
     } catch (e) { clipBar.classList.remove('show'); }
   }
   refreshClipBar();
 
+  function setClip(mode, items) {
+    sessionStorage.setItem('wpro_clip', JSON.stringify({ mode: mode, items: items }));
+    refreshClipBar();
+  }
+
   document.getElementById('actCopy').addEventListener('click', function () {
     if (!selectedItem) return;
-    sessionStorage.setItem('wpro_clip', JSON.stringify({
-      mode: 'COPY',
-      name: selectedItem.name,
-      isDir: selectedItem.isDir,
-      srcInternal: selectedItem.internalPath
-    }));
+    setClip('COPY', [selectedItem]);
     closeActionSheet();
-    refreshClipBar();
     showToast('📋 Copied "' + selectedItem.name + '"');
   });
 
   document.getElementById('actCut').addEventListener('click', function () {
     if (!selectedItem) return;
-    sessionStorage.setItem('wpro_clip', JSON.stringify({
-      mode: 'MOVE',
-      name: selectedItem.name,
-      isDir: selectedItem.isDir,
-      srcInternal: selectedItem.internalPath
-    }));
+    setClip('MOVE', [selectedItem]);
     closeActionSheet();
-    refreshClipBar();
-    showToast('✂️ Cut "' + selectedItem.name + '" — Navigate to target folder & tap Paste');
+    showToast('✂️ Cut "' + selectedItem.name + '"');
+  });
+
+  document.getElementById('btnBatchCopy').addEventListener('click', function () {
+    if (!selectedSet.length) return;
+    setClip('COPY', selectedSet.slice());
+    btnSelectMode.click();
+    showToast('📋 Copied ' + selectedSet.length + ' items');
+  });
+
+  document.getElementById('btnBatchMove').addEventListener('click', function () {
+    if (!selectedSet.length) return;
+    setClip('MOVE', selectedSet.slice());
+    btnSelectMode.click();
+    showToast('✂️ Ready to move items');
+  });
+
+  document.getElementById('btnBatchDel').addEventListener('click', function () {
+    if (!selectedSet.length) return;
+    if (!confirm('Delete ' + selectedSet.length + ' selected item(s)?')) return;
+    Promise.all(selectedSet.map(function (it) {
+      return fetch(ingressPrefix + it.internalPath, { method: 'DELETE' });
+    })).then(function () {
+      showToast('🗑️ Deleted selected items');
+      setTimeout(function () { location.reload(); }, 400);
+    });
   });
 
   document.getElementById('btnCancelClip').addEventListener('click', function () {
@@ -534,26 +715,19 @@
     var raw = sessionStorage.getItem('wpro_clip');
     if (!raw) return;
     var clip = JSON.parse(raw);
-    var destInternal = p + encodeURIComponent(clip.name) + (clip.isDir ? '/' : '');
-    if (destInternal === clip.srcInternal) {
-      var copyName = prompt('Paste in same folder as:', 'copy_of_' + clip.name);
-      if (!copyName || !copyName.trim()) return;
-      destInternal = p + encodeURIComponent(copyName.trim()) + (clip.isDir ? '/' : '');
-    }
-    fetch(ingressPrefix + clip.srcInternal, {
-      method: clip.mode,
-      headers: {
-        'Destination': buildDestinationHeader(destInternal),
-        'Overwrite': 'T'
+    Promise.all(clip.items.map(function (it) {
+      var destInternal = p + encodeURIComponent(it.name) + (it.isDir ? '/' : '');
+      if (destInternal === it.internalPath) {
+        destInternal = p + encodeURIComponent('copy_' + it.name) + (it.isDir ? '/' : '');
       }
-    }).then(function (r) {
-      if (r.ok || r.status === 201 || r.status === 204) {
-        if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip');
-        showToast('✅ Pasted successfully!');
-        setTimeout(function () { location.reload(); }, 400);
-      } else {
-        alert(clip.mode + ' failed (HTTP ' + r.status + ')');
-      }
+      return fetch(ingressPrefix + it.internalPath, {
+        method: clip.mode,
+        headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' }
+      });
+    })).then(function () {
+      if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip');
+      showToast('✅ Pasted successfully!');
+      setTimeout(function () { location.reload(); }, 400);
     });
   });
 
@@ -604,17 +778,6 @@
     localStorage.setItem('wpro_view', savedView);
     applyView(savedView);
   });
-
-  function kick() {
-    document.body.style.opacity = '0.999';
-    requestAnimationFrame(function () {
-      document.body.style.opacity = '';
-      window.scrollBy(0, 1); window.scrollBy(0, -1);
-    });
-  }
-  kick();
-  window.addEventListener('load', kick);
-  window.addEventListener('pageshow', kick);
 })();
 </script>
 </body>
