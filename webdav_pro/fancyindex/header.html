@@ -2,126 +2,316 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>WebDAV Server Pro</title>
 <style>
-:root{
-  --bg:#000; --card:#1c1c1e; --hl:#2c2c2e; --sep:#38383a;
-  --text:#fff; --muted:#8e8e93; --blue:#0a84ff;
+:root {
+  --bg: #000000;
+  --card: #1c1c1e;
+  --card-elevated: #2c2c2e;
+  --sep: rgba(84, 84, 88, 0.65);
+  --text: #ffffff;
+  --muted: #8e8e93;
+  --blue: #0a84ff;
+  --blue-bg: rgba(10, 132, 255, 0.14);
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{background:var(--bg);min-height:100%}
-body{
-  margin:0;min-height:100vh;background:var(--bg);color:var(--text);
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  padding:0 16px max(28px,env(safe-area-inset-bottom));
-  -webkit-text-size-adjust:100%;
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { background: var(--bg); min-height: 100%; }
+body {
+  margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  padding: 0 16px max(34px, env(safe-area-inset-bottom));
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
 }
-.container{max-width:720px;margin:0 auto;-webkit-backface-visibility:hidden;backface-visibility:hidden}
-.container>h1{display:none}
+.container {
+  max-width: 760px; margin: 0 auto;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+}
 
-/* Navigation bar */
-.nav{
-  position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;
-  height:48px;margin:0 -16px;padding:0 16px;background:rgba(0,0,0,.94);
-}
-.back{
-  display:inline-flex;align-items:center;gap:4px;color:var(--blue);text-decoration:none;
-  font-size:17px;visibility:hidden;max-width:60%;
-}
-.back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sort{
-  -webkit-appearance:none;appearance:none;height:32px;border:0;border-radius:16px;
-  background:var(--card);color:var(--blue);font-size:15px;padding:0 14px;outline:none;
-}
-.title{
-  font-size:30px;font-weight:700;letter-spacing:-.02em;margin:4px 2px 2px;word-break:break-word;
-}
-.crumbs{
-  display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 2px 12px;
-  font-size:13px;color:var(--muted);word-break:break-all;
-}
-.crumbs a{color:var(--blue);text-decoration:none}
-.crumbs b{color:var(--muted);font-weight:500}
-.crumbs .sep{opacity:.6}
-.search{
-  -webkit-appearance:none;appearance:none;width:100%;height:36px;margin:0 0 16px;
-  border:0;border-radius:10px;outline:none;font-size:17px;color:var(--text);
-  padding:0 12px 0 34px;background:var(--card) no-repeat 10px 50%;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M20 20l-4.8-4.8'/%3E%3C/svg%3E");
-}
-.search::placeholder{color:var(--muted)}
+/* Ẩn triệt để thẻ h1 "/" mặc định do Nginx FancyIndex sinh ra */
+.container h1, #fxi-raw > h1 { display: none !important; }
 
-/* List (iOS grouped style) */
-table#list,#list tbody{display:block;width:100%;border:0}
-#list thead,#list tr.parent{display:none}
-#list tbody{background:var(--card);border-radius:12px;overflow:hidden}
-#list tr{
-  position:relative;display:grid;grid-template-columns:auto 1fr;
-  grid-template-areas:"name name" "size date";row-gap:2px;padding:10px 36px 10px 14px;
+/* Top Sticky Navigation (Chỉ hiện khi vào thư mục con) */
+.nav {
+  position: sticky; top: 0; z-index: 20;
+  display: none; align-items: center; justify-content: space-between;
+  height: 44px; margin: 0 -16px; padding: 0 16px;
+  background: rgba(0, 0, 0, 0.82);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
 }
-#list tr:active{background:var(--hl)}
-#list tr:not(:last-child)::before{
-  content:"";position:absolute;left:58px;right:0;bottom:0;height:.5px;background:var(--sep);
+.nav.show { display: flex; }
+.back {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--blue); text-decoration: none;
+  font-size: 17px; font-weight: 400; max-width: 75%;
+  padding: 6px 0;
 }
-#list tr.dir::after{
-  content:"";position:absolute;right:16px;top:calc(50% - 4px);width:8px;height:8px;
-  border-top:2px solid #5a5a5e;border-right:2px solid #5a5a5e;transform:rotate(45deg);
-}
-#list td{display:block;padding:0;border:0;background:none}
-#list td.link{grid-area:name;min-width:0}
-#list td.link a{
-  display:flex;align-items:center;gap:12px;color:var(--text);text-decoration:none;
-  font-size:17px;min-height:32px;
-}
-#list td.link a .nm{min-width:0;word-break:break-word}
-#list td.size,#list td.date{font-size:13px;color:var(--muted);white-space:nowrap}
-#list td.size{grid-area:size;padding-left:44px}
-#list td.size::after{content:"·";margin:0 6px}
-#list td.date{grid-area:date}
-#list tr.dir td.size{display:none}
-#list tr.dir td.date{grid-area:2/1/3/3;padding-left:44px}
+.back:active { opacity: 0.55; }
+.back span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Icons */
-.ic{
-  width:32px;height:32px;flex:none;border-radius:8px;display:grid;place-items:center;
-  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18);
+/* Header Title kèm App Icon chuẩn iOS */
+.hero {
+  display: flex; align-items: center; gap: 12px;
+  margin: 14px 2px 14px;
 }
-.ic svg{width:19px;height:19px}
-.ic.folder{background:none;box-shadow:none;border-radius:0}
-.ic.folder svg{width:32px;height:27px}
-.t-img{background:linear-gradient(180deg,#ff7eb3,#ff2d92)}
-.t-vid{background:linear-gradient(180deg,#bf5af2,#8944e0)}
-.t-aud{background:linear-gradient(180deg,#ff5e6c,#ff2d55)}
-.t-pdf{background:linear-gradient(180deg,#ff6961,#ff3b30)}
-.t-doc{background:linear-gradient(180deg,#4da3ff,#0a6cff)}
-.t-xls{background:linear-gradient(180deg,#4cd964,#22b14c)}
-.t-ppt{background:linear-gradient(180deg,#ffb340,#ff8a00)}
-.t-txt{background:linear-gradient(180deg,#a1a1a6,#7c7c80)}
-.t-zip{background:linear-gradient(180deg,#c8a26b,#a07b45)}
-.t-cfg{background:linear-gradient(180deg,#8e8e93,#636366)}
-.t-code{background:linear-gradient(180deg,#64d2c8,#30b0a5)}
-.t-file{background:linear-gradient(180deg,#7d8aa1,#5b6678)}
+.app-badge {
+  width: 38px; height: 38px; border-radius: 10px; flex: none;
+  background: linear-gradient(145deg, #0f172a, #1e293b);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.22);
+  display: grid; place-items: center;
+}
+.app-badge svg { width: 24px; height: 24px; }
+.title-wrap { min-width: 0; flex: 1; }
+.title {
+  font-size: 28px; font-weight: 700; letter-spacing: -0.022em;
+  line-height: 1.15; margin: 0; word-break: break-word;
+}
 
-.stat{text-align:center;color:var(--muted);font-size:13px;margin:14px 0 0}
+/* Search Bar chuẩn iOS */
+.search-wrap {
+  position: relative; margin: 0 0 12px;
+}
+.search {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 38px; border: 0; border-radius: 10px; outline: none;
+  font-size: 17px; color: var(--text);
+  padding: 0 36px 0 36px;
+  background: var(--card) no-repeat 11px 50%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M20 20l-4.8-4.8'/%3E%3C/svg%3E");
+  transition: background-color 0.15s ease;
+}
+.search:focus { background-color: var(--card-elevated); }
+.search::placeholder { color: var(--muted); }
+.clear-btn {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  width: 22px; height: 22px; border: 0; padding: 0; background: none;
+  display: none; place-items: center; cursor: pointer;
+}
+.clear-btn.show { display: grid; }
+
+/* Sub-Toolbar dưới thanh Search: Đường dẫn (Trái) + Sort Name A-Z & View (Phải) */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin: 0 2px 18px;
+}
+.crumbs {
+  display: flex; align-items: center; flex-wrap: nowrap;
+  gap: 5px; font-size: 13px; color: var(--muted);
+  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+  padding: 4px 0; min-width: 0; flex: 1;
+}
+.crumbs::-webkit-scrollbar { display: none; }
+.crumbs a, .crumbs b {
+  display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap; padding: 4px 9px; border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  text-decoration: none; font-size: 13px;
+}
+.crumbs a { color: var(--blue); font-weight: 500; }
+.crumbs a:active { background: var(--blue-bg); }
+.crumbs b { color: var(--text); font-weight: 600; background: var(--card); cursor: pointer; }
+.crumbs .sep { color: #5a5a5e; font-size: 12px; flex: none; }
+
+.controls {
+  display: flex; align-items: center; gap: 8px; flex: none;
+}
+.sort-pill {
+  position: relative; display: inline-flex; align-items: center;
+}
+.sort {
+  -webkit-appearance: none; appearance: none;
+  height: 32px; border: 0; border-radius: 16px;
+  background: var(--card); color: var(--blue);
+  font-size: 14px; font-weight: 500;
+  padding: 0 28px 0 13px; outline: none; cursor: pointer;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+}
+.sort-pill::after {
+  content: ""; position: absolute; right: 11px; top: 50%;
+  width: 6px; height: 6px;
+  border-right: 1.8px solid var(--blue); border-bottom: 1.8px solid var(--blue);
+  transform: translateY(-65%) rotate(45deg); pointer-events: none;
+}
+.view-btn {
+  width: 32px; height: 32px; border: 0; border-radius: 16px;
+  background: var(--card); color: var(--blue);
+  display: grid; place-items: center; cursor: pointer;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+}
+.view-btn:active { background: var(--card-elevated); }
+.view-btn svg { width: 16px; height: 16px; }
+
+/* Danh sách Folder / File (iOS Grouped Inset List) */
+table#list, #list tbody { display: block; width: 100%; border: 0; }
+#list thead, #list tr.parent { display: none !important; }
+#list tbody {
+  background: var(--card); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+#list tr {
+  position: relative; display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "name name" "size date";
+  row-gap: 3px; padding: 12px 38px 12px 16px;
+  cursor: pointer; transition: background-color 0.12s ease;
+}
+#list tr:hover { background: rgba(255, 255, 255, 0.03); }
+#list tr:active { background: var(--card-elevated); }
+#list tr:not(:last-child)::before {
+  content: ""; position: absolute; left: 66px; right: 0; bottom: 0;
+  height: 0.5px; background: var(--sep);
+}
+#list tr.dir::after {
+  content: ""; position: absolute; right: 16px; top: calc(50% - 4px);
+  width: 8px; height: 8px;
+  border-top: 2px solid #636366; border-right: 2px solid #636366;
+  transform: rotate(45deg);
+}
+#list td { display: block; padding: 0; border: 0; background: none; }
+#list td.link { grid-area: name; min-width: 0; }
+#list td.link a {
+  display: flex; align-items: center; gap: 14px;
+  color: var(--text); text-decoration: none;
+  font-size: 17px; font-weight: 500; min-height: 28px;
+}
+#list td.link a .nm {
+  min-width: 0; word-break: break-word; line-height: 1.25;
+}
+#list td.size, #list td.date {
+  font-size: 13px; color: var(--muted); white-space: nowrap;
+}
+#list td.size { grid-area: size; padding-left: 50px; }
+#list td.size::after { content: "·"; margin: 0 6px; }
+#list td.date { grid-area: date; }
+#list tr.dir td.size { display: none; }
+#list tr.dir td.date { grid-area: 2 / 1 / 3 / 3; padding-left: 50px; }
+
+/* Chế độ xem Lưới (iOS Grid Mode) */
+body.grid-mode #list tbody {
+  background: transparent; border-radius: 0; box-shadow: none;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 12px;
+}
+body.grid-mode #list tr {
+  background: var(--card); border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 16px 10px 12px; row-gap: 4px;
+}
+body.grid-mode #list tr:active { background: var(--card-elevated); }
+body.grid-mode #list tr::before, body.grid-mode #list tr.dir::after { display: none; }
+body.grid-mode #list td.link a {
+  flex-direction: column; gap: 8px; font-size: 14px;
+}
+body.grid-mode #list td.link a .nm {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; font-size: 13.5px;
+}
+body.grid-mode #list td.size, body.grid-mode #list tr.dir td.date {
+  padding-left: 0; font-size: 11.5px;
+}
+body.grid-mode #list td.size::after { display: none; }
+body.grid-mode #list tr:not(.dir) td.date { display: none; }
+body.grid-mode .ic { width: 46px; height: 46px; border-radius: 11px; }
+body.grid-mode .ic svg { width: 25px; height: 25px; }
+body.grid-mode .ic.folder svg { width: 48px; height: 40px; }
+
+/* Icons chuẩn iOS */
+.ic {
+  width: 36px; height: 36px; flex: none; border-radius: 9px;
+  display: grid; place-items: center;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+}
+.ic svg { width: 20px; height: 20px; }
+.ic.folder { background: none; box-shadow: none; border-radius: 0; }
+.ic.folder svg { width: 36px; height: 30px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25)); }
+.t-img { background: linear-gradient(180deg, #ff7eb3, #ff2d92); }
+.t-vid { background: linear-gradient(180deg, #bf5af2, #8944e0); }
+.t-aud { background: linear-gradient(180deg, #ff5e6c, #ff2d55); }
+.t-pdf { background: linear-gradient(180deg, #ff6961, #ff3b30); }
+.t-doc { background: linear-gradient(180deg, #4da3ff, #0a6cff); }
+.t-xls { background: linear-gradient(180deg, #4cd964, #22b14c); }
+.t-ppt { background: linear-gradient(180deg, #ffb340, #ff8a00); }
+.t-txt { background: linear-gradient(180deg, #a1a1a6, #7c7c80); }
+.t-zip { background: linear-gradient(180deg, #c8a26b, #a07b45); }
+.t-cfg { background: linear-gradient(180deg, #64748b, #475569); }
+.t-code { background: linear-gradient(180deg, #38bdf8, #0284c7); }
+.t-file { background: linear-gradient(180deg, #7d8aa1, #5b6678); }
+
+/* Empty search state & Footer Stat */
+.empty {
+  display: none; text-align: center; padding: 42px 20px;
+  color: var(--muted); font-size: 15px;
+}
+.empty.show { display: block; }
+.stat {
+  text-align: center; color: var(--muted);
+  font-size: 13px; margin: 18px 0 6px; font-weight: 400;
+}
+.toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
+  background: rgba(44, 44, 46, 0.95); color: #fff; padding: 8px 16px;
+  border-radius: 20px; font-size: 13.5px; font-weight: 500;
+  opacity: 0; pointer-events: none; transition: all 0.22s ease; z-index: 99;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
 <div class="container">
-<div class="nav">
-  <a id="back" class="back" href="../">
-    <svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <span>Back</span>
-  </a>
-  <select id="sort" class="sort" aria-label="Sort">
-    <option value="C=N&amp;O=A">Name A–Z</option>
-    <option value="C=N&amp;O=D">Name Z–A</option>
-    <option value="C=M&amp;O=D">Newest</option>
-    <option value="C=M&amp;O=A">Oldest</option>
-    <option value="C=S&amp;O=D">Largest</option>
-  </select>
-</div>
-<div id="title" class="title">WebDAV Server Pro</div>
-<nav id="crumbs" class="crumbs"></nav>
-<input id="q" class="search" type="search" placeholder="Search" autocomplete="off">
+  <!-- Thanh điều hướng nút Back khi ở trong thư mục con -->
+  <div id="nav" class="nav">
+    <a id="back" class="back" href="../">
+      <svg width="11" height="19" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Home</span>
+    </a>
+  </div>
+
+  <!-- Tiêu đề chính kèm Icon -->
+  <div class="hero">
+    <div class="app-badge" title="WebDAV Server Pro">
+      <svg viewBox="0 0 36 36" fill="none">
+        <path d="M5 10C5 8.3 6.3 7 8 7h6.2l2.6 2.8H28c1.7 0 3 1.3 3 3v14.2c0 1.7-1.3 3-3 3H8c-1.7 0-3-1.3-3-3V10z" fill="#0284c7" fill-opacity="0.25" stroke="#38bdf8" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M15 22v-6m0 0l-2.5 2.5M15 16l2.5 2.5M21 16v6m0 0l-2.5-2.5M21 22l2.5-2.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="title-wrap">
+      <h2 id="title" class="title">WebDAV Server Pro</h2>
+    </div>
+  </div>
+
+  <!-- Thanh tìm kiếm -->
+  <div class="search-wrap">
+    <input id="q" class="search" type="search" placeholder="Search files or folders..." autocomplete="off">
+    <button id="clearBtn" class="clear-btn" type="button" aria-label="Clear search">
+      <svg width="16" height="16" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#636366"/><path d="M7 7l6 6M13 7l-6 6" stroke="#1c1c1e" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+
+  <!-- Thanh công cụ nằm DƯỚI thanh tìm kiếm: Đường dẫn (Trái) + Name A-Z & Đổi giao diện (Phải) -->
+  <div class="toolbar">
+    <nav id="crumbs" class="crumbs" title="Tap current folder to copy path"></nav>
+    <div class="controls">
+      <div class="sort-pill">
+        <select id="sort" class="sort" aria-label="Sort">
+          <option value="C=N&amp;O=A">Name A–Z</option>
+          <option value="C=N&amp;O=D">Name Z–A</option>
+          <option value="C=M&amp;O=D">Newest</option>
+          <option value="C=M&amp;O=A">Oldest</option>
+          <option value="C=S&amp;O=D">Largest</option>
+        </select>
+      </div>
+      <button id="viewBtn" class="view-btn" type="button" title="Toggle Grid / List view">
+        <svg id="viewIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Khối bọc danh sách để ẩn thẻ h1 "/" của FancyIndex -->
+  <div id="fxi-raw">
