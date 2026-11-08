@@ -1,3 +1,7 @@
+## [2.0.0] - 2026-11-08
+- **Upstream Update:** Upgraded Nginx to `1.30.6-r0` on Home Assistant Alpine Base `3.24`.
+- Updated `dav-ext` and `fancyindex` modules with the latest upstream security patches.
+
 ## [1.0.0] - 2026-11-08
 - **Initial Release:** Launched **WebDAV Server Pro** for Home Assistant.
 - **Full System Directory Mapping:** Added read/write support for `config` (`/homeassistant`), `addon_configs`, `addons`, `backup`, `media`, `share`, and `ssl`.
