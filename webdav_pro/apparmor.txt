@@ -1,8 +1,9 @@
 #include <tunables/global>
 
-profile webdav_pro flags=(attach_disconnected,mediate_deleted) {
+profile ADDON_SLUG flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
+  # Capabilities needed by nginx and s6
   capability chown,
   capability dac_override,
   capability dac_read_search,
@@ -13,29 +14,17 @@ profile webdav_pro flags=(attach_disconnected,mediate_deleted) {
   capability setgid,
   capability setuid,
 
+  # Network
   network inet stream,
   network inet6 stream,
   network inet dgram,
   network inet6 dgram,
+  network unix stream,
+  network unix dgram,
+  unix,
 
-  /init ix,
-  /bin/** ix,
-  /usr/bin/** ix,
-  /usr/sbin/nginx ix,
-  /run.sh rix,
-  /etc/s6/** rix,
-  /run/s6/** rix,
+  signal (send,receive),
 
-  /etc/** rwk,
-  /var/** rwk,
-  /run/** rwk,
-  /tmp/** rwk,
-  /data/** rwk,
-  /homeassistant/** rwk,
-  /addon_configs/** rwk,
-  /addons/** rwk,
-  /backup/** rwk,
-  /media/** rwk,
-  /share/** rwk,
-  /ssl/** rwk,
+  # Files (same approach as the official HA add-on template)
+  file,
 }
