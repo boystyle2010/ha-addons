@@ -2,7 +2,7 @@
 set -e
 
 bashio::log.info "---------------------------------------------------"
-bashio::log.info " Đang khởi tạo Home Assistant WebDAV Server Pro..."
+bashio::log.info " Initializing Home Assistant WebDAV Server Pro..."
 bashio::log.info "---------------------------------------------------"
 
 CONFIG_PATH=/data/options.json
@@ -12,7 +12,7 @@ ROOT_DIR=/var/webdav_root
 WEBDAV_PORT=8090
 INGRESS_PORT=8099
 
-# 1. Đọc cấu hình từ Home Assistant UI
+# 1. Read configuration from the Home Assistant UI
 UNIFIED_ROOT=$(bashio::config 'unified_root')
 SSL=$(bashio::config 'ssl')
 CERTFILE=$(bashio::config 'certfile')
@@ -22,13 +22,13 @@ FANCY_UI=$(bashio::config 'fancy_ui')
 SHOW_DOTFILES=$(bashio::config 'show_dotfiles')
 LOG_LEVEL=$(bashio::config 'log_level')
 
-# 2. Khởi tạo danh sách tài khoản với mã hóa Bcrypt
+# 2. Create the account list with Bcrypt hashing
 rm -f "$HTPASSWD_FILE"
 touch "$HTPASSWD_FILE"
 
 USERS_COUNT=$(jq '.users | length' "$CONFIG_PATH")
 if [ "$USERS_COUNT" -eq 0 ]; then
-    bashio::exit.nok "Lỗi: Bạn phải khai báo ít nhất 1 tài khoản trong phần 'users'!"
+    bashio::exit.nok "Error: you must define at least one account under 'users'!"
 fi
 
 for (( i=0; i<USERS_COUNT; i++ )); do
@@ -36,16 +36,16 @@ for (( i=0; i<USERS_COUNT; i++ )); do
     PASSWORD=$(jq -r ".users[$i].password" "$CONFIG_PATH")
     if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
         htpasswd -Bb "$HTPASSWD_FILE" "$USERNAME" "$PASSWORD" >/dev/null 2>&1
-        bashio::log.info "Đã kích hoạt tài khoản WebDAV: ${USERNAME}"
+        bashio::log.info "Enabled WebDAV account: ${USERNAME}"
     fi
 done
 
-# 3. Cấu hình SSL/TLS
+# 3. SSL/TLS configuration
 LISTEN_DIRECTIVE="listen ${WEBDAV_PORT};"
 SSL_DIRECTIVES=""
 if bashio::var.true "$SSL"; then
     if [ ! -f "/ssl/${CERTFILE}" ] || [ ! -f "/ssl/${KEYFILE}" ]; then
-        bashio::exit.nok "Không tìm thấy chứng chỉ SSL tại /ssl/${CERTFILE} hoặc /ssl/${KEYFILE}"
+        bashio::exit.nok "SSL certificate not found at /ssl/${CERTFILE} or /ssl/${KEYFILE}"
     fi
     LISTEN_DIRECTIVE="listen ${WEBDAV_PORT} ssl;"
     SSL_DIRECTIVES="
@@ -54,12 +54,12 @@ if bashio::var.true "$SSL"; then
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_ciphers HIGH:!aNULL:!MD5;
     "
-    bashio::log.info "Chế độ bảo mật: HTTPS (SSL/TLS) đã bật."
+    bashio::log.info "Security mode: HTTPS (SSL/TLS) enabled."
 else
-    bashio::log.info "Chế độ kết nối: HTTP tiêu chuẩn (tương thích Cloudflare Tunnel / Reverse Proxy)."
+    bashio::log.info "Connection mode: standard HTTP (compatible with Cloudflare Tunnel / reverse proxy)."
 fi
 
-# 4. Cấu hình giao diện duyệt file (FancyIndex vs AutoIndex)
+# 4. File browser UI (FancyIndex vs AutoIndex)
 DOTFILES_RULE=""
 if ! bashio::var.true "$SHOW_DOTFILES"; then
     DOTFILES_RULE="location ~ /\. { deny all; }"
@@ -82,7 +82,7 @@ else
     "
 fi
 
-# 5. Chuẩn bị thư mục gốc hợp nhất (/var/webdav_root)
+# 5. Prepare the unified root directory (/var/webdav_root)
 mkdir -p "$ROOT_DIR"
 rm -rf "${ROOT_DIR:?}"/*
 
@@ -92,14 +92,14 @@ for (( i=0; i<SHARES_COUNT; i++ )); do
     SHARE_PATH=$(jq -r ".shares[$i].path" "$CONFIG_PATH")
 
     if [ ! -d "$SHARE_PATH" ]; then
-        bashio::log.warning "Thư mục ${SHARE_PATH} chưa có sẵn, đang tự động tạo..."
+        bashio::log.warning "Folder ${SHARE_PATH} does not exist, creating it..."
         mkdir -p "$SHARE_PATH"
     fi
 
     ln -sfn "$SHARE_PATH" "${ROOT_DIR}/${SHARE_NAME}"
 done
 
-# 6. Tạo file cấu hình Nginx chính
+# 6. Generate the main Nginx configuration
 cat <<EOF > "$NGINX_CONF"
 load_module /usr/lib/nginx/modules/ngx_http_dav_ext_module.so;
 load_module /usr/lib/nginx/modules/ngx_http_fancyindex_module.so;
@@ -127,14 +127,14 @@ http {
     client_max_body_size ${MAX_UPLOAD};
     client_body_temp_path /var/lib/nginx/tmp/client_body;
 
-    # Bộ nhớ quản lý khóa file (Lock) cho macOS Finder, iOS Files & Windows Explorer
+    # File lock memory zone (macOS Finder, iOS Files & Windows Explorer)
     dav_ext_lock_zone zone=davlock:10m;
 
-    # Giới hạn chống dò mật khẩu (Brute-force protection)
+    # Brute-force protection
     limit_req_zone \$binary_remote_addr zone=dav_auth_limit:10m rate=15r/s;
 
     # =========================================================
-    # SERVER 1: HOME ASSISTANT INGRESS (Truy cập nội bộ trên HA UI)
+    # SERVER 1: HOME ASSISTANT INGRESS (internal access from the HA UI)
     # =========================================================
     server {
         listen ${INGRESS_PORT};
@@ -152,14 +152,14 @@ http {
     }
 
     # =========================================================
-    # SERVER 2: WEBDAV SERVER CHÍNH (Cổng ${WEBDAV_PORT})
+    # SERVER 2: MAIN WEBDAV SERVER (port ${WEBDAV_PORT})
     # =========================================================
     server {
         ${LISTEN_DIRECTIVE}
         ${SSL_DIRECTIVES}
         server_name _;
 
-        # Cho phép tải giao diện FancyIndex không cần hỏi lại mật khẩu
+        # Serve the FancyIndex UI assets without asking for a password
         location ^~ /.fancyindex/ {
             alias /usr/share/nginx/fancyindex/;
             auth_basic off;
@@ -168,7 +168,7 @@ http {
         ${DOTFILES_RULE}
 EOF
 
-# 7. Kiểm tra chế độ Gộp 1 đường dẫn gốc (Unified Root) hay Tách riêng phân quyền
+# 7. Unified Root mode vs. separate per-share permissions
 if bashio::var.true "$UNIFIED_ROOT"; then
     cat <<EOF >> "$NGINX_CONF"
         location / {
@@ -190,9 +190,9 @@ if bashio::var.true "$UNIFIED_ROOT"; then
             }
         }
 EOF
-    bashio::log.info "Chế độ Unified Root: Đã gộp toàn bộ thư mục vào đường dẫn gốc '/'."
+    bashio::log.info "Unified Root mode: all folders merged under the root path '/'."
 else
-    # Cho phép duyệt danh sách ở gốc /
+    # Allow listing the root /
     cat <<EOF >> "$NGINX_CONF"
         location = / {
             auth_basic "Home Assistant WebDAV Pro";
@@ -201,7 +201,7 @@ else
             ${INDEX_CONFIG}
         }
 EOF
-    # Khởi tạo từng nhánh thư mục với quyền Read-Only / Allowed Users riêng
+    # Create each share with its own Read-Only / allowed-users rules
     for (( i=0; i<SHARES_COUNT; i++ )); do
         SHARE_NAME=$(jq -r ".shares[$i].name" "$CONFIG_PATH")
         SHARE_PATH=$(jq -r ".shares[$i].path" "$CONFIG_PATH")
@@ -226,7 +226,7 @@ EOF
                     deny all;
                 }
             "
-            MODE_TEXT="Chỉ đọc (Read-Only)"
+            MODE_TEXT="Read-Only"
         else
             DAV_CONFIG="
                 dav_methods PUT DELETE MKCOL COPY MOVE;
@@ -235,7 +235,7 @@ EOF
                 create_full_put_path on;
                 dav_access user:rw group:rw all:r;
             "
-            MODE_TEXT="Đọc & Ghi (Read/Write)"
+            MODE_TEXT="Read/Write"
         fi
 
         cat <<EOF >> "$NGINX_CONF"
@@ -253,7 +253,7 @@ EOF
             }
         }
 EOF
-        bashio::log.info "Đã ánh xạ nhánh: /${SHARE_NAME} -> ${SHARE_PATH} [${MODE_TEXT}]"
+        bashio::log.info "Mapped share: /${SHARE_NAME} -> ${SHARE_PATH} [${MODE_TEXT}]"
     done
 fi
 
@@ -262,15 +262,15 @@ cat <<EOF >> "$NGINX_CONF"
 }
 EOF
 
-# 8. Kiểm tra cú pháp Nginx trước khi chạy
-bashio::log.info "Đang kiểm tra cú pháp cấu hình Nginx..."
+# 8. Validate the Nginx configuration before starting
+bashio::log.info "Checking Nginx configuration syntax..."
 if ! nginx -t 2>&1; then
-    bashio::log.error "Cấu hình Nginx không hợp lệ, xem chi tiết các dòng log phía trên."
-    bashio::log.error "Nội dung file cấu hình để đối chiếu số dòng:"
+    bashio::log.error "Invalid Nginx configuration, see the details in the log lines above."
+    bashio::log.error "Generated config (with line numbers) for reference:"
     cat -n "$NGINX_CONF" >&2
-    bashio::exit.nok "Dừng add-on do lỗi cấu hình Nginx."
+    bashio::exit.nok "Stopping add-on due to an Nginx configuration error."
 fi
-bashio::log.info "Cú pháp Nginx hợp lệ."
+bashio::log.info "Nginx configuration is valid."
 
-bashio::log.info "WebDAV Server Pro đã sẵn sàng phục vụ trên cổng ${WEBDAV_PORT} (và Ingress cổng ${INGRESS_PORT})!"
+bashio::log.info "WebDAV Server Pro is ready on port ${WEBDAV_PORT} (and Ingress on port ${INGRESS_PORT})!"
 exec nginx -g "daemon off;"
