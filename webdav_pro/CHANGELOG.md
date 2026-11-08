@@ -1,3 +1,6 @@
+## [2.0.18] - 2026-11-08
+- **Maintenance & Improvements:** Create README.md
+
 ## [2.0.17] - 2026-11-08
 - **Maintenance & Improvements:** Update DOCS.md
 
