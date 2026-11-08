@@ -1,4 +1,7 @@
-<div id="stat" class="stat"></div>
+  </div>
+  <div id="empty" class="empty">No matching items found</div>
+  <div id="stat" class="stat"></div>
+  <div id="toast" class="toast">Copied path to clipboard</div>
 </div>
 <script>
 (function () {
@@ -13,7 +16,7 @@
     code:'<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>'
   };
   var T = [
-    ['img','img','jpg jpeg png gif webp heic bmp svg'],
+    ['img','img','jpg jpeg png gif webp heic bmp svg ico'],
     ['vid','vid','mp4 mkv mov avi webm m4v'],
     ['aud','aud','mp3 flac wav m4a ogg aac'],
     ['pdf','doc','pdf'],
@@ -21,45 +24,97 @@
     ['xls','doc','xls xlsx csv ods numbers'],
     ['ppt','doc','ppt pptx key'],
     ['txt','txt','txt md log'],
-    ['zip','zip','zip tar gz tgz rar 7z'],
-    ['cfg','cfg','yaml yml json conf cfg ini toml'],
-    ['code','code','py js ts sh html css xml']
+    ['zip','zip','zip tar gz tgz rar 7z xz'],
+    ['cfg','cfg','yaml yml json conf cfg ini toml env lock'],
+    ['code','code','py js ts sh html css xml php sql']
   ];
   var MAP = {};
   T.forEach(function (t) { t[2].split(' ').forEach(function (e) { MAP[e] = [t[0], t[1]]; }); });
 
-  var FOLDER = '<span class="ic folder"><svg viewBox="0 0 34 28"><path fill="#1c8bff" d="M2 5a3 3 0 0 1 3-3h7.2a3 3 0 0 1 2.3 1.1l1.4 1.7A3 3 0 0 0 18.2 6H29a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3z"/><path fill="#5ac8fa" d="M2 10a3 3 0 0 1 3-3h24a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3z"/></svg></span>';
+  var FOLDER = '<span class="ic folder"><svg viewBox="0 0 36 30"><path fill="#0a84ff" d="M2 5.5A3.5 3.5 0 0 1 5.5 2h7.6a3.5 3.5 0 0 1 2.7 1.3l1.5 1.8a3.5 3.5 0 0 0 2.7 1.3H30.5A3.5 3.5 0 0 1 34 9.9v14.6A3.5 3.5 0 0 1 30.5 28h-25A3.5 3.5 0 0 1 2 24.5z"/><path fill="#5ac8fa" d="M2 10.5A3.5 3.5 0 0 1 5.5 7h25A3.5 3.5 0 0 1 34 10.5v14A3.5 3.5 0 0 1 30.5 28h-25A3.5 3.5 0 0 1 2 24.5z"/></svg></span>';
+
   function fileIcon(name) {
     var m = /\.([a-z0-9]+)$/i.exec(name);
     var t = (m && MAP[m[1].toLowerCase()]) || ['file', 'doc'];
-    return '<span class="ic t-' + t[0] + '"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + GL[t[1]] + '</svg></span>';
+    return '<span class="ic t-' + t[0] + '"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + GL[t[1]] + '</svg></span>';
   }
   function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function up(n) { return n > 0 ? new Array(n + 1).join('../') : './'; }
 
-  // Current path (strip the Home Assistant Ingress prefix)
+  // 1. Tự động gắn App Icon vào thanh tiêu đề trên cùng của Home Assistant (chỗ nút 3 gạch ☰)
+  function injectTopBarIcon() {
+    try {
+      if (!window.parent || window.parent === window) return;
+      var doc = window.parent.document;
+      var walk = function (root) {
+        if (!root) return;
+        var nodes = root.querySelectorAll ? root.querySelectorAll('.main-title, [slot="title"], .title') : [];
+        for (var i = 0; i < nodes.length; i++) {
+          var el = nodes[i];
+          if (el.textContent && el.textContent.trim().indexOf('WebDAV') !== -1 && !el.querySelector('.wpro-ha-ic')) {
+            el.style.display = 'inline-flex';
+            el.style.alignItems = 'center';
+            el.style.gap = '9px';
+            var span = doc.createElement('span');
+            span.className = 'wpro-ha-ic';
+            span.style.cssText = 'display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:linear-gradient(145deg,#0f172a,#1e293b);border:1px solid rgba(56,189,248,0.45);flex:none;';
+            span.innerHTML = '<svg width="16" height="16" viewBox="0 0 36 36" fill="none"><path d="M5 10C5 8.3 6.3 7 8 7h6.2l2.6 2.8H28c1.7 0 3 1.3 3 3v14.2c0 1.7-1.3 3-3 3H8c-1.7 0-3-1.3-3-3V10z" fill="#38bdf8" fill-opacity="0.3" stroke="#38bdf8" stroke-width="2.6"/><path d="M15 22v-6m0 0l-2.5 2.5M15 16l2.5 2.5M21 16v6m0 0l-2.5-2.5M21 22l2.5-2.5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
+            el.insertBefore(span, el.firstChild);
+            return;
+          }
+        }
+        var all = root.querySelectorAll ? root.querySelectorAll('*') : [];
+        for (var j = 0; j < all.length; j++) {
+          if (all[j].shadowRoot) walk(all[j].shadowRoot);
+        }
+      };
+      walk(doc);
+    } catch (e) {}
+  }
+  injectTopBarIcon();
+  setTimeout(injectTopBarIcon, 400);
+
+  // 2. Xử lý đường dẫn hiện tại (loại bỏ tiền tố Home Assistant Ingress)
   var p = location.pathname.replace(/^\/api\/hassio_ingress\/[^\/]+/, '') || '/';
   var segs = p.split('/').filter(Boolean).map(function (s) {
     try { return decodeURIComponent(s); } catch (e) { return s; }
   });
 
-  // Title, back button, breadcrumbs (relative links, so they work through Ingress)
+  // 3. Tiêu đề, nút Back & Thanh đường dẫn (Breadcrumbs)
   document.getElementById('title').textContent = segs.length ? segs[segs.length - 1] : 'WebDAV Server Pro';
+  var nav = document.getElementById('nav');
   var back = document.getElementById('back');
   if (segs.length) {
     back.querySelector('span').textContent = segs.length > 1 ? segs[segs.length - 2] : 'Home';
-    back.style.visibility = 'visible';
+    nav.classList.add('show');
   }
-  var html = segs.length ? '<a href="' + up(segs.length) + '">Home</a>' : '<b>Home</b>';
+
+  var homeIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z"/></svg>';
+  var html = segs.length ? '<a href="' + up(segs.length) + '">' + homeIcon + 'Home</a>' : '<b data-copy="/">' + homeIcon + 'Home</b>';
   segs.forEach(function (s, i) {
     var last = i === segs.length - 1;
-    html += '<span class="sep">/</span>' + (last ? '<b>' + esc(s) + '</b>'
+    var fullPath = '/' + segs.slice(0, i + 1).join('/');
+    html += '<span class="sep">›</span>' + (last ? '<b data-copy="' + esc(fullPath) + '">' + esc(s) + '</b>'
       : '<a href="' + up(segs.length - 1 - i) + '">' + esc(s) + '</a>');
   });
-  document.getElementById('crumbs').innerHTML = html;
+  var crumbsEl = document.getElementById('crumbs');
+  crumbsEl.innerHTML = html;
+  crumbsEl.scrollLeft = crumbsEl.scrollWidth;
 
-  // Rows
+  // Bấm vào tên thư mục hiện tại trên Breadcrumbs để copy đường dẫn nhanh
+  crumbsEl.addEventListener('click', function (e) {
+    var b = e.target.closest('b[data-copy]');
+    if (b && navigator.clipboard) {
+      navigator.clipboard.writeText(b.getAttribute('data-copy'));
+      var t = document.getElementById('toast');
+      t.textContent = 'Copied: ' + b.getAttribute('data-copy');
+      t.classList.add('show');
+      setTimeout(function () { t.classList.remove('show'); }, 1800);
+    }
+  });
+
+  // 4. Chuẩn hóa danh sách hàng & Cho phép bấm vào toàn bộ hàng (Full-row click)
   var rows = [].slice.call(document.querySelectorAll('#list tbody tr'));
   var nd = 0, nf = 0;
   rows.forEach(function (tr) {
@@ -73,26 +128,66 @@
     if (isDir) { tr.classList.add('dir'); nd++; } else { nf++; }
     a.innerHTML = (isDir ? FOLDER : fileIcon(label)) + '<span class="nm">' + esc(label) + '</span>';
     tr.setAttribute('data-n', label.toLowerCase());
-  });
-  document.getElementById('stat').textContent = plural(nd, 'folder') + ', ' + plural(nf, 'file');
 
-  // Live search
-  document.getElementById('q').addEventListener('input', function () {
-    var v = this.value.trim().toLowerCase();
+    // Bấm vào bất kỳ vị trí nào trên dòng cũng mở folder/file
+    tr.addEventListener('click', function (e) {
+      if (e.target.closest('a')) return;
+      a.click();
+    });
+  });
+  document.getElementById('stat').textContent = plural(nd, 'folder') + ' • ' + plural(nf, 'file');
+
+  // 5. Tìm kiếm tức thì kèm nút Clear (x) và thông báo Empty
+  var qInput = document.getElementById('q');
+  var clearBtn = document.getElementById('clearBtn');
+  var emptyEl = document.getElementById('empty');
+
+  function filterRows() {
+    var v = qInput.value.trim().toLowerCase();
+    clearBtn.classList.toggle('show', v.length > 0);
+    var visibleCount = 0;
     rows.forEach(function (tr) {
       var n = tr.getAttribute('data-n');
       if (n === null) return;
-      tr.style.display = (!v || n.indexOf(v) !== -1) ? '' : 'none';
+      var match = !v || n.indexOf(v) !== -1;
+      tr.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
     });
+    emptyEl.classList.toggle('show', visibleCount === 0 && (nd + nf) > 0);
+  }
+  qInput.addEventListener('input', filterRows);
+  clearBtn.addEventListener('click', function () {
+    qInput.value = '';
+    filterRows();
+    qInput.focus();
   });
 
-  // Sorting
+  // 6. Sắp xếp (Name A-Z nằm dưới thanh Search)
   var s = document.getElementById('sort');
   var cur = location.search.replace(/^\?/, '');
   if (cur) { for (var i = 0; i < s.options.length; i++) if (s.options[i].value === cur) s.selectedIndex = i; }
   s.addEventListener('change', function () { location.search = '?' + this.value; });
 
-  // Workaround for the iOS WebView not repainting until the screen is touched
+  // 7. Chuyển đổi giao diện Danh sách (List) / Lưới (Grid) chuẩn iOS
+  var viewBtn = document.getElementById('viewBtn');
+  var viewIcon = document.getElementById('viewIcon');
+  var gridSvg = '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>';
+  var listSvg = '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>';
+
+  function applyView(mode) {
+    var isGrid = mode === 'grid';
+    document.body.classList.toggle('grid-mode', isGrid);
+    viewIcon.innerHTML = isGrid ? listSvg : gridSvg;
+  }
+  var savedView = localStorage.getItem('wpro_view') || 'list';
+  applyView(savedView);
+  viewBtn.addEventListener('click', function () {
+    savedView = document.body.classList.contains('grid-mode') ? 'list' : 'grid';
+    localStorage.setItem('wpro_view', savedView);
+    applyView(savedView);
+  });
+
+  // 8. Khắc phục lỗi iOS WebView không tự vẽ lại màn hình
   function kick() {
     document.body.style.opacity = '0.999';
     requestAnimationFrame(function () {
