@@ -1,7 +1,58 @@
   </div>
   <div id="empty" class="empty">No matching items found</div>
   <div id="stat" class="stat"></div>
-  <div id="toast" class="toast">Copied path to clipboard</div>
+
+  <!-- Thanh nổi Paste Here khi Copy / Cut -->
+  <div id="clipBar" class="clip-bar">
+    <div class="clip-info">
+      <b id="clipMode">COPIED</b>
+      <span id="clipName">filename.yaml</span>
+    </div>
+    <div class="clip-btns">
+      <button id="btnPaste" class="clip-btn paste" type="button">Paste Here</button>
+      <button id="btnCancelClip" class="clip-btn cancel" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <!-- iOS Bottom Action Sheet (Khi bấm nút ••• trên từng dòng) -->
+  <div id="backdrop" class="backdrop"></div>
+  <div id="sheet" class="sheet">
+    <div class="sheet-group">
+      <div id="sheetTitle" class="sheet-head">filename.yaml</div>
+      <button id="actEdit" class="sheet-btn" type="button"><span>Edit in Code Editor</span><span>✏️</span></button>
+      <button id="actCopy" class="sheet-btn" type="button"><span>Copy</span><span>📋</span></button>
+      <button id="actCut" class="sheet-btn" type="button"><span>Move (Cut)</span><span>✂️</span></button>
+      <button id="actRename" class="sheet-btn" type="button"><span>Rename</span><span>🏷️</span></button>
+      <button id="actDownload" class="sheet-btn" type="button"><span>Download</span><span>⬇️</span></button>
+      <button id="actDelete" class="sheet-btn danger" type="button"><span>Delete</span><span>🗑️</span></button>
+    </div>
+    <div class="sheet-group">
+      <button id="actCancelSheet" class="sheet-btn cancel" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Trình sửa Code & Xem Media toàn màn hình (Code Editor Modal) -->
+  <div id="editorModal" class="editor-modal">
+    <div class="ed-top">
+      <button id="edClose" class="ed-btn close" type="button">Close</button>
+      <div id="edTitle" class="ed-title">configuration.yaml</div>
+      <button id="edSave" class="ed-btn save" type="button">Save</button>
+    </div>
+    <div id="edSubbar" class="ed-subbar">
+      <span id="edStatus">UTF-8 • Ready</span>
+      <div class="ed-tools">
+        <button id="edTab" class="ed-chip" type="button">Insert Tab (2 spaces)</button>
+        <button id="edWrap" class="ed-chip" type="button">Word Wrap</button>
+      </div>
+    </div>
+    <div class="ed-body">
+      <div id="edLines" class="ed-lines">1</div>
+      <textarea id="edArea" class="ed-textarea" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+      <div id="edPreview" class="ed-preview"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast">Saved successfully</div>
 </div>
 <script>
 (function () {
@@ -28,6 +79,10 @@
     ['cfg','cfg','yaml yml json conf cfg ini toml env lock'],
     ['code','code','py js ts sh html css xml php sql']
   ];
+  var EDITABLE_EXT = /^(yaml|yml|json|conf|cfg|ini|toml|env|lock|txt|md|log|py|js|ts|sh|html|css|xml|php|sql|gitignore|dockerignore|htaccess)$/i;
+  var IMG_EXT = /^(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i;
+  var VID_EXT = /^(mp4|webm|mov|m4v)$/i;
+
   var MAP = {};
   T.forEach(function (t) { t[2].split(' ').forEach(function (e) { MAP[e] = [t[0], t[1]]; }); });
 
@@ -42,7 +97,14 @@
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function up(n) { return n > 0 ? new Array(n + 1).join('../') : './'; }
 
-  // 1. Tự động gắn App Icon vào thanh tiêu đề trên cùng của Home Assistant (chỗ nút 3 gạch ☰)
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  // 1. Gắn App Icon lên thanh tiêu đề Home Assistant (cạnh nút 3 gạch ☰)
   function injectTopBarIcon() {
     try {
       if (!window.parent || window.parent === window) return;
@@ -75,13 +137,26 @@
   injectTopBarIcon();
   setTimeout(injectTopBarIcon, 400);
 
-  // 2. Xử lý đường dẫn hiện tại (loại bỏ tiền tố Home Assistant Ingress)
+  // 2. Xử lý đường dẫn Ingress & WebDAV Root
+  var ingressMatch = location.pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
+  var ingressPrefix = ingressMatch ? ingressMatch[1] : '';
   var p = location.pathname.replace(/^\/api\/hassio_ingress\/[^\/]+/, '') || '/';
+  if (!/\/$/.test(p)) p += '/';
+
   var segs = p.split('/').filter(Boolean).map(function (s) {
     try { return decodeURIComponent(s); } catch (e) { return s; }
   });
 
-  // 3. Tiêu đề, nút Back & Thanh đường dẫn (Breadcrumbs)
+  function buildWebdavUrl(relPath) {
+    if (relPath.indexOf('/') === 0) return ingressPrefix + relPath;
+    return location.pathname.replace(/\/?$/, '/') + relPath;
+  }
+  // Header Destination cho lệnh COPY/MOVE của Nginx cần đường dẫn nội bộ (không gồm ingressPrefix)
+  function buildDestinationHeader(targetInternalPath) {
+    return location.origin + targetInternalPath;
+  }
+
+  // 3. Tiêu đề, Back & Breadcrumbs
   document.getElementById('title').textContent = segs.length ? segs[segs.length - 1] : 'WebDAV Server Pro';
   var nav = document.getElementById('nav');
   var back = document.getElementById('back');
@@ -102,19 +177,15 @@
   crumbsEl.innerHTML = html;
   crumbsEl.scrollLeft = crumbsEl.scrollWidth;
 
-  // Bấm vào tên thư mục hiện tại trên Breadcrumbs để copy đường dẫn nhanh
   crumbsEl.addEventListener('click', function (e) {
     var b = e.target.closest('b[data-copy]');
     if (b && navigator.clipboard) {
       navigator.clipboard.writeText(b.getAttribute('data-copy'));
-      var t = document.getElementById('toast');
-      t.textContent = 'Copied: ' + b.getAttribute('data-copy');
-      t.classList.add('show');
-      setTimeout(function () { t.classList.remove('show'); }, 1800);
+      showToast('Copied path: ' + b.getAttribute('data-copy'));
     }
   });
 
-  // 4. Chuẩn hóa danh sách hàng & Cho phép bấm vào toàn bộ hàng (Full-row click)
+  // 4. Chuẩn hóa danh sách hàng & Thêm nút ••• cho mỗi mục
   var rows = [].slice.call(document.querySelectorAll('#list tbody tr'));
   var nd = 0, nf = 0;
   rows.forEach(function (tr) {
@@ -129,15 +200,364 @@
     a.innerHTML = (isDir ? FOLDER : fileIcon(label)) + '<span class="nm">' + esc(label) + '</span>';
     tr.setAttribute('data-n', label.toLowerCase());
 
-    // Bấm vào bất kỳ vị trí nào trên dòng cũng mở folder/file
+    // Thêm nút ••• mở menu thao tác
+    var moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'more-btn';
+    moreBtn.title = 'Actions';
+    moreBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+    moreBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+      openActionSheet(label, href, isDir);
+    });
+    tr.appendChild(moreBtn);
+
+    // Bấm vào dòng: Nếu là Folder thì mở Folder, nếu là File code/ảnh thì mở Code Editor / Preview
     tr.addEventListener('click', function (e) {
-      if (e.target.closest('a')) return;
-      a.click();
+      if (e.target.closest('.more-btn')) return;
+      e.preventDefault();
+      if (isDir) {
+        location.href = href;
+      } else {
+        var extMatch = /\.([a-z0-9]+)$/i.exec(label);
+        var ext = extMatch ? extMatch[1].toLowerCase() : '';
+        if (EDITABLE_EXT.test(ext) || EDITABLE_EXT.test(label) || !ext) {
+          openCodeEditor(label, href, 'code');
+        } else if (IMG_EXT.test(ext)) {
+          openCodeEditor(label, href, 'img');
+        } else if (VID_EXT.test(ext)) {
+          openCodeEditor(label, href, 'vid');
+        } else {
+          openActionSheet(label, href, false);
+        }
+      }
     });
   });
   document.getElementById('stat').textContent = plural(nd, 'folder') + ' • ' + plural(nf, 'file');
 
-  // 5. Tìm kiếm tức thì kèm nút Clear (x) và thông báo Empty
+  // 5. Trình sửa Code (Code Editor) & Xem Ảnh/Video
+  var editorModal = document.getElementById('editorModal');
+  var edTitle = document.getElementById('edTitle');
+  var edArea = document.getElementById('edArea');
+  var edLines = document.getElementById('edLines');
+  var edPreview = document.getElementById('edPreview');
+  var edSave = document.getElementById('edSave');
+  var edSubbar = document.getElementById('edSubbar');
+  var edStatus = document.getElementById('edStatus');
+  var currentEditHref = '';
+
+  function updateLineNumbers() {
+    var count = edArea.value.split('\n').length;
+    var arr = [];
+    for (var i = 1; i <= count; i++) arr.push(i);
+    edLines.innerHTML = arr.join('<br>');
+  }
+  edArea.addEventListener('input', updateLineNumbers);
+  edArea.addEventListener('scroll', function () { edLines.scrollTop = edArea.scrollTop; });
+  edArea.addEventListener('keydown', function (e) {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      var start = this.selectionStart, end = this.selectionEnd;
+      this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+      this.selectionStart = this.selectionEnd = start + 2;
+      updateLineNumbers();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveCurrentFile();
+    }
+  });
+
+  document.getElementById('edTab').addEventListener('click', function () {
+    var start = edArea.selectionStart, end = edArea.selectionEnd;
+    edArea.value = edArea.value.substring(0, start) + '  ' + edArea.value.substring(end);
+    edArea.selectionStart = edArea.selectionEnd = start + 2;
+    edArea.focus();
+    updateLineNumbers();
+  });
+  document.getElementById('edWrap').addEventListener('click', function () {
+    var wrapped = edArea.style.whiteSpace === 'pre-wrap';
+    edArea.style.whiteSpace = wrapped ? 'pre' : 'pre-wrap';
+    showToast(wrapped ? 'Word Wrap: Off' : 'Word Wrap: On');
+  });
+
+  function openCodeEditor(label, href, mode) {
+    currentEditHref = href;
+    edTitle.textContent = label;
+    editorModal.classList.add('show');
+
+    if (mode === 'img' || mode === 'vid') {
+      edArea.style.display = 'none';
+      edLines.style.display = 'none';
+      edSubbar.style.display = 'none';
+      edSave.style.display = 'none';
+      edPreview.style.display = 'grid';
+      edPreview.innerHTML = mode === 'img'
+        ? '<img src="' + href + '" alt="' + esc(label) + '">'
+        : '<video src="' + href + '" controls autoplay playsinline></video>';
+      return;
+    }
+
+    edPreview.style.display = 'none';
+    edPreview.innerHTML = '';
+    edArea.style.display = 'block';
+    edLines.style.display = 'block';
+    edSubbar.style.display = 'flex';
+    edSave.style.display = 'inline-flex';
+    edArea.value = 'Loading file content...';
+    edStatus.textContent = 'Loading...';
+
+    fetch(href, { cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(function (txt) {
+        edArea.value = txt;
+        updateLineNumbers();
+        edStatus.textContent = 'UTF-8 • ' + txt.split('\n').length + ' lines';
+      })
+      .catch(function (err) {
+        edArea.value = '';
+        edStatus.textContent = 'New or empty file (' + err.message + ')';
+        updateLineNumbers();
+      });
+  }
+
+  function saveCurrentFile() {
+    if (!currentEditHref) return;
+    edSave.disabled = true;
+    edStatus.textContent = 'Saving...';
+    fetch(currentEditHref, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      body: edArea.value
+    }).then(function (r) {
+      edSave.disabled = false;
+      if (r.ok || r.status === 201 || r.status === 204) {
+        edStatus.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+        showToast('✅ File saved successfully');
+      } else {
+        throw new Error('HTTP ' + r.status);
+      }
+    }).catch(function (err) {
+      edSave.disabled = false;
+      edStatus.textContent = 'Save failed!';
+      alert('Failed to save file: ' + err.message);
+    });
+  }
+
+  edSave.addEventListener('click', saveCurrentFile);
+  document.getElementById('edClose').addEventListener('click', function () {
+    editorModal.classList.remove('show');
+    edPreview.innerHTML = '';
+  });
+
+  // 6. Các nút Tạo File mới, Tạo Folder mới, Upload File
+  document.getElementById('btnNewFile').addEventListener('click', function () {
+    var name = prompt('Enter new file name (e.g. script.yaml, notes.txt):');
+    if (!name || !name.trim()) return;
+    var clean = name.trim().replace(/^\/+/, '');
+    var url = buildWebdavUrl(encodeURIComponent(clean));
+    fetch(url, { method: 'PUT', body: '' }).then(function (r) {
+      if (r.ok || r.status === 201 || r.status === 204) {
+        openCodeEditor(clean, encodeURIComponent(clean), 'code');
+      } else {
+        alert('Could not create file (HTTP ' + r.status + ')');
+      }
+    });
+  });
+
+  document.getElementById('btnNewDir').addEventListener('click', function () {
+    var name = prompt('Enter new folder name:');
+    if (!name || !name.trim()) return;
+    var clean = name.trim().replace(/^\/+|\/+$/g, '');
+    var url = buildWebdavUrl(encodeURIComponent(clean) + '/');
+    fetch(url, { method: 'MKCOL' }).then(function (r) {
+      if (r.ok || r.status === 201) {
+        showToast('📁 Folder created');
+        setTimeout(function () { location.reload(); }, 400);
+      } else {
+        alert('Could not create folder (HTTP ' + r.status + ')');
+      }
+    });
+  });
+
+  var fileInput = document.getElementById('fileInput');
+  document.getElementById('btnUpload').addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    var files = [].slice.call(this.files);
+    if (!files.length) return;
+    showToast('⏳ Uploading ' + files.length + ' file(s)...');
+    Promise.all(files.map(function (f) {
+      return fetch(buildWebdavUrl(encodeURIComponent(f.name)), {
+        method: 'PUT',
+        body: f
+      });
+    })).then(function () {
+      showToast('✅ Upload complete!');
+      setTimeout(function () { location.reload(); }, 500);
+    }).catch(function (err) {
+      alert('Upload error: ' + err.message);
+    });
+  });
+
+  // 7. Menu thao tác iOS Action Sheet (Copy, Cut, Rename, Delete, Download)
+  var backdrop = document.getElementById('backdrop');
+  var sheet = document.getElementById('sheet');
+  var selectedItem = null;
+
+  function openActionSheet(name, href, isDir) {
+    selectedItem = {
+      name: name,
+      href: href,
+      isDir: isDir,
+      internalPath: p + encodeURIComponent(name) + (isDir ? '/' : '')
+    };
+    document.getElementById('sheetTitle').textContent = name + (isDir ? '/' : '');
+    document.getElementById('actEdit').style.display = isDir ? 'none' : 'flex';
+    document.getElementById('actDownload').style.display = isDir ? 'none' : 'flex';
+    backdrop.classList.add('show');
+    sheet.classList.add('show');
+  }
+  function closeActionSheet() {
+    backdrop.classList.remove('show');
+    sheet.classList.remove('show');
+  }
+  backdrop.addEventListener('click', closeActionSheet);
+  document.getElementById('actCancelSheet').addEventListener('click', closeActionSheet);
+
+  document.getElementById('actEdit').addEventListener('click', function () {
+    if (!selectedItem) return;
+    closeActionSheet();
+    openCodeEditor(selectedItem.name, selectedItem.href, 'code');
+  });
+
+  document.getElementById('actDownload').addEventListener('click', function () {
+    if (!selectedItem) return;
+    closeActionSheet();
+    var link = document.createElement('a');
+    link.href = selectedItem.href;
+    link.download = selectedItem.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  });
+
+  document.getElementById('actRename').addEventListener('click', function () {
+    if (!selectedItem) return;
+    var item = selectedItem;
+    closeActionSheet();
+    var newName = prompt('Rename "' + item.name + '" to:', item.name);
+    if (!newName || !newName.trim() || newName.trim() === item.name) return;
+    var destInternal = p + encodeURIComponent(newName.trim()) + (item.isDir ? '/' : '');
+    fetch(buildWebdavUrl(item.href), {
+      method: 'MOVE',
+      headers: {
+        'Destination': buildDestinationHeader(destInternal),
+        'Overwrite': 'T'
+      }
+    }).then(function (r) {
+      if (r.ok || r.status === 201 || r.status === 204) {
+        showToast('🏷️ Renamed successfully');
+        setTimeout(function () { location.reload(); }, 400);
+      } else {
+        alert('Rename failed (HTTP ' + r.status + ')');
+      }
+    });
+  });
+
+  document.getElementById('actDelete').addEventListener('click', function () {
+    if (!selectedItem) return;
+    var item = selectedItem;
+    closeActionSheet();
+    if (!confirm('Are you sure you want to delete "' + item.name + '"?')) return;
+    fetch(buildWebdavUrl(item.href), { method: 'DELETE' }).then(function (r) {
+      if (r.ok || r.status === 200 || r.status === 204) {
+        showToast('🗑️ Deleted "' + item.name + '"');
+        setTimeout(function () { location.reload(); }, 400);
+      } else {
+        alert('Delete failed (HTTP ' + r.status + ')');
+      }
+    });
+  });
+
+  // 8. Hệ thống Clipboard (Copy / Move / Paste giữa các thư mục)
+  var clipBar = document.getElementById('clipBar');
+  var clipModeEl = document.getElementById('clipMode');
+  var clipNameEl = document.getElementById('clipName');
+
+  function refreshClipBar() {
+    try {
+      var raw = sessionStorage.getItem('wpro_clip');
+      if (!raw) { clipBar.classList.remove('show'); return; }
+      var clip = JSON.parse(raw);
+      clipModeEl.textContent = clip.mode === 'MOVE' ? '✂️ READY TO MOVE' : '📋 COPIED TO CLIPBOARD';
+      clipNameEl.textContent = clip.name + ' (from ' + clip.srcInternal + ')';
+      clipBar.classList.add('show');
+    } catch (e) { clipBar.classList.remove('show'); }
+  }
+  refreshClipBar();
+
+  document.getElementById('actCopy').addEventListener('click', function () {
+    if (!selectedItem) return;
+    sessionStorage.setItem('wpro_clip', JSON.stringify({
+      mode: 'COPY',
+      name: selectedItem.name,
+      isDir: selectedItem.isDir,
+      srcInternal: selectedItem.internalPath
+    }));
+    closeActionSheet();
+    refreshClipBar();
+    showToast('📋 Copied "' + selectedItem.name + '"');
+  });
+
+  document.getElementById('actCut').addEventListener('click', function () {
+    if (!selectedItem) return;
+    sessionStorage.setItem('wpro_clip', JSON.stringify({
+      mode: 'MOVE',
+      name: selectedItem.name,
+      isDir: selectedItem.isDir,
+      srcInternal: selectedItem.internalPath
+    }));
+    closeActionSheet();
+    refreshClipBar();
+    showToast('✂️ Cut "' + selectedItem.name + '" — Navigate to target folder & tap Paste');
+  });
+
+  document.getElementById('btnCancelClip').addEventListener('click', function () {
+    sessionStorage.removeItem('wpro_clip');
+    refreshClipBar();
+  });
+
+  document.getElementById('btnPaste').addEventListener('click', function () {
+    var raw = sessionStorage.getItem('wpro_clip');
+    if (!raw) return;
+    var clip = JSON.parse(raw);
+    var destInternal = p + encodeURIComponent(clip.name) + (clip.isDir ? '/' : '');
+    if (destInternal === clip.srcInternal) {
+      var copyName = prompt('Paste in same folder as:', 'copy_of_' + clip.name);
+      if (!copyName || !copyName.trim()) return;
+      destInternal = p + encodeURIComponent(copyName.trim()) + (clip.isDir ? '/' : '');
+    }
+    fetch(ingressPrefix + clip.srcInternal, {
+      method: clip.mode,
+      headers: {
+        'Destination': buildDestinationHeader(destInternal),
+        'Overwrite': 'T'
+      }
+    }).then(function (r) {
+      if (r.ok || r.status === 201 || r.status === 204) {
+        if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip');
+        showToast('✅ Pasted successfully!');
+        setTimeout(function () { location.reload(); }, 400);
+      } else {
+        alert(clip.mode + ' failed (HTTP ' + r.status + ')');
+      }
+    });
+  });
+
+  // 9. Tìm kiếm, Sắp xếp & Đổi giao diện List/Grid
   var qInput = document.getElementById('q');
   var clearBtn = document.getElementById('clearBtn');
   var emptyEl = document.getElementById('empty');
@@ -162,13 +582,11 @@
     qInput.focus();
   });
 
-  // 6. Sắp xếp (Name A-Z nằm dưới thanh Search)
   var s = document.getElementById('sort');
   var cur = location.search.replace(/^\?/, '');
   if (cur) { for (var i = 0; i < s.options.length; i++) if (s.options[i].value === cur) s.selectedIndex = i; }
   s.addEventListener('change', function () { location.search = '?' + this.value; });
 
-  // 7. Chuyển đổi giao diện Danh sách (List) / Lưới (Grid) chuẩn iOS
   var viewBtn = document.getElementById('viewBtn');
   var viewIcon = document.getElementById('viewIcon');
   var gridSvg = '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>';
@@ -187,7 +605,6 @@
     applyView(savedView);
   });
 
-  // 8. Khắc phục lỗi iOS WebView không tự vẽ lại màn hình
   function kick() {
     document.body.style.opacity = '0.999';
     requestAnimationFrame(function () {
@@ -198,8 +615,6 @@
   kick();
   window.addEventListener('load', kick);
   window.addEventListener('pageshow', kick);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) kick(); });
-  setTimeout(kick, 150); setTimeout(kick, 600);
 })();
 </script>
 </body>
