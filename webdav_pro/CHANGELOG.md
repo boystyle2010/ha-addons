@@ -1,3 +1,6 @@
+## [2.0.15] - 2026-11-08
+- **Maintenance & Improvements:** Rename AppArmor.txt to apparmor.txt
+
 ## [2.0.14] - 2026-11-08
 - **Maintenance & Improvements:** Update footer.html
 
