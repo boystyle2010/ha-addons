@@ -1,0 +1,61 @@
+name: Builder & Auto-Updater
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # Tự động kiểm tra bản cập nhật Alpine Base mới vào 08:00 sáng Chủ Nhật hàng tuần
+    - cron: "0 8 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check_and_build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check Latest Home Assistant Alpine Base
+        id: alpine_check
+        run: |
+          CURRENT_BASE=$(grep -oP 'aarch64-base:\K[0-9.]+' webdav_pro/build.yaml)
+          echo "Current Alpine Base: $CURRENT_BASE"
+
+          # Nếu chạy theo lịch định kỳ (schedule), tự động tăng patch version để rebuild gói bảo mật mới nhất của Alpine & Nginx
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            CURRENT_VER=$(grep -oP '^version: "\K[0-9.]+' webdav_pro/config.yaml)
+            IFS='.' read -r major minor patch <<< "$CURRENT_VER"
+            NEW_VER="${major}.${minor}.$((patch + 1))"
+            TODAY=$(date +%Y-%m-%d)
+
+            sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" webdav_pro/config.yaml
+            sed -i "1s/^/## [${NEW_VER}] - ${TODAY}\n- Tự động cập nhật gói bảo mật Alpine Linux và Nginx mới nhất.\n\n/" webdav_pro/CHANGELOG.md
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add webdav_pro/config.yaml webdav_pro/CHANGELOG.md
+            git commit -m "chore: bump version to ${NEW_VER} for security packages update"
+            git push
+          fi
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Publish Home Assistant Add-on (Multi-Arch)
+        uses: home-assistant/builder@2024.03.1
+        with:
+          args: |
+            --all \
+            --target webdav_pro \
+            --docker-hub ghcr.io/${{ github.repository_owner }} \
+            --docker-user ${{ github.actor }} \
+            --docker-password ${{ secrets.GITHUB_TOKEN }}
