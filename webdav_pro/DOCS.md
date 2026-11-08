@@ -1,58 +1,55 @@
-# Home Assistant Add-on: WebDAV Server Pro
+# Home Assistant Add-on: WebDAV Server Pro — Documentation
 
-A high-performance, security-hardened **WebDAV Server** for Home Assistant built on Alpine Linux and Nginx (`ngx_http_dav_ext_module` & `ngx_http_fancyindex_module`). Designed for seamless file management across iOS/iPadOS Files, macOS Finder, Windows Explorer, Rclone, and Cloudflare Zero Trust Tunnels.
-
----
-
-## ✨ Key Features
-
-- **Full WebDAV Class 1 & 2 Compliance:** Supports `PROPFIND`, `OPTIONS`, `PUT`, `DELETE`, `MKCOL`, `COPY`, `MOVE`, `LOCK`, and `UNLOCK` with shared memory lock zones for native macOS Finder and iOS Files compatibility.
-- **Unified System Access:** Unlocks read/write access to all Home Assistant directories:
-  - `/config` (`/homeassistant`)
-  - `/addon_configs`
-  - `/addons`
-  - `/backup`
-  - `/media`
-  - `/share`
-  - `/ssl`
-- **Built-in Dark Mode Web UI & Ingress:** Features a custom **FancyIndex Dark Theme** with real-time file filtering, accessible directly from the Home Assistant sidebar via Ingress (zero login prompts) or any web browser.
-- **Multi-User & Granular Permissions:** Bcrypt-encrypted authentication (`htpasswd -B`), built-in brute-force rate limiting, per-folder Read-Only toggles, and user-level access restrictions.
-- **Maximum Security Rating:** Runs with a dedicated **AppArmor** profile without requiring privileged container permissions.
+**WebDAV Server Pro** combines a compliant **Class 1 & 2 WebDAV Server** with an **iOS-styled File Manager & Cloud Code IDE** built directly into your Home Assistant sidebar.
 
 ---
 
-## 🚀 Connection Guide
+## 🛠️ Built-in Web UI & Code IDE (Ingress)
+
+Click **WebDAV Pro** in your Home Assistant sidebar to open the full workspace without entering a password:
+
+1. **Ace Code Editor (Syntax Highlighting):**
+   - Tap any `.yaml`, `.py`, `.sh`, `.json`, `.js`, `.html`, `.css`, `.conf`, `.log`, or `.txt` file to open the built-in IDE.
+   - Includes **Undo / Redo**, **Find & Replace (`🔍 Find`)**, **2-Space Tab Indentation**, **Line Comment Toggle (`# Toggle`)**, **Word Wrap**, and **YAML Syntax Validation** before saving.
+   - Press `Cmd + S` (macOS) / `Ctrl + S` (Windows) or tap **Save** to write changes directly via WebDAV `PUT`.
+2. **Live Markdown Preview (`👁️ Preview`):**
+   - Opening any `.md` file automatically renders formatted GitHub-flavored Markdown. Tap **✏️ Edit Code** in the top bar to switch between raw code and live preview.
+3. **File & Batch Management:**
+   - **Action Bar:** Create a **New File**, **New Folder**, or **Upload** multiple files with a real-time percentage progress bar.
+   - **Context Menu (`•••`):** Open in Code Editor, Copy, Move (Cut), Duplicate, Rename, Copy Full Path, Download, or Delete.
+   - **Multi-Select Mode (`Select`):** Select multiple files and folders at once to perform batch Copy, Move, or Delete operations.
+
+---
+
+## 🌐 Connecting External Devices (WebDAV Port `8080`)
 
 ### 1. Local Network (LAN)
-Connect using your favorite WebDAV client or browser:
 - **Unified Root URL:** `http://<HOME_ASSISTANT_IP>:8080/`
-- **Direct Folder URL:** `http://<HOME_ASSISTANT_IP>:8080/config/`
+- **Individual Share URL:** `http://<HOME_ASSISTANT_IP>:8080/config/`
 
-### 2. Remote Access via Cloudflare Tunnel (Zero Trust)
-Because WebDAV operates purely over HTTP/HTTPS, it works seamlessly over Cloudflare Tunnels without opening router ports or running a VPN:
-1. Open your **Cloudflare Zero Trust Dashboard** -> **Networks** -> **Tunnels**.
-2. Add a **Public Hostname** (e.g., `dav.yourdomain.com`).
-3. Set the Service Type to **HTTP** and URL to `localhost:8080` (or `<HOME_ASSISTANT_IP>:8080`).
-4. Connect from anywhere using `https://dav.yourdomain.com/`.
+### 2. Remote Access via Cloudflare Zero Trust Tunnel
+1. Open **Cloudflare Zero Trust** -> **Networks** -> **Tunnels**.
+2. Add a Public Hostname (e.g., `dav.yourdomain.com`) pointing to `http://localhost:8080`.
+3. Mount `https://dav.yourdomain.com/` from anywhere in the world over HTTPS.
 
-### 3. Connecting from Apple Devices & PC
-- **iPhone / iPad (Files App, FE File Explorer, Documents):** Tap the `...` menu -> **Connect to Server** -> Enter `http://<HOME_ASSISTANT_IP>:8080/` (or your `https://` domain) -> Enter your configured username and password.
-- **macOS (Finder):** Press `Cmd + K` -> Enter `http://<HOME_ASSISTANT_IP>:8080/` -> Click **Connect**.
-- **Windows (File Explorer):** Right-click **This PC** -> **Map network drive** -> Enter the URL and check *Connect using different credentials*.
+### 3. Mounting on Apple & Windows Devices
+- **iOS / iPadOS (Files App):** Tap `•••` -> **Connect to Server** -> Enter URL -> Authenticate with your configured `users` credentials.
+- **macOS (Finder):** Press `Cmd + K` -> Enter URL -> Connect.
+- **Windows (File Explorer):** Right-click **This PC** -> **Map network drive** -> Enter URL.
 
 ---
 
-## ⚙️ Configuration Options
+## ⚙️ Configuration Reference
 
 | Option | Default | Description |
 | :--- | :--- | :--- |
-| `unified_root` | `true` | Combines all configured shares under `/` so you can mount a single drive and move files across directories. Set to `false` to enforce individual `read_only` or `allowed_users` rules per share. |
-| `ssl` | `false` | Enables native HTTPS on port `8080` using certificates in `/ssl`. Leave `false` if using Cloudflare Tunnel or an external reverse proxy. |
-| `certfile` | `fullchain.pem` | SSL certificate filename in `/ssl`. |
-| `keyfile` | `privkey.pem` | SSL private key filename in `/ssl`. |
-| `max_upload_size` | `"0"` | Maximum allowed upload size (`"0"` = unlimited). |
-| `fancy_ui` | `true` | Enables the modern Dark Mode Web UI with instant search. |
-| `show_dotfiles` | `true` | Displays hidden files and folders (e.g., `.storage`). |
-| `log_level` | `info` | Nginx error log verbosity (`debug`, `info`, `notice`, `warn`, `error`). |
-| `users` | `[...]` | List of `{ username, password }` objects. |
-| `shares` | `[...]` | List of mapped directories `{ name, path, read_only, allowed_users }`. |
+| `unified_root` | `true` | Mounts all shares under `/` so you can move files across directories. Set to `false` to enforce per-share `read_only` or `allowed_users` rules. |
+| `ssl` | `false` | Enables native HTTPS on port `8080`. Keep `false` when using Cloudflare Tunnel. |
+| `certfile` | `fullchain.pem` | SSL certificate in `/ssl`. |
+| `keyfile` | `privkey.pem` | SSL private key in `/ssl`. |
+| `max_upload_size` | `"0"` | Maximum file upload size (`"0"` = unlimited). |
+| `fancy_ui` | `true` | Enables the iOS Dark Mode Web UI and built-in Code IDE. |
+| `show_dotfiles` | `true` | Shows hidden system files and folders (e.g., `.storage`). |
+| `log_level` | `info` | Nginx log verbosity (`debug`, `info`, `notice`, `warn`, `error`). |
+| `users` | `[...]` | List of `{ username, password }` accounts (hashed with Bcrypt). |
+| `shares` | `[...]` | Mapped directories (`config`, `addon_configs`, `addons`, `backup`, `media`, `share`, `ssl`). |
