@@ -6,7 +6,7 @@
             const input = document.createElement('input');
             input.type = 'text';
             input.className = 'search-box';
-            input.placeholder = '🔍 Tìm nhanh file hoặc thư mục...';
+            input.placeholder = '🔍 Filter files or folders...';
             input.addEventListener('keyup', function() {
                 const filter = input.value.toLowerCase();
                 const rows = document.querySelectorAll('#list tbody tr');
