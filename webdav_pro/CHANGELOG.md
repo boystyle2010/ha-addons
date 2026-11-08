@@ -1,3 +1,6 @@
+## [2.0.1] - 2026-11-08
+- **Maintenance & Improvements:** Update config.yaml
+
 ## [2.0.0] - 2026-11-08
 - **Upstream Update:** Upgraded Nginx to `1.30.6-r0` on Home Assistant Alpine Base `3.24`.
 - Updated `dav-ext` and `fancyindex` modules with the latest upstream security patches.
