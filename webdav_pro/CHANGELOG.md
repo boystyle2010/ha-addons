@@ -1,3 +1,6 @@
+## [2.0.6] - 2026-11-08
+- **Maintenance & Improvements:** Update Dockerfile
+
 ## [2.0.5] - 2026-11-08
 - **Maintenance & Improvements:** Create footer.html
 
