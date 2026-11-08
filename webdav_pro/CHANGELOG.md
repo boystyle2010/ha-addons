@@ -1,3 +1,6 @@
+## [2.0.4] - 2026-11-08
+- **Maintenance & Improvements:** Create header.html
+
 ## [2.0.3] - 2026-11-08
 - **Maintenance & Improvements:** Delete webdav_pro/fancyindex/footer.html
 
