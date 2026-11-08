@@ -29,114 +29,14 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: 2. Kiểm tra phiên bản Alpine Base & Nginx Upstream mới nhất
-        id: check_upstream
+      - name: 2. Generate True Transparent PNG Icon & Logo
+        id: gen_icons
         run: |
           set -e
-          CONFIG_FILE="webdav_pro/config.yaml"
-          BUILD_FILE="webdav_pro/build.yaml"
-
-          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1)
-          CURRENT_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1)
-
-          echo "🔹 Alpine hiện tại: $CURRENT_ALPINE"
-          echo "🔹 Nginx hiện tại:  $CURRENT_NGINX"
-
-          # 1. Lấy phiên bản Alpine mới nhất từ kho Alpine chính thức
-          LATEST_ALPINE=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/latest-releases.yaml" | grep -oP 'version:\s*\K[0-9]+\.[0-9]+' | head -n1 || echo "$CURRENT_ALPINE")
-          if [ -z "$LATEST_ALPINE" ]; then LATEST_ALPINE="$CURRENT_ALPINE"; fi
-
-          # Kiểm tra xem ghcr.io/home-assistant/aarch64-base:<LATEST_ALPINE> đã tồn tại chưa
-          if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" >/dev/null 2>&1; then
-            echo "⚠️ Home Assistant chưa phát hành base image cho Alpine ${LATEST_ALPINE}, giữ nguyên ${CURRENT_ALPINE}"
-            LATEST_ALPINE="$CURRENT_ALPINE"
-          fi
-
-          # 2. Lấy phiên bản gói Nginx mới nhất trong nhánh Alpine đó
-          LATEST_NGINX=$(docker run --rm "ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" sh -c "apk update >/dev/null 2>&1 && apk info -v nginx 2>/dev/null | sed 's/^nginx-//'" || echo "$CURRENT_NGINX")
-          if [ -z "$LATEST_NGINX" ]; then LATEST_NGINX="$CURRENT_NGINX"; fi
-
-          echo "🔸 Alpine mới nhất: $LATEST_ALPINE"
-          echo "🔸 Nginx mới nhất:  $LATEST_NGINX"
-
-          echo "latest_alpine=$LATEST_ALPINE" >> $GITHUB_OUTPUT
-          echo "latest_nginx=$LATEST_NGINX" >> $GITHUB_OUTPUT
-
-          if [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ] || [ "$LATEST_NGINX" != "$CURRENT_NGINX" ]; then
-            echo "upstream_changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "upstream_changed=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: 3. Calculate Version & Update Changelog (Major for Upstream / Patch for Local Edit)
-        id: calc_version
-        run: |
-          set -e
-          CONFIG_FILE="webdav_pro/config.yaml"
-          BUILD_FILE="webdav_pro/build.yaml"
-          CHANGELOG_FILE="webdav_pro/CHANGELOG.md"
-
-          CURRENT_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VER"
-
-          UPSTREAM_CHANGED="${{ steps.check_upstream.outputs.upstream_changed }}"
-          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
-          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
-          TODAY=$(date +%Y-%m-%d)
-
-          NEED_COMMIT="false"
-
-          if [ "$UPSTREAM_CHANGED" = "true" ]; then
-            # Bump Major Version on upstream Nginx or Alpine Base update (e.g., 1.0.1 -> 2.0.0)
-            NEW_MAJOR=$((MAJOR + 1))
-            NEW_VER="${NEW_MAJOR}.0.0"
-            NEED_COMMIT="true"
-
-            sed -i "s/aarch64-base:[0-9.]\+/aarch64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
-            sed -i "s/amd64-base:[0-9.]\+/amd64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
-            sed -i "s/NGINX_VERSION: \".*\"/NGINX_VERSION: \"${LATEST_NGINX}\"/g" "$BUILD_FILE"
-            sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
-
-            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Upstream Update:** Upgraded Nginx to \`${LATEST_NGINX}\` on Home Assistant Alpine Base \`${LATEST_ALPINE}\`.\n- Updated \`dav-ext\` and \`fancyindex\` modules with the latest upstream security patches.\n"
-            awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
-            echo "✅ Bumped Major Version to ${NEW_VER} (Upstream Release)"
-
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            # Check if version was already manually bumped in the push commit
-            PREV_VER=$(git show HEAD~1:webdav_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' || echo "")
-            if [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ]; then
-              # Local code modified without manual version change -> Auto-bump Patch Version (e.g., 1.0.0 -> 1.0.1)
-              NEW_PATCH=$((PATCH + 1))
-              NEW_VER="${MAJOR}.${MINOR}.${NEW_PATCH}"
-              NEED_COMMIT="true"
-
-              COMMIT_MSG=$(git log -1 --pretty=%B | head -n1)
-              sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
-
-              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Maintenance & Improvements:** ${COMMIT_MSG}\n"
-              awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
-              echo "✅ Auto-bumped Patch Version to ${NEW_VER} (Local Commit)"
-            fi
-          fi
-
-          echo "need_commit=$NEED_COMMIT" >> $GITHUB_OUTPUT
-
-      - name: 4. Build thử nghiệm Dockerfile để đảm bảo không lỗi trước khi Commit
-        run: |
-          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
-          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
-          docker build \
-            --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" \
-            --build-arg NGINX_VERSION="${LATEST_NGINX}" \
-            -t webdav-pro-verify:latest \
-            ./webdav_pro
-
-      - name: Generate True Transparent PNG Icon & Logo
-        run: |
+          ICONS_CREATED="false"
           if [ ! -f "webdav_pro/icon.png" ] || [ ! -f "webdav_pro/logo.png" ]; then
             sudo apt-get update && sudo apt-get install -y librsvg2-bin
 
-            # 1. Tạo SVG cho icon.png (512x512, nền trong suốt)
             cat << 'EOF' > /tmp/icon.svg
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
               <defs>
@@ -149,19 +49,14 @@ jobs:
                   <stop offset="100%" stop-color="#0284c7"/>
                 </linearGradient>
               </defs>
-              <!-- Bo góc chuẩn iOS/HA với viền ngoài trong suốt -->
               <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#bg)" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.4"/>
-              <!-- Biểu tượng Folder -->
               <path d="M116 156 C116 138 130 124 148 124 L220 124 L252 156 L364 156 C382 156 396 170 396 188 L396 356 C396 374 382 388 364 388 L148 388 C130 388 116 374 116 356 Z" fill="none" stroke="url(#accent)" stroke-width="20" stroke-linejoin="round"/>
-              <!-- Đám mây & Mũi tên đồng bộ WebDAV -->
               <path d="M210 304 H306 C326 304 342 288 342 268 C342 250 329 235 311 233 C305 206 281 186 252 186 C220 186 194 211 193 243 C177 247 166 261 166 278 C166 293 178 304 194 304 Z" fill="url(#accent)" fill-opacity="0.25" stroke="#38bdf8" stroke-width="14" stroke-linejoin="round"/>
-              <!-- Mũi tên lên/xuống -->
               <path d="M236 250 V330 M216 270 L236 250 L256 270" fill="none" stroke="#f8fafc" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M280 330 V250 M260 310 L280 330 L300 310" fill="none" stroke="#38bdf8" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            EOF
+          EOF
 
-            # 2. Tạo SVG cho logo.png (1024x512, nền trong suốt)
             cat << 'EOF' > /tmp/logo.svg
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" width="1024" height="512">
               <defs>
@@ -181,20 +76,126 @@ jobs:
               <text x="480" y="245" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="108" font-weight="800" fill="#38bdf8">WebDAV</text>
               <text x="480" y="355" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="86" font-weight="700" fill="#0ea5e9">Server Pro</text>
             </svg>
-            EOF
+          EOF
 
-            # Xuất ra file PNG 32-bit chuẩn với nền trong suốt
             rsvg-convert -w 256 -h 256 /tmp/icon.svg -o webdav_pro/icon.png
             rsvg-convert -w 512 -h 256 /tmp/logo.svg -o webdav_pro/logo.png
+            ICONS_CREATED="true"
+            echo "✅ Đã tạo thành công webdav_pro/icon.png và webdav_pro/logo.png"
+          fi
+          echo "icons_created=${ICONS_CREATED}" >> "$GITHUB_OUTPUT"
+
+      - name: 3. Check Latest Alpine Base & Nginx Upstream Version
+        id: check_upstream
+        run: |
+          set -e
+          BUILD_FILE="webdav_pro/build.yaml"
+
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+          CURRENT_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+
+          echo "🔹 Alpine hiện tại: $CURRENT_ALPINE"
+          echo "🔹 Nginx hiện tại:  $CURRENT_NGINX"
+
+          # 1. Lấy phiên bản Alpine mới nhất
+          LATEST_ALPINE=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/latest-releases.yaml" | grep -oP 'version:\s*\K[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "$CURRENT_ALPINE")
+          if [ -z "$LATEST_ALPINE" ]; then LATEST_ALPINE="$CURRENT_ALPINE"; fi
+
+          # Xác thực image trên ghcr.io của Home Assistant
+          if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" >/dev/null 2>&1; then
+            echo "⚠️ Home Assistant chưa có base image cho Alpine ${LATEST_ALPINE}, giữ nguyên ${CURRENT_ALPINE}"
+            LATEST_ALPINE="$CURRENT_ALPINE"
           fi
 
-      - name: 5. Commit & Push thay đổi lên nhánh Main
-        if: steps.calc_version.outputs.need_commit == 'true'
+          # 2. Lấy chính xác phiên bản gói nginx trực tiếp từ APKINDEX của Alpine (Không dùng docker run để tránh s6-overlay logs)
+          LATEST_NGINX=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/v${LATEST_ALPINE}/main/aarch64/APKINDEX.tar.gz" | tar -Oxz APKINDEX 2>/dev/null | awk -F: '$1=="P" && $2=="nginx" {getline; if ($1=="V") print $2}' | head -n1 | tr -d '[:space:]' || true)
+
+          # Kiểm tra định dạng version hợp lệ (chỉ gồm số, dấu chấm, gạch ngang, chữ r)
+          if [[ ! "$LATEST_NGINX" =~ ^[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]; then
+            echo "⚠️ Không đọc được APKINDEX hoặc định dạng lạ (${LATEST_NGINX}), giữ nguyên ${CURRENT_NGINX}"
+            LATEST_NGINX="$CURRENT_NGINX"
+          fi
+
+          echo "🔸 Alpine mới nhất: $LATEST_ALPINE"
+          echo "🔸 Nginx mới nhất:  $LATEST_NGINX"
+
+          echo "latest_alpine=${LATEST_ALPINE}" >> "$GITHUB_OUTPUT"
+          echo "latest_nginx=${LATEST_NGINX}" >> "$GITHUB_OUTPUT"
+
+          if [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ] || [ "$LATEST_NGINX" != "$CURRENT_NGINX" ]; then
+            echo "upstream_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upstream_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 4. Calculate Version & Update Changelog (Major for Upstream / Patch for Local Edit)
+        id: calc_version
+        run: |
+          set -e
+          CONFIG_FILE="webdav_pro/config.yaml"
+          BUILD_FILE="webdav_pro/build.yaml"
+          CHANGELOG_FILE="webdav_pro/CHANGELOG.md"
+
+          CURRENT_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VER"
+
+          UPSTREAM_CHANGED="${{ steps.check_upstream.outputs.upstream_changed }}"
+          ICONS_CREATED="${{ steps.gen_icons.outputs.icons_created }}"
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          NEED_COMMIT="false"
+
+          if [ "$UPSTREAM_CHANGED" = "true" ]; then
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_VER="${NEW_MAJOR}.0.0"
+            NEED_COMMIT="true"
+
+            sed -i "s/aarch64-base:[0-9.]\+/aarch64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/amd64-base:[0-9.]\+/amd64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/NGINX_VERSION: \".*\"/NGINX_VERSION: \"${LATEST_NGINX}\"/g" "$BUILD_FILE"
+            sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Upstream Update:** Upgraded Nginx to \`${LATEST_NGINX}\` on Home Assistant Alpine Base \`${LATEST_ALPINE}\`.\n- Updated \`dav-ext\` and \`fancyindex\` modules with the latest upstream security patches.\n"
+            awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+            echo "✅ Bumped Major Version to ${NEW_VER} (Upstream Release)"
+
+          elif [ "${{ github.event_name }}" = "push" ] || [ "$ICONS_CREATED" = "true" ]; then
+            PREV_VER=$(git show HEAD~1:webdav_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "")
+            if [ "$ICONS_CREATED" = "true" ] || { [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ]; }; then
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VER="${MAJOR}.${MINOR}.${NEW_PATCH}"
+              NEED_COMMIT="true"
+
+              COMMIT_MSG=$(git log -1 --pretty=%B | head -n1)
+              sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Maintenance & Improvements:** ${COMMIT_MSG}\n"
+              awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+              echo "✅ Auto-bumped Patch Version to ${NEW_VER} (Local Commit)"
+            fi
+          fi
+
+          echo "need_commit=${NEED_COMMIT}" >> "$GITHUB_OUTPUT"
+
+      - name: 5. Test Docker Build Before Commit
+        run: |
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          docker build \
+            --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" \
+            --build-arg NGINX_VERSION="${LATEST_NGINX}" \
+            -t webdav-pro-verify:latest \
+            ./webdav_pro
+
+      - name: 6. Commit & Push Changes to Main
+        if: steps.calc_version.outputs.need_commit == 'true' || steps.gen_icons.outputs.icons_created == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git pull --rebase origin main
-          git add webdav_pro/config.yaml webdav_pro/build.yaml webdav_pro/CHANGELOG.md
-          NEW_VER=$(grep -oP '^version:\s*"\K[0-9.]+' webdav_pro/config.yaml)
+          git add webdav_pro/
+          NEW_VER=$(grep -oP '^version:\s*"\K[0-9.]+' webdav_pro/config.yaml | head -n1)
           git commit -m "chore(webdav_pro): release version ${NEW_VER} [skip ci]"
           git push origin HEAD:main
