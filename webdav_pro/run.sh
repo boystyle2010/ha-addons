@@ -134,20 +134,30 @@ http {
     limit_req_zone \$binary_remote_addr zone=dav_auth_limit:10m rate=15r/s;
 
     # =========================================================
-    # SERVER 1: HOME ASSISTANT INGRESS (internal access from the HA UI)
+    # SERVER 1: HOME ASSISTANT INGRESS (Full WebDAV + Code Editor)
     # =========================================================
     server {
-        listen ${INGRESS_PORT};
+        listen 8099;
         allow 172.30.32.2;
         deny all;
 
-        location ^~ /.fancyindex/ {
+        location /.fancyindex/ {
             alias /usr/share/nginx/fancyindex/;
         }
 
         location / {
             root ${ROOT_DIR};
             ${INDEX_CONFIG}
+
+            dav_methods PUT DELETE MKCOL COPY MOVE;
+            dav_ext_methods PROPFIND OPTIONS LOCK UNLOCK;
+            dav_ext_lock zone=davlock;
+            create_full_put_path on;
+            dav_access user:rw group:rw all:r;
+
+            if (-d \$request_filename) {
+                rewrite ^(.*[^/])$ \$1/ break;
+            }
         }
     }
 
