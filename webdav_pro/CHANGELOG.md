@@ -1,5 +1,6 @@
 ## [1.0.0] - 2026-11-08
-- Phát hành phiên bản đầu tiên của WebDAV Server Pro.
-- Mở khóa toàn bộ phân vùng: `config`, `addon_configs`, `addons`, `backup`, `media`, `share`, `ssl`.
-- Tích hợp giao diện duyệt file FancyIndex Dark Mode và Home Assistant Ingress.
-- Bổ sung hồ sơ bảo mật AppArmor chuẩn Home Assistant Supervisor.
+- **Initial Release:** Launched **WebDAV Server Pro** for Home Assistant.
+- **Full System Directory Mapping:** Added read/write support for `config` (`/homeassistant`), `addon_configs`, `addons`, `backup`, `media`, `share`, and `ssl`.
+- **Native OS Compatibility:** Integrated `nginx-mod-http-dav-ext` with shared `davlock` memory zone for full `PROPFIND`, `LOCK`, and `UNLOCK` support on iOS, macOS, and Windows.
+- **FancyIndex Dark UI & Ingress:** Built-in responsive dark theme with instant search bar and Home Assistant sidebar Ingress integration.
+- **Security Hardening:** Added custom AppArmor profile, Bcrypt password hashing, and brute-force rate limiting (`limit_req_zone`).
