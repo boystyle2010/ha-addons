@@ -68,7 +68,7 @@ jobs:
             echo "upstream_changed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: 3. Tính toán Version (Major cho Upstream / Patch cho Local Edit)
+      - name: 3. Calculate Version & Update Changelog (Major for Upstream / Patch for Local Edit)
         id: calc_version
         run: |
           set -e
@@ -87,7 +87,7 @@ jobs:
           NEED_COMMIT="false"
 
           if [ "$UPSTREAM_CHANGED" = "true" ]; then
-            # Nâng Major Version khi có bản cập nhật Nginx hoặc Alpine mới (VD: 1.0.1 -> 2.0.0)
+            # Bump Major Version on upstream Nginx or Alpine Base update (e.g., 1.0.1 -> 2.0.0)
             NEW_MAJOR=$((MAJOR + 1))
             NEW_VER="${NEW_MAJOR}.0.0"
             NEED_COMMIT="true"
@@ -97,15 +97,15 @@ jobs:
             sed -i "s/NGINX_VERSION: \".*\"/NGINX_VERSION: \"${LATEST_NGINX}\"/g" "$BUILD_FILE"
             sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
 
-            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Cập nhật Upstream:** Nâng cấp Nginx lên phiên bản \`${LATEST_NGINX}\` (Alpine Base \`${LATEST_ALPINE}\`).\n- Cập nhật các bản vá bảo mật cho module \`dav-ext\` và \`fancyindex\`.\n"
+            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Upstream Update:** Upgraded Nginx to \`${LATEST_NGINX}\` on Home Assistant Alpine Base \`${LATEST_ALPINE}\`.\n- Updated \`dav-ext\` and \`fancyindex\` modules with the latest upstream security patches.\n"
             awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
-            echo "✅ Đã nâng Major Version lên ${NEW_VER} (Upstream Update)"
+            echo "✅ Bumped Major Version to ${NEW_VER} (Upstream Release)"
 
           elif [ "${{ github.event_name }}" = "push" ]; then
-            # Kiểm tra xem người dùng đã tự tăng version trong commit vừa push chưa
+            # Check if version was already manually bumped in the push commit
             PREV_VER=$(git show HEAD~1:webdav_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' || echo "")
             if [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ]; then
-              # Người dùng sửa code nhưng chưa đổi version -> Tự động tăng Patch Version (VD: 1.0.0 -> 1.0.1)
+              # Local code modified without manual version change -> Auto-bump Patch Version (e.g., 1.0.0 -> 1.0.1)
               NEW_PATCH=$((PATCH + 1))
               NEW_VER="${MAJOR}.${MINOR}.${NEW_PATCH}"
               NEED_COMMIT="true"
@@ -113,9 +113,9 @@ jobs:
               COMMIT_MSG=$(git log -1 --pretty=%B | head -n1)
               sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
 
-              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Cập nhật cấu hình/mã nguồn:** ${COMMIT_MSG}\n"
+              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Maintenance & Improvements:** ${COMMIT_MSG}\n"
               awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
-              echo "✅ Đã tự động nâng Patch Version lên ${NEW_VER} (Local Change)"
+              echo "✅ Auto-bumped Patch Version to ${NEW_VER} (Local Commit)"
             fi
           fi
 
