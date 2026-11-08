@@ -1,0 +1,111 @@
+<div id="stat" class="stat"></div>
+</div>
+<script>
+(function () {
+  var GL = {
+    img:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>',
+    vid:'<rect x="3" y="6.5" width="12.5" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/>',
+    aud:'<path d="M9 17.5V6l10-2v11.5"/><circle cx="6.8" cy="17.5" r="2.2"/><circle cx="16.8" cy="15.5" r="2.2"/>',
+    doc:'<path d="M7 3.5h6.5L19 9v11.5H7z"/><path d="M13.5 3.5V9H19"/>',
+    txt:'<path d="M5 7h14M5 11h14M5 15h14M5 19h8"/>',
+    zip:'<path d="M3.5 8h17v11.5h-17zM3 4.5h18V8H3zM10 12h4"/>',
+    cfg:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
+    code:'<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>'
+  };
+  var T = [
+    ['img','img','jpg jpeg png gif webp heic bmp svg'],
+    ['vid','vid','mp4 mkv mov avi webm m4v'],
+    ['aud','aud','mp3 flac wav m4a ogg aac'],
+    ['pdf','doc','pdf'],
+    ['doc','doc','doc docx odt rtf pages'],
+    ['xls','doc','xls xlsx csv ods numbers'],
+    ['ppt','doc','ppt pptx key'],
+    ['txt','txt','txt md log'],
+    ['zip','zip','zip tar gz tgz rar 7z'],
+    ['cfg','cfg','yaml yml json conf cfg ini toml'],
+    ['code','code','py js ts sh html css xml']
+  ];
+  var MAP = {};
+  T.forEach(function (t) { t[2].split(' ').forEach(function (e) { MAP[e] = [t[0], t[1]]; }); });
+
+  var FOLDER = '<span class="ic folder"><svg viewBox="0 0 34 28"><path fill="#1c8bff" d="M2 5a3 3 0 0 1 3-3h7.2a3 3 0 0 1 2.3 1.1l1.4 1.7A3 3 0 0 0 18.2 6H29a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3z"/><path fill="#5ac8fa" d="M2 10a3 3 0 0 1 3-3h24a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3z"/></svg></span>';
+  function fileIcon(name) {
+    var m = /\.([a-z0-9]+)$/i.exec(name);
+    var t = (m && MAP[m[1].toLowerCase()]) || ['file', 'doc'];
+    return '<span class="ic t-' + t[0] + '"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + GL[t[1]] + '</svg></span>';
+  }
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
+  function up(n) { return n > 0 ? new Array(n + 1).join('../') : './'; }
+
+  // Current path (strip the Home Assistant Ingress prefix)
+  var p = location.pathname.replace(/^\/api\/hassio_ingress\/[^\/]+/, '') || '/';
+  var segs = p.split('/').filter(Boolean).map(function (s) {
+    try { return decodeURIComponent(s); } catch (e) { return s; }
+  });
+
+  // Title, back button, breadcrumbs (relative links, so they work through Ingress)
+  document.getElementById('title').textContent = segs.length ? segs[segs.length - 1] : 'WebDAV Server Pro';
+  var back = document.getElementById('back');
+  if (segs.length) {
+    back.querySelector('span').textContent = segs.length > 1 ? segs[segs.length - 2] : 'Home';
+    back.style.visibility = 'visible';
+  }
+  var html = segs.length ? '<a href="' + up(segs.length) + '">Home</a>' : '<b>Home</b>';
+  segs.forEach(function (s, i) {
+    var last = i === segs.length - 1;
+    html += '<span class="sep">/</span>' + (last ? '<b>' + esc(s) + '</b>'
+      : '<a href="' + up(segs.length - 1 - i) + '">' + esc(s) + '</a>');
+  });
+  document.getElementById('crumbs').innerHTML = html;
+
+  // Rows
+  var rows = [].slice.call(document.querySelectorAll('#list tbody tr'));
+  var nd = 0, nf = 0;
+  rows.forEach(function (tr) {
+    var a = tr.querySelector('td.link a');
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    var name = (a.getAttribute('title') || a.textContent || '').trim();
+    if (tr.classList.contains('parent') || href === '../') { tr.classList.add('parent'); return; }
+    var isDir = /\/$/.test(href);
+    var label = name.replace(/\/$/, '');
+    if (isDir) { tr.classList.add('dir'); nd++; } else { nf++; }
+    a.innerHTML = (isDir ? FOLDER : fileIcon(label)) + '<span class="nm">' + esc(label) + '</span>';
+    tr.setAttribute('data-n', label.toLowerCase());
+  });
+  document.getElementById('stat').textContent = plural(nd, 'folder') + ', ' + plural(nf, 'file');
+
+  // Live search
+  document.getElementById('q').addEventListener('input', function () {
+    var v = this.value.trim().toLowerCase();
+    rows.forEach(function (tr) {
+      var n = tr.getAttribute('data-n');
+      if (n === null) return;
+      tr.style.display = (!v || n.indexOf(v) !== -1) ? '' : 'none';
+    });
+  });
+
+  // Sorting
+  var s = document.getElementById('sort');
+  var cur = location.search.replace(/^\?/, '');
+  if (cur) { for (var i = 0; i < s.options.length; i++) if (s.options[i].value === cur) s.selectedIndex = i; }
+  s.addEventListener('change', function () { location.search = '?' + this.value; });
+
+  // Workaround for the iOS WebView not repainting until the screen is touched
+  function kick() {
+    document.body.style.opacity = '0.999';
+    requestAnimationFrame(function () {
+      document.body.style.opacity = '';
+      window.scrollBy(0, 1); window.scrollBy(0, -1);
+    });
+  }
+  kick();
+  window.addEventListener('load', kick);
+  window.addEventListener('pageshow', kick);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) kick(); });
+  setTimeout(kick, 150); setTimeout(kick, 600);
+})();
+</script>
+</body>
+</html>
