@@ -3,7 +3,7 @@ FROM $BUILD_FROM
 
 ARG NGINX_VERSION
 
-# Cài đặt Nginx, module WebDAV mở rộng, module giao diện FancyIndex và công cụ mã hóa
+# Install Nginx, the WebDAV extension module, the FancyIndex UI module and helper tools
 RUN apk update && apk add --no-cache \
     nginx \
     nginx-mod-http-dav-ext \
@@ -13,7 +13,7 @@ RUN apk update && apk add --no-cache \
     bash \
     tzdata
 
-# Khởi tạo các thư mục đệm cho Nginx & WebDAV
+# Create working directories for Nginx & WebDAV
 RUN mkdir -p \
     /run/nginx \
     /var/lib/nginx/tmp/client_body \
