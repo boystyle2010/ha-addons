@@ -1,3 +1,6 @@
+## [2.0.17] - 2026-11-08
+- **Maintenance & Improvements:** Update DOCS.md
+
 ## [2.0.16] - 2026-11-08
 - **Maintenance & Improvements:** Update apparmor.txt
 
