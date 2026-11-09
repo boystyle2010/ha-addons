@@ -1,3 +1,6 @@
+## [2.0.20] - 2026-11-09
+- **Maintenance & Improvements:** Rename webdav_pro.yaml to webdav_pro.yml
+
 ## [2.0.19] - 2026-11-09
 - **Maintenance & Improvements:** Add files via upload
 
