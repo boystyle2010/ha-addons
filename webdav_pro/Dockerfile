@@ -3,7 +3,7 @@ FROM $BUILD_FROM
 
 ARG NGINX_VERSION
 
-# Install Nginx, WebDAV & FancyIndex modules, plus Python3, Git, Zip, and ttyd (WebSocket Terminal)
+# Install Nginx, WebDAV & FancyIndex modules, plus Python3, Git, and Zip
 RUN apk update && apk add --no-cache \
     nginx \
     nginx-mod-http-dav-ext \
@@ -14,8 +14,7 @@ RUN apk update && apk add --no-cache \
     tzdata \
     python3 \
     git \
-    zip \
-    ttyd
+    zip
 
 # Create working directories for Nginx, WebDAV & Pro API
 RUN mkdir -p \
