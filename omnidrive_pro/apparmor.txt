@@ -1,6 +1,6 @@
 #include <tunables/global>
 
-profile webdav_pro flags=(attach_disconnected,mediate_deleted) {
+profile omnidrive_pro flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
   # Capabilities & General File Access (Bắt buộc phải có 'file,' cho S6-Overlay v3)
