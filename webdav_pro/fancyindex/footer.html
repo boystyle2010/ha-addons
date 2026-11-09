@@ -2,12 +2,8 @@
   <div id="empty" class="empty">No matching items found</div>
   <div id="stat" class="stat"></div>
 
-  <!-- Thanh tác vụ hàng loạt khi bật chế độ Select -->
   <div id="batchBar" class="batch-bar">
-    <div class="clip-info">
-      <b>BATCH SELECTION</b>
-      <span id="batchCount">0 items selected</span>
-    </div>
+    <div class="clip-info"><b>BATCH SELECTION</b><span id="batchCount">0 items selected</span></div>
     <div class="clip-btns">
       <button id="btnBatchCopy" class="clip-btn paste" type="button">Copy</button>
       <button id="btnBatchMove" class="clip-btn cancel" type="button">Move</button>
@@ -15,19 +11,14 @@
     </div>
   </div>
 
-  <!-- Thanh nổi Paste Here khi Copy / Move -->
   <div id="clipBar" class="clip-bar">
-    <div class="clip-info">
-      <b id="clipMode">COPIED</b>
-      <span id="clipName">filename.yaml</span>
-    </div>
+    <div class="clip-info"><b id="clipMode">COPIED</b><span id="clipName">filename.yaml</span></div>
     <div class="clip-btns">
       <button id="btnPaste" class="clip-btn paste" type="button">Paste Here</button>
       <button id="btnCancelClip" class="clip-btn cancel" type="button">Cancel</button>
     </div>
   </div>
 
-  <!-- iOS Bottom Action Sheet (Khi bấm nút ••• trên từng dòng) -->
   <div id="backdrop" class="backdrop"></div>
   <div id="sheet" class="sheet">
     <div class="sheet-group">
@@ -46,7 +37,6 @@
     </div>
   </div>
 
-  <!-- FULLSCREEN CODE EDITOR (Syntax Highlighting + Markdown Live Preview + Media Viewer) -->
   <div id="editorModal" class="editor-modal">
     <div class="ed-top">
       <button id="edClose" class="ed-btn close" type="button">Done</button>
@@ -57,14 +47,18 @@
       <button id="edMdToggle" class="ed-btn md-toggle" type="button">👁️ Preview</button>
       <button id="edSave" class="ed-btn save" type="button">Save</button>
     </div>
+    <div id="yamlAlert" class="yaml-alert"></div>
     <div id="edSubbar" class="ed-subbar">
       <div class="ed-tools">
-        <button id="edUndo" class="ed-chip" type="button" title="Undo">↶ Undo</button>
-        <button id="edRedo" class="ed-chip" type="button" title="Redo">↷ Redo</button>
-        <button id="edFind" class="ed-chip" type="button" title="Find & Replace">🔍 Find</button>
+        <button id="edUndo" class="ed-chip" type="button">↶</button>
+        <button id="edRedo" class="ed-chip" type="button">↷</button>
+        <button id="edFind" class="ed-chip" type="button">🔍 Find</button>
         <button id="edTab" class="ed-chip" type="button">⇥ Tab</button>
-        <button id="edComment" class="ed-chip" type="button"># Toggle</button>
+        <button id="edComment" class="ed-chip" type="button">#</button>
+        <button id="edFontUp" class="ed-chip" type="button">A+</button>
+        <button id="edFontDown" class="ed-chip" type="button">A-</button>
         <button id="edWrap" class="ed-chip" type="button">↵ Wrap</button>
+        <button id="edZen" class="ed-chip" type="button">⛶ Zen</button>
       </div>
       <span id="edStatus" class="ed-status">UTF-8</span>
     </div>
@@ -95,12 +89,9 @@
     ['img','img','jpg jpeg png gif webp heic bmp svg ico'],
     ['vid','vid','mp4 mkv mov avi webm m4v'],
     ['aud','aud','mp3 flac wav m4a ogg aac'],
-    ['pdf','doc','pdf'],
-    ['md','md','md markdown'],
-    ['doc','doc','doc docx odt rtf pages'],
-    ['xls','doc','xls xlsx csv ods numbers'],
-    ['ppt','doc','ppt pptx key'],
-    ['txt','txt','txt log'],
+    ['pdf','doc','pdf'],['md','md','md markdown'],
+    ['doc','doc','doc docx odt rtf pages'],['xls','doc','xls xlsx csv ods numbers'],
+    ['ppt','doc','ppt pptx key'],['txt','txt','txt log'],
     ['zip','zip','zip tar gz tgz rar 7z xz'],
     ['cfg','cfg','yaml yml json conf cfg ini toml env lock'],
     ['code','code','py js ts sh html css xml php sql dockerfile']
@@ -109,17 +100,11 @@
   var IMG_EXT = /^(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i;
   var VID_EXT = /^(mp4|webm|mov|m4v)$/i;
   var AUD_EXT = /^(mp3|wav|m4a|ogg|aac|flac)$/i;
-
-  var ACE_MODES = {
-    yaml: 'yaml', yml: 'yaml', json: 'json', py: 'python', sh: 'sh', bash: 'sh',
-    js: 'javascript', ts: 'typescript', html: 'html', htm: 'html', css: 'css',
-    php: 'php', xml: 'xml', sql: 'sql', md: 'markdown', markdown: 'markdown',
-    ini: 'ini', conf: 'sh', cfg: 'ini', toml: 'toml', dockerfile: 'dockerfile'
-  };
+  var ARCH_EXT = /^(zip|tar)$/i;
+  var ACE_MODES = {yaml:'yaml',yml:'yaml',json:'json',py:'python',sh:'sh',bash:'sh',js:'javascript',ts:'typescript',html:'html',htm:'html',css:'css',php:'php',xml:'xml',sql:'sql',md:'markdown',markdown:'markdown',ini:'ini',conf:'sh',cfg:'ini',toml:'toml',dockerfile:'dockerfile'};
 
   var MAP = {};
   T.forEach(function (t) { t[2].split(' ').forEach(function (e) { MAP[e] = [t[0], t[1]]; }); });
-
   var FOLDER = '<span class="ic folder"><svg viewBox="0 0 36 30"><path fill="#0a84ff" d="M2 5.5A3.5 3.5 0 0 1 5.5 2h7.6a3.5 3.5 0 0 1 2.7 1.3l1.5 1.8a3.5 3.5 0 0 0 2.7 1.3H30.5A3.5 3.5 0 0 1 34 9.9v14.6A3.5 3.5 0 0 1 30.5 28h-25A3.5 3.5 0 0 1 2 24.5z"/><path fill="#5ac8fa" d="M2 10.5A3.5 3.5 0 0 1 5.5 7h25A3.5 3.5 0 0 1 34 10.5v14A3.5 3.5 0 0 1 30.5 28h-25A3.5 3.5 0 0 1 2 24.5z"/></svg></span>';
   var CHECK_ICON = '<span class="sel-chk"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>';
 
@@ -128,14 +113,12 @@
     var t = (m && MAP[m[1].toLowerCase()]) || ['file', 'doc'];
     return '<span class="ic t-' + t[0] + '"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + GL[t[1]] + '</svg></span>';
   }
-  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function up(n) { return n > 0 ? new Array(n + 1).join('../') : './'; }
-
   function showToast(msg) {
     var t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
+    t.textContent = msg; t.classList.add('show');
     setTimeout(function () { t.classList.remove('show'); }, 2200);
   }
 
@@ -150,9 +133,7 @@
         for (var i = 0; i < nodes.length; i++) {
           var el = nodes[i];
           if (el.textContent && el.textContent.trim().indexOf('WebDAV') !== -1 && !el.querySelector('.wpro-ha-ic')) {
-            el.style.display = 'inline-flex';
-            el.style.alignItems = 'center';
-            el.style.gap = '9px';
+            el.style.display = 'inline-flex'; el.style.alignItems = 'center'; el.style.gap = '9px';
             var span = doc.createElement('span');
             span.className = 'wpro-ha-ic';
             span.style.cssText = 'display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:linear-gradient(145deg,#0f172a,#1e293b);border:1px solid rgba(56,189,248,0.45);flex:none;';
@@ -162,117 +143,79 @@
           }
         }
         var all = root.querySelectorAll ? root.querySelectorAll('*') : [];
-        for (var j = 0; j < all.length; j++) {
-          if (all[j].shadowRoot) walk(all[j].shadowRoot);
-        }
+        for (var j = 0; j < all.length; j++) if (all[j].shadowRoot) walk(all[j].shadowRoot);
       };
       walk(doc);
     } catch (e) {}
   }
-  injectTopBarIcon();
-  setTimeout(injectTopBarIcon, 400);
+  injectTopBarIcon(); setTimeout(injectTopBarIcon, 400);
 
   // 2. Đường dẫn Ingress & WebDAV
   var ingressMatch = location.pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
   var ingressPrefix = ingressMatch ? ingressMatch[1] : '';
   var p = location.pathname.replace(/^\/api\/hassio_ingress\/[^\/]+/, '') || '/';
   if (!/\/$/.test(p)) p += '/';
-
-  var segs = p.split('/').filter(Boolean).map(function (s) {
-    try { return decodeURIComponent(s); } catch (e) { return s; }
-  });
+  var segs = p.split('/').filter(Boolean).map(function (s) { try { return decodeURIComponent(s); } catch (e) { return s; } });
 
   function buildWebdavUrl(relPath) {
     if (relPath.indexOf('/') === 0) return ingressPrefix + relPath;
     return location.pathname.replace(/\/?$/, '/') + relPath;
   }
-  function buildDestinationHeader(targetInternalPath) {
-    return location.origin + targetInternalPath;
-  }
+  function buildDestinationHeader(targetInternalPath) { return location.origin + targetInternalPath; }
 
   // 3. Tiêu đề, Back & Breadcrumbs
   document.getElementById('title').textContent = segs.length ? segs[segs.length - 1] : 'WebDAV Server Pro';
-  var nav = document.getElementById('nav');
-  var back = document.getElementById('back');
+  var nav = document.getElementById('nav'), back = document.getElementById('back');
   if (segs.length) {
     back.querySelector('span').textContent = segs.length > 1 ? segs[segs.length - 2] : 'Home';
     nav.classList.add('show');
   }
-
   var homeIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z"/></svg>';
   var html = segs.length ? '<a href="' + up(segs.length) + '">' + homeIcon + 'Home</a>' : '<b data-copy="/">' + homeIcon + 'Home</b>';
   segs.forEach(function (s, i) {
-    var last = i === segs.length - 1;
-    var fullPath = '/' + segs.slice(0, i + 1).join('/');
-    html += '<span class="sep">›</span>' + (last ? '<b data-copy="' + esc(fullPath) + '">' + esc(s) + '</b>'
-      : '<a href="' + up(segs.length - 1 - i) + '">' + esc(s) + '</a>');
+    var last = i === segs.length - 1, fullPath = '/' + segs.slice(0, i + 1).join('/');
+    html += '<span class="sep">›</span>' + (last ? '<b data-copy="' + esc(fullPath) + '">' + esc(s) + '</b>' : '<a href="' + up(segs.length - 1 - i) + '">' + esc(s) + '</a>');
   });
   var crumbsEl = document.getElementById('crumbs');
-  crumbsEl.innerHTML = html;
-  crumbsEl.scrollLeft = crumbsEl.scrollWidth;
-
+  crumbsEl.innerHTML = html; crumbsEl.scrollLeft = crumbsEl.scrollWidth;
   crumbsEl.addEventListener('click', function (e) {
     var b = e.target.closest('b[data-copy]');
-    if (b && navigator.clipboard) {
-      navigator.clipboard.writeText(b.getAttribute('data-copy'));
-      showToast('🔗 Copied path: ' + b.getAttribute('data-copy'));
-    }
+    if (b && navigator.clipboard) { navigator.clipboard.writeText(b.getAttribute('data-copy')); showToast('🔗 Copied path: ' + b.getAttribute('data-copy')); }
   });
 
-  // 4. Chuẩn hóa danh sách & Chế độ chọn nhiều mục (Multi-Select)
+  // 4. Danh sách hàng & Multi-Select
   var rows = [].slice.call(document.querySelectorAll('#list tbody tr'));
-  var nd = 0, nf = 0;
-  var selectMode = false;
-  var selectedSet = [];
-  var btnSelectMode = document.getElementById('btnSelectMode');
-  var batchBar = document.getElementById('batchBar');
-  var batchCountEl = document.getElementById('batchCount');
+  var nd = 0, nf = 0, selectMode = false, selectedSet = [];
+  var btnSelectMode = document.getElementById('btnSelectMode'), batchBar = document.getElementById('batchBar'), batchCountEl = document.getElementById('batchCount');
 
   function updateBatchUI() {
     batchCountEl.textContent = plural(selectedSet.length, 'item') + ' selected';
     batchBar.classList.toggle('show', selectMode && selectedSet.length > 0);
   }
-
   btnSelectMode.addEventListener('click', function () {
     selectMode = !selectMode;
     document.body.classList.toggle('select-mode', selectMode);
     btnSelectMode.classList.toggle('active', selectMode);
     btnSelectMode.textContent = selectMode ? 'Done' : 'Select';
-    if (!selectMode) {
-      selectedSet = [];
-      rows.forEach(function (r) { r.classList.remove('selected'); });
-    }
+    if (!selectMode) { selectedSet = []; rows.forEach(function (r) { r.classList.remove('selected'); }); }
     updateBatchUI();
   });
 
   rows.forEach(function (tr) {
     var a = tr.querySelector('td.link a');
     if (!a) return;
-    var href = a.getAttribute('href') || '';
-    var name = (a.getAttribute('title') || a.textContent || '').trim();
+    var href = a.getAttribute('href') || '', name = (a.getAttribute('title') || a.textContent || '').trim();
     if (tr.classList.contains('parent') || href === '../') { tr.classList.add('parent'); return; }
-    var isDir = /\/$/.test(href);
-    var label = name.replace(/\/$/, '');
+    var isDir = /\/$/.test(href), label = name.replace(/\/$/, '');
     if (isDir) { tr.classList.add('dir'); nd++; } else { nf++; }
     a.innerHTML = CHECK_ICON + (isDir ? FOLDER : fileIcon(label)) + '<span class="nm">' + esc(label) + '</span>';
     tr.setAttribute('data-n', label.toLowerCase());
-
-    var itemObj = {
-      name: label,
-      href: href,
-      isDir: isDir,
-      internalPath: p + encodeURIComponent(label) + (isDir ? '/' : '')
-    };
+    var itemObj = { name: label, href: href, isDir: isDir, internalPath: p + encodeURIComponent(label) + (isDir ? '/' : '') };
 
     var moreBtn = document.createElement('button');
-    moreBtn.type = 'button';
-    moreBtn.className = 'more-btn';
+    moreBtn.type = 'button'; moreBtn.className = 'more-btn';
     moreBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
-    moreBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      e.preventDefault();
-      openActionSheet(itemObj);
-    });
+    moreBtn.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); openActionSheet(itemObj); });
     tr.appendChild(moreBtn);
 
     tr.addEventListener('click', function (e) {
@@ -282,76 +225,59 @@
         var idx = selectedSet.indexOf(itemObj);
         if (idx === -1) { selectedSet.push(itemObj); tr.classList.add('selected'); }
         else { selectedSet.splice(idx, 1); tr.classList.remove('selected'); }
-        updateBatchUI();
-        return;
+        updateBatchUI(); return;
       }
-      if (isDir) {
-        location.href = href;
-      } else {
-        openSmartViewer(itemObj);
-      }
+      if (isDir) location.href = href; else openSmartViewer(itemObj);
     });
   });
 
   var summaryText = plural(nd, 'folder') + ' • ' + plural(nf, 'file');
   document.getElementById('stat').textContent = summaryText;
-  document.getElementById('subStat').textContent = (segs.length ? '/' + segs.join('/') : 'Root Directory') + ' • ' + summaryText;
+  document.getElementById('subStat').textContent = (segs.length ? '/' + segs.join('/') : 'Root Storage') + ' • ' + summaryText;
 
-  // 5. Trình sửa Code (Ace IDE + Tô màu cú pháp + Markdown Preview)
-  var editorModal = document.getElementById('editorModal');
-  var edTitle = document.getElementById('edTitle');
-  var edLang = document.getElementById('edLang');
-  var aceContainer = document.getElementById('aceContainer');
-  var edArea = document.getElementById('edArea');
-  var mdView = document.getElementById('mdView');
-  var edPreview = document.getElementById('edPreview');
-  var edSave = document.getElementById('edSave');
-  var edMdToggle = document.getElementById('edMdToggle');
-  var edSubbar = document.getElementById('edSubbar');
-  var edStatus = document.getElementById('edStatus');
-  var aceEditor = null;
-  var currentEditHref = '';
-  var isMarkdownFile = false;
-  var mdPreviewActive = false;
+  // 5. Trình sửa Code (Ace IDE + YAML Linter + Markdown + Archive Viewer + Zen + A+/A-)
+  var editorModal = document.getElementById('editorModal'), edTitle = document.getElementById('edTitle'), edLang = document.getElementById('edLang');
+  var aceContainer = document.getElementById('aceContainer'), edArea = document.getElementById('edArea'), mdView = document.getElementById('mdView');
+  var edPreview = document.getElementById('edPreview'), edSave = document.getElementById('edSave'), edMdToggle = document.getElementById('edMdToggle');
+  var edSubbar = document.getElementById('edSubbar'), edStatus = document.getElementById('edStatus'), yamlAlert = document.getElementById('yamlAlert');
+  var aceEditor = null, currentEditHref = '', currentExt = '', isMarkdownFile = false, mdPreviewActive = false;
+  var editorFontSize = parseInt(localStorage.getItem('wpro_fsize') || '14', 10);
+
+  function validateYamlContent() {
+    if (!/^(yaml|yml)$/i.test(currentExt) || !window.jsyaml) { yamlAlert.classList.remove('show'); return true; }
+    try {
+      var src = getEditorContent().replace(/![a-zA-Z_]+\s+/g, '');
+      jsyaml.loadAll(src);
+      yamlAlert.className = 'yaml-alert show yaml-ok';
+      yamlAlert.textContent = '✓ Valid Home Assistant YAML syntax';
+      return true;
+    } catch (err) {
+      yamlAlert.className = 'yaml-alert show';
+      yamlAlert.textContent = '⚠️ YAML Error (Line ' + (err.mark ? err.mark.line + 1 : '?') + '): ' + err.reason;
+      return false;
+    }
+  }
 
   function initAce() {
     if (aceEditor || !window.ace) return;
     ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/');
     aceEditor = ace.edit('aceContainer');
     aceEditor.setTheme('ace/theme/one_dark');
-    aceEditor.setOptions({
-      fontSize: '14px',
-      fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace',
-      showPrintMargin: false,
-      tabSize: 2,
-      useSoftTabs: true,
-      wrap: false,
-      scrollPastEnd: 0.3
-    });
-    aceEditor.commands.addCommand({
-      name: 'saveFile',
-      bindKey: { win: 'Ctrl-S', mac: 'Command-S' },
-      exec: function () { saveCurrentFile(); }
-    });
+    aceEditor.setOptions({ fontSize: editorFontSize + 'px', fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace', showPrintMargin: false, tabSize: 2, useSoftTabs: true, wrap: false, scrollPastEnd: 0.3 });
+    aceEditor.session.on('change', function () { validateYamlContent(); });
+    aceEditor.commands.addCommand({ name: 'saveFile', bindKey: { win: 'Ctrl-S', mac: 'Command-S' }, exec: function () { saveCurrentFile(); } });
   }
-
-  function getEditorContent() {
-    return aceEditor ? aceEditor.getValue() : edArea.value;
-  }
+  function getEditorContent() { return aceEditor ? aceEditor.getValue() : edArea.value; }
   function setEditorContent(val, ext) {
     initAce();
     if (aceEditor) {
-      aceContainer.style.display = 'block';
-      edArea.style.display = 'none';
-      var mode = ACE_MODES[ext] || 'yaml';
-      aceEditor.session.setMode('ace/mode/' + mode);
-      aceEditor.setValue(val, -1);
-      aceEditor.resize();
+      aceContainer.style.display = 'block'; edArea.style.display = 'none';
+      aceEditor.session.setMode('ace/mode/' + (ACE_MODES[ext] || 'yaml'));
+      aceEditor.setValue(val, -1); aceEditor.resize();
     } else {
-      aceContainer.style.display = 'none';
-      edArea.style.display = 'block';
-      edArea.value = val;
+      aceContainer.style.display = 'none'; edArea.style.display = 'block'; edArea.value = val;
     }
+    validateYamlContent();
   }
 
   function toggleMarkdownPreview(forceState) {
@@ -361,47 +287,64 @@
     if (mdPreviewActive) {
       var rawMd = getEditorContent();
       mdView.innerHTML = window.marked ? marked.parse(rawMd) : '<pre>' + esc(rawMd) + '</pre>';
-      mdView.style.display = 'block';
-      aceContainer.style.display = 'none';
-      edArea.style.display = 'none';
+      mdView.style.display = 'block'; aceContainer.style.display = 'none'; edArea.style.display = 'none';
     } else {
       mdView.style.display = 'none';
-      if (aceEditor) { aceContainer.style.display = 'block'; aceEditor.resize(); }
-      else edArea.style.display = 'block';
+      if (aceEditor) { aceContainer.style.display = 'block'; aceEditor.resize(); } else edArea.style.display = 'block';
     }
   }
   edMdToggle.addEventListener('click', function () { toggleMarkdownPreview(); });
 
   function openSmartViewer(item) {
-    var label = item.name;
-    var href = item.href;
-    var extMatch = /\.([a-z0-9]+)$/i.exec(label);
-    var ext = extMatch ? extMatch[1].toLowerCase() : '';
-
+    var label = item.name, href = item.href;
+    var extMatch = /\.([a-z0-9]+)$/i.exec(label), ext = extMatch ? extMatch[1].toLowerCase() : '';
     if (IMG_EXT.test(ext)) { openMediaModal(label, href, 'img', ext); return; }
     if (VID_EXT.test(ext)) { openMediaModal(label, href, 'vid', ext); return; }
     if (AUD_EXT.test(ext)) { openMediaModal(label, href, 'aud', ext); return; }
     if (ext === 'pdf') { openMediaModal(label, href, 'pdf', ext); return; }
+    if (ARCH_EXT.test(ext)) { openArchiveInspector(label, href, ext); return; }
+    if (EDITABLE_EXT.test(ext) || EDITABLE_EXT.test(label) || !ext) openCodeEditor(label, href, ext || 'yaml');
+    else openActionSheet(item);
+  }
 
-    if (EDITABLE_EXT.test(ext) || EDITABLE_EXT.test(label) || !ext) {
-      openCodeEditor(label, href, ext || 'yaml');
-    } else {
-      openActionSheet(item);
-    }
+  function openArchiveInspector(label, href, ext) {
+    edTitle.textContent = label; edLang.textContent = ext.toUpperCase() + ' ARCHIVE INSPECTOR';
+    editorModal.classList.add('show');
+    aceContainer.style.display = 'none'; edArea.style.display = 'none'; mdView.style.display = 'none';
+    edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
+    edPreview.style.display = 'grid'; edPreview.innerHTML = '<div style="color:#8b949e">Reading archive contents...</div>';
+
+    fetch(href).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+      if (ext === 'zip' && window.JSZip) {
+        return JSZip.loadAsync(buf).then(function (zip) {
+          var items = [];
+          zip.forEach(function (relPath, file) { items.push('<div class="arch-item"><span>' + (file.dir ? '📁 ' : '📄 ') + esc(relPath) + '</span><span>' + (file.dir ? 'DIR' : '') + '</span></div>'); });
+          edPreview.innerHTML = '<div class="arch-list">' + (items.join('') || '<div class="arch-item">Empty archive</div>') + '</div>';
+        });
+      } else {
+        // Đọc header chuẩn POSIX ustar của file .tar (Backup Home Assistant)
+        var view = new Uint8Array(buf), pos = 0, items = [];
+        while (pos + 512 <= view.length && items.length < 300) {
+          var name = '';
+          for (var i = 0; i < 100 && view[pos + i] !== 0; i++) name += String.fromCharCode(view[pos + i]);
+          if (!name) break;
+          var sizeOct = '';
+          for (var j = 124; j < 136 && view[pos + j] !== 0 && view[pos + j] !== 32; j++) sizeOct += String.fromCharCode(view[pos + j]);
+          var size = parseInt(sizeOct, 8) || 0;
+          items.push('<div class="arch-item"><span>' + (/\/$/.test(name) ? '📁 ' : '📦 ') + esc(name) + '</span><span>' + (size ? (size / 1024).toFixed(1) + ' KB' : '') + '</span></div>');
+          pos += 512 + Math.ceil(size / 512) * 512;
+        }
+        edPreview.innerHTML = '<div class="arch-list">' + (items.join('') || '<div class="arch-item">Compressed TAR archive — Download to extract</div>') + '</div>';
+      }
+    }).catch(function (e) { edPreview.innerHTML = '<div style="color:var(--red)">Could not inspect archive: ' + esc(e.message) + '</div>'; });
   }
 
   function openMediaModal(label, href, type, ext) {
-    edTitle.textContent = label;
-    edLang.textContent = ext.toUpperCase() + ' PREVIEW';
+    edTitle.textContent = label; edLang.textContent = ext.toUpperCase() + ' PREVIEW';
     editorModal.classList.add('show');
-    aceContainer.style.display = 'none';
-    edArea.style.display = 'none';
-    mdView.style.display = 'none';
-    edSubbar.style.display = 'none';
-    edSave.style.display = 'none';
-    edMdToggle.style.display = 'none';
+    aceContainer.style.display = 'none'; edArea.style.display = 'none'; mdView.style.display = 'none';
+    edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
     edPreview.style.display = 'grid';
-
     if (type === 'img') edPreview.innerHTML = '<img src="' + href + '" alt="' + esc(label) + '">';
     else if (type === 'vid') edPreview.innerHTML = '<video src="' + href + '" controls autoplay playsinline></video>';
     else if (type === 'aud') edPreview.innerHTML = '<audio src="' + href + '" controls autoplay></audio>';
@@ -409,95 +352,75 @@
   }
 
   function openCodeEditor(label, href, ext) {
-    currentEditHref = href;
-    edTitle.textContent = label;
+    currentEditHref = href; currentExt = ext; edTitle.textContent = label;
     isMarkdownFile = /^(md|markdown)$/i.test(ext);
     edLang.textContent = (ext || 'TEXT').toUpperCase() + (isMarkdownFile ? ' • MARKDOWN' : '');
     editorModal.classList.add('show');
-
-    edPreview.style.display = 'none';
-    edPreview.innerHTML = '';
-    mdView.style.display = 'none';
-    edSubbar.style.display = 'flex';
-    edSave.style.display = 'inline-flex';
+    edPreview.style.display = 'none'; edPreview.innerHTML = ''; mdView.style.display = 'none';
+    edSubbar.style.display = 'flex'; edSave.style.display = 'inline-flex';
     edMdToggle.style.display = isMarkdownFile ? 'inline-flex' : 'none';
-    mdPreviewActive = false;
-    edMdToggle.classList.remove('active');
-    edMdToggle.textContent = '👁️ Preview';
+    mdPreviewActive = false; edMdToggle.classList.remove('active'); edMdToggle.textContent = '👁️ Preview';
     edStatus.textContent = 'Loading...';
 
-    fetch(href, { cache: 'no-store' })
-      .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.text();
-      })
-      .then(function (txt) {
-        setEditorContent(txt, ext);
-        edStatus.textContent = 'UTF-8 • ' + txt.split('\n').length + ' lines';
-        if (isMarkdownFile) toggleMarkdownPreview(true);
-      })
-      .catch(function () {
-        setEditorContent('', ext);
-        edStatus.textContent = 'New File';
-      });
+    fetch(href, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function (txt) {
+      setEditorContent(txt, ext);
+      edStatus.textContent = 'UTF-8 • ' + txt.split('\n').length + ' lines';
+      if (isMarkdownFile) toggleMarkdownPreview(true);
+    }).catch(function () { setEditorContent('', ext); edStatus.textContent = 'New File'; });
   }
 
   function saveCurrentFile() {
     if (!currentEditHref) return;
-    edSave.disabled = true;
-    edStatus.textContent = 'Saving...';
-    fetch(currentEditHref, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-      body: getEditorContent()
-    }).then(function (r) {
+    if (!validateYamlContent() && !confirm('YAML syntax error detected! Save anyway?')) return;
+    edSave.disabled = true; edStatus.textContent = 'Saving...';
+    fetch(currentEditHref, { method: 'PUT', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: getEditorContent() }).then(function (r) {
       edSave.disabled = false;
       if (r.ok || r.status === 201 || r.status === 204) {
         edStatus.textContent = 'Saved ' + new Date().toLocaleTimeString();
         showToast('✅ Saved ' + edTitle.textContent);
         if (isMarkdownFile && mdPreviewActive) toggleMarkdownPreview(true);
-      } else {
-        throw new Error('HTTP ' + r.status);
-      }
-    }).catch(function (err) {
-      edSave.disabled = false;
-      alert('Save error: ' + err.message);
-    });
+      } else throw new Error('HTTP ' + r.status);
+    }).catch(function (err) { edSave.disabled = false; alert('Save error: ' + err.message); });
   }
 
   edSave.addEventListener('click', saveCurrentFile);
   document.getElementById('edClose').addEventListener('click', function () {
-    editorModal.classList.remove('show');
-    edPreview.innerHTML = '';
+    editorModal.classList.remove('show', 'zen'); edPreview.innerHTML = ''; yamlAlert.classList.remove('show');
   });
 
-  // Các nút thanh công cụ Code Editor trên di động
   document.getElementById('edUndo').addEventListener('click', function () { if (aceEditor) aceEditor.undo(); });
   document.getElementById('edRedo').addEventListener('click', function () { if (aceEditor) aceEditor.redo(); });
   document.getElementById('edFind').addEventListener('click', function () { if (aceEditor) aceEditor.execCommand('find'); });
   document.getElementById('edTab').addEventListener('click', function () { if (aceEditor) aceEditor.indent(); });
   document.getElementById('edComment').addEventListener('click', function () { if (aceEditor) aceEditor.toggleCommentLines(); });
+  document.getElementById('edFontUp').addEventListener('click', function () {
+    editorFontSize = Math.min(24, editorFontSize + 1);
+    localStorage.setItem('wpro_fsize', editorFontSize);
+    if (aceEditor) aceEditor.setFontSize(editorFontSize + 'px');
+    showToast('Font size: ' + editorFontSize + 'px');
+  });
+  document.getElementById('edFontDown').addEventListener('click', function () {
+    editorFontSize = Math.max(10, editorFontSize - 1);
+    localStorage.setItem('wpro_fsize', editorFontSize);
+    if (aceEditor) aceEditor.setFontSize(editorFontSize + 'px');
+    showToast('Font size: ' + editorFontSize + 'px');
+  });
   document.getElementById('edWrap').addEventListener('click', function () {
-    if (aceEditor) {
-      var w = aceEditor.session.getUseWrapMode();
-      aceEditor.session.setUseWrapMode(!w);
-      showToast(!w ? 'Word Wrap: On' : 'Word Wrap: Off');
-    }
+    if (aceEditor) { var w = aceEditor.session.getUseWrapMode(); aceEditor.session.setUseWrapMode(!w); showToast(!w ? 'Word Wrap: On' : 'Word Wrap: Off'); }
+  });
+  document.getElementById('edZen').addEventListener('click', function () {
+    editorModal.classList.toggle('zen');
+    if (aceEditor) setTimeout(function () { aceEditor.resize(); }, 50);
   });
 
-  // 6. Tạo File mới, Tạo Folder mới & Upload có thanh phần trăm (%)
+  // 6. Tạo File, Tạo Folder, Upload, Kéo-Thả (Drag & Drop) & Dán Clipboard (Cmd+V)
   document.getElementById('btnNewFile').addEventListener('click', function () {
     var name = prompt('Enter new file name (e.g. script.yaml, README.md):');
     if (!name || !name.trim()) return;
-    var clean = name.trim().replace(/^\/+/, '');
-    var extMatch = /\.([a-z0-9]+)$/i.exec(clean);
-    var ext = extMatch ? extMatch[1].toLowerCase() : 'yaml';
+    var clean = name.trim().replace(/^\/+/, ''), extMatch = /\.([a-z0-9]+)$/i.exec(clean), ext = extMatch ? extMatch[1].toLowerCase() : 'yaml';
     fetch(buildWebdavUrl(encodeURIComponent(clean)), { method: 'PUT', body: '' }).then(function (r) {
-      if (r.ok || r.status === 201 || r.status === 204) {
-        openCodeEditor(clean, encodeURIComponent(clean), ext);
-      } else {
-        alert('Could not create file (HTTP ' + r.status + ')');
-      }
+      if (r.ok || r.status === 201 || r.status === 204) openCodeEditor(clean, encodeURIComponent(clean), ext);
+      else alert('Could not create file (HTTP ' + r.status + ')');
     });
   });
 
@@ -506,150 +429,100 @@
     if (!name || !name.trim()) return;
     var clean = name.trim().replace(/^\/+|\/+$/g, '');
     fetch(buildWebdavUrl(encodeURIComponent(clean) + '/'), { method: 'MKCOL' }).then(function (r) {
-      if (r.ok || r.status === 201) {
-        showToast('📁 Folder created');
-        setTimeout(function () { location.reload(); }, 400);
-      } else {
-        alert('Could not create folder (HTTP ' + r.status + ')');
-      }
+      if (r.ok || r.status === 201) { showToast('📁 Folder created'); setTimeout(function () { location.reload(); }, 400); }
+      else alert('Could not create folder (HTTP ' + r.status + ')');
     });
   });
 
-  var fileInput = document.getElementById('fileInput');
-  var uploadProg = document.getElementById('uploadProg');
-  var uploadText = document.getElementById('uploadText');
-  var progBar = document.getElementById('progBar');
-
-  document.getElementById('btnUpload').addEventListener('click', function () { fileInput.click(); });
-  fileInput.addEventListener('change', function () {
-    var files = [].slice.call(this.files);
-    if (!files.length) return;
-    uploadProg.classList.add('show');
-    var idx = 0;
-
+  var fileInput = document.getElementById('fileInput'), uploadProg = document.getElementById('uploadProg'), uploadText = document.getElementById('uploadText'), progBar = document.getElementById('progBar');
+  function uploadFileList(files) {
+    if (!files || !files.length) return;
+    uploadProg.classList.add('show'); var idx = 0;
     function next() {
-      if (idx >= files.length) {
-        showToast('✅ Uploaded ' + files.length + ' file(s)!');
-        setTimeout(function () { location.reload(); }, 400);
-        return;
-      }
-      var f = files[idx++];
-      var xhr = new XMLHttpRequest();
+      if (idx >= files.length) { showToast('✅ Uploaded ' + files.length + ' file(s)!'); setTimeout(function () { location.reload(); }, 400); return; }
+      var f = files[idx++], xhr = new XMLHttpRequest();
       xhr.open('PUT', buildWebdavUrl(encodeURIComponent(f.name)), true);
       xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) {
-          var pct = Math.round((e.loaded / e.total) * 100);
-          uploadText.textContent = 'Uploading ' + f.name + ' (' + pct + '%)';
-          progBar.style.width = pct + '%';
-        }
+        if (e.lengthComputable) { var pct = Math.round((e.loaded / e.total) * 100); uploadText.textContent = 'Uploading ' + f.name + ' (' + pct + '%)'; progBar.style.width = pct + '%'; }
       };
-      xhr.onload = function () { next(); };
-      xhr.onerror = function () { alert('Failed uploading ' + f.name); next(); };
+      xhr.onload = next; xhr.onerror = function () { alert('Failed uploading ' + f.name); next(); };
       xhr.send(f);
     }
     next();
+  }
+  document.getElementById('btnUpload').addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () { uploadFileList([].slice.call(this.files)); });
+
+  // Kéo-Thả file vào cửa sổ trình duyệt
+  window.addEventListener('dragover', function (e) { e.preventDefault(); document.body.classList.add('dragging'); });
+  window.addEventListener('dragleave', function (e) { if (e.relatedTarget === null) document.body.classList.remove('dragging'); });
+  window.addEventListener('drop', function (e) {
+    e.preventDefault(); document.body.classList.remove('dragging');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) uploadFileList([].slice.call(e.dataTransfer.files));
+  });
+  // Dán ảnh/file từ Clipboard (Cmd+V)
+  window.addEventListener('paste', function (e) {
+    if (editorModal.classList.contains('show') || document.activeElement === document.getElementById('q')) return;
+    var items = e.clipboardData && e.clipboardData.files;
+    if (items && items.length) uploadFileList([].slice.call(items));
   });
 
-  // 7. iOS Action Sheet (•••)
-  var backdrop = document.getElementById('backdrop');
-  var sheet = document.getElementById('sheet');
-  var selectedItem = null;
-
+  // 7. iOS Action Sheet & Clipboard
+  var backdrop = document.getElementById('backdrop'), sheet = document.getElementById('sheet'), selectedItem = null;
   function openActionSheet(item) {
     selectedItem = item;
     document.getElementById('sheetTitle').textContent = item.name + (item.isDir ? '/' : '');
     document.getElementById('actEdit').style.display = item.isDir ? 'none' : 'flex';
     document.getElementById('actDownload').style.display = item.isDir ? 'none' : 'flex';
-    backdrop.classList.add('show');
-    sheet.classList.add('show');
+    backdrop.classList.add('show'); sheet.classList.add('show');
   }
-  function closeActionSheet() {
-    backdrop.classList.remove('show');
-    sheet.classList.remove('show');
-  }
+  function closeActionSheet() { backdrop.classList.remove('show'); sheet.classList.remove('show'); }
   backdrop.addEventListener('click', closeActionSheet);
   document.getElementById('actCancelSheet').addEventListener('click', closeActionSheet);
 
   document.getElementById('actEdit').addEventListener('click', function () {
-    if (!selectedItem) return;
-    closeActionSheet();
+    if (!selectedItem) return; closeActionSheet();
     var extMatch = /\.([a-z0-9]+)$/i.exec(selectedItem.name);
     openCodeEditor(selectedItem.name, selectedItem.href, extMatch ? extMatch[1].toLowerCase() : 'yaml');
   });
-
   document.getElementById('actCopyPath').addEventListener('click', function () {
-    if (!selectedItem) return;
-    closeActionSheet();
+    if (!selectedItem) return; closeActionSheet();
     var cleanPath = decodeURIComponent(selectedItem.internalPath);
     if (navigator.clipboard) navigator.clipboard.writeText(cleanPath);
     showToast('🔗 Copied: ' + cleanPath);
   });
-
   document.getElementById('actDownload').addEventListener('click', function () {
-    if (!selectedItem) return;
-    closeActionSheet();
-    var link = document.createElement('a');
-    link.href = selectedItem.href;
-    link.download = selectedItem.name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    if (!selectedItem) return; closeActionSheet();
+    var link = document.createElement('a'); link.href = selectedItem.href; link.download = selectedItem.name;
+    document.body.appendChild(link); link.click(); link.remove();
   });
-
   document.getElementById('actDup').addEventListener('click', function () {
-    if (!selectedItem) return;
-    var item = selectedItem;
-    closeActionSheet();
+    if (!selectedItem) return; var item = selectedItem; closeActionSheet();
     var dupName = prompt('Duplicate "' + item.name + '" as:', 'copy_' + item.name);
     if (!dupName || !dupName.trim()) return;
     var destInternal = p + encodeURIComponent(dupName.trim()) + (item.isDir ? '/' : '');
-    fetch(buildWebdavUrl(item.href), {
-      method: 'COPY',
-      headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' }
-    }).then(function (r) {
-      if (r.ok || r.status === 201 || r.status === 204) {
-        showToast('📑 Duplicated successfully');
-        setTimeout(function () { location.reload(); }, 400);
-      } else alert('Duplicate failed (HTTP ' + r.status + ')');
+    fetch(buildWebdavUrl(item.href), { method: 'COPY', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
+      if (r.ok || r.status === 201 || r.status === 204) { showToast('📑 Duplicated'); setTimeout(function () { location.reload(); }, 400); }
     });
   });
-
   document.getElementById('actRename').addEventListener('click', function () {
-    if (!selectedItem) return;
-    var item = selectedItem;
-    closeActionSheet();
+    if (!selectedItem) return; var item = selectedItem; closeActionSheet();
     var newName = prompt('Rename "' + item.name + '" to:', item.name);
     if (!newName || !newName.trim() || newName.trim() === item.name) return;
     var destInternal = p + encodeURIComponent(newName.trim()) + (item.isDir ? '/' : '');
-    fetch(buildWebdavUrl(item.href), {
-      method: 'MOVE',
-      headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' }
-    }).then(function (r) {
-      if (r.ok || r.status === 201 || r.status === 204) {
-        showToast('🏷️ Renamed successfully');
-        setTimeout(function () { location.reload(); }, 400);
-      } else alert('Rename failed (HTTP ' + r.status + ')');
+    fetch(buildWebdavUrl(item.href), { method: 'MOVE', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
+      if (r.ok || r.status === 201 || r.status === 204) { showToast('🏷️ Renamed'); setTimeout(function () { location.reload(); }, 400); }
     });
   });
-
   document.getElementById('actDelete').addEventListener('click', function () {
-    if (!selectedItem) return;
-    var item = selectedItem;
-    closeActionSheet();
+    if (!selectedItem) return; var item = selectedItem; closeActionSheet();
     if (!confirm('Delete "' + item.name + '" permanently?')) return;
     fetch(buildWebdavUrl(item.href), { method: 'DELETE' }).then(function (r) {
-      if (r.ok || r.status === 200 || r.status === 204) {
-        showToast('🗑️ Deleted "' + item.name + '"');
-        setTimeout(function () { location.reload(); }, 400);
-      } else alert('Delete failed (HTTP ' + r.status + ')');
+      if (r.ok || r.status === 200 || r.status === 204) { showToast('🗑️ Deleted'); setTimeout(function () { location.reload(); }, 400); }
     });
   });
 
-  // 8. Hệ thống Clipboard (Đơn lẻ & Hàng loạt)
-  var clipBar = document.getElementById('clipBar');
-  var clipModeEl = document.getElementById('clipMode');
-  var clipNameEl = document.getElementById('clipName');
-
+  var clipBar = document.getElementById('clipBar'), clipModeEl = document.getElementById('clipMode'), clipNameEl = document.getElementById('clipName');
   function refreshClipBar() {
     try {
       var raw = sessionStorage.getItem('wpro_clip');
@@ -661,123 +534,46 @@
     } catch (e) { clipBar.classList.remove('show'); }
   }
   refreshClipBar();
+  function setClip(mode, items) { sessionStorage.setItem('wpro_clip', JSON.stringify({ mode: mode, items: items })); refreshClipBar(); }
 
-  function setClip(mode, items) {
-    sessionStorage.setItem('wpro_clip', JSON.stringify({ mode: mode, items: items }));
-    refreshClipBar();
-  }
-
-  document.getElementById('actCopy').addEventListener('click', function () {
-    if (!selectedItem) return;
-    setClip('COPY', [selectedItem]);
-    closeActionSheet();
-    showToast('📋 Copied "' + selectedItem.name + '"');
-  });
-
-  document.getElementById('actCut').addEventListener('click', function () {
-    if (!selectedItem) return;
-    setClip('MOVE', [selectedItem]);
-    closeActionSheet();
-    showToast('✂️ Cut "' + selectedItem.name + '"');
-  });
-
-  document.getElementById('btnBatchCopy').addEventListener('click', function () {
-    if (!selectedSet.length) return;
-    setClip('COPY', selectedSet.slice());
-    btnSelectMode.click();
-    showToast('📋 Copied ' + selectedSet.length + ' items');
-  });
-
-  document.getElementById('btnBatchMove').addEventListener('click', function () {
-    if (!selectedSet.length) return;
-    setClip('MOVE', selectedSet.slice());
-    btnSelectMode.click();
-    showToast('✂️ Ready to move items');
-  });
-
+  document.getElementById('actCopy').addEventListener('click', function () { if (selectedItem) { setClip('COPY', [selectedItem]); closeActionSheet(); showToast('📋 Copied'); } });
+  document.getElementById('actCut').addEventListener('click', function () { if (selectedItem) { setClip('MOVE', [selectedItem]); closeActionSheet(); showToast('✂️ Cut'); } });
+  document.getElementById('btnBatchCopy').addEventListener('click', function () { if (selectedSet.length) { setClip('COPY', selectedSet.slice()); btnSelectMode.click(); } });
+  document.getElementById('btnBatchMove').addEventListener('click', function () { if (selectedSet.length) { setClip('MOVE', selectedSet.slice()); btnSelectMode.click(); } });
   document.getElementById('btnBatchDel').addEventListener('click', function () {
-    if (!selectedSet.length) return;
-    if (!confirm('Delete ' + selectedSet.length + ' selected item(s)?')) return;
-    Promise.all(selectedSet.map(function (it) {
-      return fetch(ingressPrefix + it.internalPath, { method: 'DELETE' });
-    })).then(function () {
-      showToast('🗑️ Deleted selected items');
-      setTimeout(function () { location.reload(); }, 400);
-    });
+    if (!selectedSet.length || !confirm('Delete ' + selectedSet.length + ' item(s)?')) return;
+    Promise.all(selectedSet.map(function (it) { return fetch(ingressPrefix + it.internalPath, { method: 'DELETE' }); })).then(function () { location.reload(); });
   });
-
-  document.getElementById('btnCancelClip').addEventListener('click', function () {
-    sessionStorage.removeItem('wpro_clip');
-    refreshClipBar();
-  });
-
+  document.getElementById('btnCancelClip').addEventListener('click', function () { sessionStorage.removeItem('wpro_clip'); refreshClipBar(); });
   document.getElementById('btnPaste').addEventListener('click', function () {
-    var raw = sessionStorage.getItem('wpro_clip');
-    if (!raw) return;
-    var clip = JSON.parse(raw);
+    var raw = sessionStorage.getItem('wpro_clip'); if (!raw) return; var clip = JSON.parse(raw);
     Promise.all(clip.items.map(function (it) {
       var destInternal = p + encodeURIComponent(it.name) + (it.isDir ? '/' : '');
-      if (destInternal === it.internalPath) {
-        destInternal = p + encodeURIComponent('copy_' + it.name) + (it.isDir ? '/' : '');
-      }
-      return fetch(ingressPrefix + it.internalPath, {
-        method: clip.mode,
-        headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' }
-      });
-    })).then(function () {
-      if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip');
-      showToast('✅ Pasted successfully!');
-      setTimeout(function () { location.reload(); }, 400);
-    });
+      if (destInternal === it.internalPath) destInternal = p + encodeURIComponent('copy_' + it.name) + (it.isDir ? '/' : '');
+      return fetch(ingressPrefix + it.internalPath, { method: clip.mode, headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } });
+    })).then(function () { if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip'); location.reload(); });
   });
 
-  // 9. Tìm kiếm, Sắp xếp & Đổi giao diện List/Grid
-  var qInput = document.getElementById('q');
-  var clearBtn = document.getElementById('clearBtn');
-  var emptyEl = document.getElementById('empty');
-
+  // 8. Search, Sort & Grid/List View
+  var qInput = document.getElementById('q'), clearBtn = document.getElementById('clearBtn'), emptyEl = document.getElementById('empty');
   function filterRows() {
-    var v = qInput.value.trim().toLowerCase();
-    clearBtn.classList.toggle('show', v.length > 0);
-    var visibleCount = 0;
-    rows.forEach(function (tr) {
-      var n = tr.getAttribute('data-n');
-      if (n === null) return;
-      var match = !v || n.indexOf(v) !== -1;
-      tr.style.display = match ? '' : 'none';
-      if (match) visibleCount++;
-    });
-    emptyEl.classList.toggle('show', visibleCount === 0 && (nd + nf) > 0);
+    var v = qInput.value.trim().toLowerCase(); clearBtn.classList.toggle('show', v.length > 0); var c = 0;
+    rows.forEach(function (tr) { var n = tr.getAttribute('data-n'); if (n === null) return; var m = !v || n.indexOf(v) !== -1; tr.style.display = m ? '' : 'none'; if (m) c++; });
+    emptyEl.classList.toggle('show', c === 0 && (nd + nf) > 0);
   }
   qInput.addEventListener('input', filterRows);
-  clearBtn.addEventListener('click', function () {
-    qInput.value = '';
-    filterRows();
-    qInput.focus();
-  });
+  clearBtn.addEventListener('click', function () { qInput.value = ''; filterRows(); qInput.focus(); });
 
-  var s = document.getElementById('sort');
-  var cur = location.search.replace(/^\?/, '');
-  if (cur) { for (var i = 0; i < s.options.length; i++) if (s.options[i].value === cur) s.selectedIndex = i; }
+  var s = document.getElementById('sort'), cur = location.search.replace(/^\?/, '');
+  if (cur) for (var i = 0; i < s.options.length; i++) if (s.options[i].value === cur) s.selectedIndex = i;
   s.addEventListener('change', function () { location.search = '?' + this.value; });
 
-  var viewBtn = document.getElementById('viewBtn');
-  var viewIcon = document.getElementById('viewIcon');
+  var viewBtn = document.getElementById('viewBtn'), viewIcon = document.getElementById('viewIcon');
   var gridSvg = '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>';
   var listSvg = '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>';
-
-  function applyView(mode) {
-    var isGrid = mode === 'grid';
-    document.body.classList.toggle('grid-mode', isGrid);
-    viewIcon.innerHTML = isGrid ? listSvg : gridSvg;
-  }
-  var savedView = localStorage.getItem('wpro_view') || 'list';
-  applyView(savedView);
-  viewBtn.addEventListener('click', function () {
-    savedView = document.body.classList.contains('grid-mode') ? 'list' : 'grid';
-    localStorage.setItem('wpro_view', savedView);
-    applyView(savedView);
-  });
+  function applyView(mode) { var g = mode === 'grid'; document.body.classList.toggle('grid-mode', g); viewIcon.innerHTML = g ? listSvg : gridSvg; }
+  var savedView = localStorage.getItem('wpro_view') || 'list'; applyView(savedView);
+  viewBtn.addEventListener('click', function () { savedView = document.body.classList.contains('grid-mode') ? 'list' : 'grid'; localStorage.setItem('wpro_view', savedView); applyView(savedView); });
 })();
 </script>
 </body>
