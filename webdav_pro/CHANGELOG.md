@@ -1,3 +1,6 @@
+## [2.3.8] - 2026-11-09
+- **Maintenance & Improvements:** Update run.sh
+
 ## [2.3.7] - 2026-11-09
 - **Maintenance & Improvements:** Update header.html
 
