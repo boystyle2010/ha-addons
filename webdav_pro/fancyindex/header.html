@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>WebDAV Server Pro</title>
-<!-- Ace Code Editor, Marked (Markdown), js-yaml, JSZip, PDF.js & xterm.js -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-searchbox.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
@@ -26,14 +25,12 @@ body{
   margin:0;min-height:100vh;background:var(--bg);color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,sans-serif;
   padding:0 16px max(120px,env(safe-area-inset-bottom));-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
 }
-.container{max-width:860px;margin:0 auto;-webkit-backface-visibility:hidden;backface-visibility:hidden}
-
-/* Ẩn triệt để dấu "/" và text thừa của Nginx FancyIndex */
+.container{max-width:860px;margin:0 auto}
 #fxi-raw{font-size:0!important;line-height:0!important;color:transparent!important;margin-top:4px}
 #fxi-raw>h1,#fxi-raw>p,#fxi-raw>hr{display:none!important}
 
-/* Drag & Drop Overlay */
 .drop-zone{
   position:fixed;inset:12px;border:2.5px dashed var(--blue);border-radius:20px;
   background:rgba(10,132,255,.12);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
@@ -41,7 +38,6 @@ body{
 }
 body.dragging .drop-zone{display:grid}
 
-/* Top Sticky Navigation */
 .nav{
   position:sticky;top:0;z-index:20;display:none;align-items:center;justify-content:space-between;
   height:44px;margin:0 -16px;padding:0 16px;background:rgba(0,0,0,.84);
@@ -49,10 +45,8 @@ body.dragging .drop-zone{display:grid}
 }
 .nav.show{display:flex}
 .back{display:inline-flex;align-items:center;gap:5px;color:var(--blue);text-decoration:none;font-size:17px;font-weight:500;max-width:80%;padding:6px 0}
-.back:active{opacity:.55}
 .back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* Hàng 1: Hero Header */
 .hero{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 2px 12px}
 .hero-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
 .app-badge{
@@ -72,7 +66,6 @@ body.dragging .drop-zone{display:grid}
 }
 .select-toggle.active{background:var(--blue);color:#fff}
 
-/* Hàng 2: Search Bar */
 .search-wrap{position:relative;margin:0 0 10px}
 .search{
   -webkit-appearance:none;appearance:none;width:100%;height:38px;border:0;border-radius:11px;outline:none;
@@ -81,72 +74,47 @@ body.dragging .drop-zone{display:grid}
 }
 .search:focus{background-color:var(--card-elevated)}
 .search::placeholder{color:var(--muted)}
-.clear-btn{
-  position:absolute;right:8px;top:50%;transform:translateY(-50%);
-  width:22px;height:22px;border:0;padding:0;background:none;display:none;place-items:center;cursor:pointer;
-}
+.clear-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:22px;height:22px;border:0;padding:0;background:none;display:none;place-items:center;cursor:pointer}
 .clear-btn.show{display:grid}
 
-/* Hàng 3: Action Bar & System Suite Bar */
-.action-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 8px}
-.sys-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 12px}
-@media (max-width:480px){.sys-bar{grid-template-columns:repeat(2,1fr)}}
+.action-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 8px}
+.sys-bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 12px}
+@media (max-width:520px){.sys-bar{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .act-btn{
   height:36px;padding:0 10px;border:0;border-radius:10px;background:var(--card);color:var(--blue);
   display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;font-weight:600;
-  cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.08);white-space:nowrap;
+  cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.08);white-space:nowrap;min-width:0;overflow:hidden;
 }
+.act-btn span{overflow:hidden;text-overflow:ellipsis}
 .act-btn:active{transform:scale(.96);background:var(--card-elevated)}
-.act-btn svg{width:16px;height:16px;flex:none}
+.act-btn svg{width:16px;height:16px;flex:none;color:var(--blue)}
 .act-btn.primary{background:var(--blue-bg);color:#409cff}
-.act-btn.sys{height:34px;font-size:12.5px;color:#e5e5ea;background:rgba(28,28,30,.9)}
-.act-btn.sys span.em{font-size:14px}
+.act-btn.primary svg{color:#409cff}
 
 .upload-prog{display:none;margin:0 0 12px;background:var(--card);border-radius:10px;padding:10px 14px;font-size:13px}
 .upload-prog.show{display:block}
 .prog-track{height:6px;background:var(--card-elevated);border-radius:3px;overflow:hidden;margin-top:6px}
 .prog-bar{height:100%;width:0%;background:var(--blue);transition:width .15s ease}
 
-/* Hàng 4: Sub-Toolbar */
 .toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 14px}
-.crumbs{
-  display:flex;align-items:center;flex-wrap:nowrap;gap:5px;font-size:13px;color:var(--muted);
-  overflow-x:auto;scrollbar-width:none;padding:2px 0;min-width:0;flex:1;
-}
+.crumbs{display:flex;align-items:center;flex-wrap:nowrap;gap:5px;font-size:13px;color:var(--muted);overflow-x:auto;scrollbar-width:none;padding:2px 0;min-width:0;flex:1}
 .crumbs::-webkit-scrollbar{display:none}
-.crumbs a,.crumbs b{
-  display:inline-flex;align-items:center;gap:4px;white-space:nowrap;padding:5px 10px;border-radius:8px;
-  background:rgba(255,255,255,.06);text-decoration:none;font-size:13px;
-}
+.crumbs a,.crumbs b{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;padding:5px 10px;border-radius:8px;background:rgba(255,255,255,.06);text-decoration:none;font-size:13px}
 .crumbs a{color:var(--blue);font-weight:500}
 .crumbs b{color:var(--text);font-weight:600;background:var(--card);cursor:pointer}
 .crumbs .sep{color:#5a5a5e;font-size:13px;flex:none}
 
 .controls{display:flex;align-items:center;gap:8px;flex:none}
 .sort-pill{position:relative;display:inline-flex;align-items:center}
-.sort{
-  -webkit-appearance:none;appearance:none;height:32px;border:0;border-radius:16px;background:var(--card);
-  color:var(--blue);font-size:13.5px;font-weight:500;padding:0 27px 0 13px;outline:none;cursor:pointer;
-  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.09);
-}
-.sort-pill::after{
-  content:"";position:absolute;right:11px;top:50%;width:6px;height:6px;
-  border-right:1.8px solid var(--blue);border-bottom:1.8px solid var(--blue);transform:translateY(-65%) rotate(45deg);pointer-events:none;
-}
-.view-btn{
-  width:32px;height:32px;border:0;border-radius:16px;background:var(--card);color:var(--blue);
-  display:grid;place-items:center;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.09);
-}
+.sort{-webkit-appearance:none;appearance:none;height:32px;border:0;border-radius:16px;background:var(--card);color:var(--blue);font-size:13.5px;font-weight:500;padding:0 27px 0 13px;outline:none;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.09)}
+.sort-pill::after{content:"";position:absolute;right:11px;top:50%;width:6px;height:6px;border-right:1.8px solid var(--blue);border-bottom:1.8px solid var(--blue);transform:translateY(-65%) rotate(45deg);pointer-events:none}
+.view-btn{width:32px;height:32px;border:0;border-radius:16px;background:var(--card);color:var(--blue);display:grid;place-items:center;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.09)}
 .view-btn svg{width:16px;height:16px}
 
-/* Danh sách Folder / File */
 table#list,#list tbody{display:block;width:100%;border:0;font-size:16px;line-height:1.35;color:var(--text)}
 #list thead,#list tr.parent{display:none!important}
 #list tbody{background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.22)}
-#list tr{
-  position:relative;display:grid;grid-template-columns:auto 1fr;grid-template-areas:"name name" "size date";
-  row-gap:3px;padding:12px 52px 12px 16px;cursor:pointer;transition:background-color .12s ease;
-}
+#list tr{position:relative;display:grid;grid-template-columns:auto 1fr;grid-template-areas:"name name" "size date";row-gap:3px;padding:12px 52px 12px 16px;cursor:pointer;transition:background-color .12s ease}
 #list tr:hover{background:var(--card-hover)}
 #list tr:active{background:var(--card-elevated)}
 #list tr.selected{background:rgba(10,132,255,.18)!important}
@@ -161,39 +129,16 @@ table#list,#list tbody{display:block;width:100%;border:0;font-size:16px;line-hei
 #list td.date{grid-area:date}
 #list tr.dir td.size{display:none}
 #list tr.dir td.date{grid-area:2/1/3/3;padding-left:50px}
-
-/* Git Status Dots */
 .git-dot{width:8.5px;height:8.5px;border-radius:50%;flex:none;display:inline-block}
 .git-dot.mod{background:#ffd60a;box-shadow:0 0 6px rgba(255,214,10,.65)}
 .git-dot.add{background:#30d158;box-shadow:0 0 6px rgba(48,209,88,.65)}
-
 .sel-chk{width:22px;height:22px;border-radius:50%;border:1.8px solid var(--muted);display:none;place-items:center;flex:none}
 body.select-mode .sel-chk{display:grid}
 #list tr.selected .sel-chk{background:var(--blue);border-color:var(--blue)}
 .sel-chk svg{width:13px;height:13px;opacity:0}
 #list tr.selected .sel-chk svg{opacity:1}
-
-.more-btn{
-  position:absolute;right:10px;top:50%;transform:translateY(-50%);width:34px;height:34px;
-  border-radius:50%;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;z-index:3;
-}
-.more-btn:hover,.more-btn:active{background:rgba(255,255,255,.1);color:var(--blue)}
+.more-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);width:34px;height:34px;border-radius:50%;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;z-index:3}
 .more-btn svg{width:18px;height:18px;pointer-events:none}
-
-/* Grid Mode */
-body.grid-mode #list tbody{background:transparent;border-radius:0;box-shadow:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:12px}
-body.grid-mode #list tr{background:var(--card);border-radius:14px;display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 10px 12px;row-gap:4px}
-body.grid-mode #list tr::before{display:none}
-body.grid-mode .more-btn{top:6px;right:6px;transform:none;width:28px;height:28px}
-body.grid-mode #list td.link a{flex-direction:column;gap:8px;font-size:14px}
-body.grid-mode #list td.link a .nm{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13.5px}
-body.grid-mode #list td.size,body.grid-mode #list tr.dir td.date{padding-left:0;font-size:11.5px}
-body.grid-mode #list td.size::after,body.grid-mode #list tr:not(.dir) td.date{display:none}
-body.grid-mode .ic{width:46px;height:46px;border-radius:11px}
-body.grid-mode .ic svg{width:25px;height:25px}
-body.grid-mode .ic.folder svg{width:48px;height:40px}
-
-/* Icons */
 .ic{width:36px;height:36px;flex:none;border-radius:9px;display:grid;place-items:center;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18)}
 .ic svg{width:20px;height:20px}
 .ic.folder{background:none;box-shadow:none;border-radius:0}
@@ -212,149 +157,10 @@ body.grid-mode .ic.folder svg{width:48px;height:40px}
 .t-md{background:linear-gradient(180deg,#818cf8,#4f46e5)}
 .t-hex{background:linear-gradient(180deg,#f59e0b,#d97706)}
 .t-file{background:linear-gradient(180deg,#7d8aa1,#5b6678)}
-
-/* Floating Bars & Action Sheet */
-.clip-bar,.batch-bar,.bg-audio-bar{
-  position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(150px);
-  width:calc(100% - 32px);max-width:540px;background:rgba(28,28,30,.95);
-  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
-  border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:10px 14px;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 12px 32px rgba(0,0,0,.65);z-index:80;
-  transition:transform .25s cubic-bezier(.2,.9,.3,1);
-}
-.bg-audio-bar{bottom:max(78px,env(safe-area-inset-bottom));z-index:79}
-.clip-bar.show,.batch-bar.show,.bg-audio-bar.show{transform:translateX(-50%) translateY(0)}
-.clip-info{min-width:0;flex:1;font-size:13.5px}
-.clip-info b{color:var(--blue);display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-.clip-info span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
-.clip-btns{display:flex;gap:6px;flex:none;align-items:center}
-.clip-btn{height:32px;padding:0 12px;border-radius:16px;border:0;font-size:13px;font-weight:600;cursor:pointer}
-.clip-btn.paste{background:var(--blue);color:#fff}
-.clip-btn.danger{background:rgba(255,69,58,.2);color:var(--red)}
-.clip-btn.cancel{background:var(--card-elevated);color:var(--muted)}
-
-.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:90}
-.backdrop.show{opacity:1;pointer-events:auto}
-.sheet{
-  position:fixed;left:50%;bottom:0;transform:translateX(-50%) translateY(105%);
-  width:100%;max-width:500px;padding:0 12px max(14px,env(safe-area-inset-bottom));z-index:95;
-  transition:transform .26s cubic-bezier(.2,.9,.3,1);
-}
-.sheet.show{transform:translateX(-50%) translateY(0)}
-.sheet-group{background:rgba(30,30,32,.96);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:14px;overflow:hidden;margin-bottom:8px;max-height:76vh;overflow-y:auto}
-.sheet-head{padding:13px 16px;text-align:center;border-bottom:.5px solid var(--sep);font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sheet-btn{
-  width:100%;padding:13px 18px;border:0;background:none;border-bottom:.5px solid var(--sep);color:var(--blue);
-  font-size:16.5px;font-weight:500;text-align:left;display:flex;align-items:center;justify-content:space-between;cursor:pointer;
-}
-.sheet-btn:last-child{border-bottom:0}
-.sheet-btn:active{background:rgba(255,255,255,.08)}
-.sheet-btn.danger{color:var(--red)}
-.sheet-btn.cancel{justify-content:center;font-weight:600}
-
-/* IDE CODE EDITOR + MINIMAP + MEDIA/PDF/HEX VIEWERS */
-.editor-modal{position:fixed;inset:0;background:#0d1117;z-index:120;display:none;flex-direction:column}
-.editor-modal.show{display:flex}
-.editor-modal.zen .ed-subbar{display:none!important}
-.ed-top{height:50px;padding:0 12px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;gap:8px}
-.ed-title-wrap{min-width:0;flex:1;text-align:center}
-.ed-title{font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ed-lang-badge{font-size:11px;color:#58a6ff;font-weight:500}
-.ed-btn{height:32px;padding:0 12px;border-radius:8px;border:0;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;flex:none}
-.ed-btn.close{background:#21262d;color:#c9d1d9}
-.ed-btn.md-toggle{background:rgba(88,166,255,.16);color:#58a6ff;display:none}
-.ed-btn.md-toggle.active{background:#58a6ff;color:#0d1117}
-.ed-btn.save{background:var(--blue);color:#fff}
-.ed-btn.save:disabled{opacity:.5}
-
-.yaml-alert{display:none;padding:8px 14px;background:rgba(255,69,58,.16);border-bottom:1px solid var(--red);color:#ff6961;font-size:12.5px;font-family:"SF Mono",monospace}
-.yaml-alert.show{display:block}
-.yaml-ok{color:var(--green)!important}
-
-.ed-subbar{height:38px;padding:0 10px;background:#161b22;border-bottom:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;gap:8px;overflow-x:auto;scrollbar-width:none}
-.ed-subbar::-webkit-scrollbar{display:none}
-.ed-tools{display:flex;align-items:center;gap:5px;flex:none}
-.ed-chip{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;height:26px;padding:0 8px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap}
-.ed-chip:active,.ed-chip.active{background:#30363d;border-color:#58a6ff;color:#58a6ff}
-.ed-status{font-size:11.5px;color:#8b949e;white-space:nowrap;flex:none}
-
-.ed-body{flex:1;position:relative;display:flex;overflow:hidden}
-#aceContainer{flex:1;width:100%;height:100%;font-size:14px}
-/* Ace Mini Map */
-.minimap-wrap{width:64px;height:100%;background:#11161d;border-left:1px solid #21262d;position:relative;display:none;cursor:pointer;flex:none;user-select:none}
-.minimap-wrap.show{display:block}
-#minimapCanvas{width:100%;height:100%;display:block}
-.minimap-vp{position:absolute;left:0;right:0;top:0;height:40px;background:rgba(88,166,255,.22);border-top:1px solid rgba(88,166,255,.55);border-bottom:1px solid rgba(88,166,255,.55);pointer-events:none}
-
-.ed-textarea{flex:1;width:100%;height:100%;border:0;outline:none;resize:none;padding:14px;background:#0d1117;color:#e6edf3;font-family:"SF Mono",monospace;font-size:14px;line-height:1.55;display:none}
-.md-view{flex:1;display:none;overflow-y:auto;padding:20px 18px 60px;background:#0d1117;color:#e6edf3;line-height:1.6;font-size:15px}
-.md-view h1,.md-view h2,.md-view h3{border-bottom:1px solid #21262d;padding-bottom:.3em;margin-top:1.2em;color:#fff}
-.md-view code{background:rgba(110,118,129,.4);padding:.2em .4em;border-radius:6px;font-family:"SF Mono",monospace;font-size:85%}
-.md-view pre{background:#161b22;padding:14px;border-radius:10px;overflow-x:auto;border:1px solid #30363d}
-.md-view pre code{background:none;padding:0}
-.md-view table{width:100%;border-collapse:collapse;margin:14px 0}
-.md-view th,.md-view td{border:1px solid #30363d;padding:8px 12px;text-align:left}
-.md-view th{background:#161b22}
-.md-view a{color:#58a6ff}
-
-.ed-preview{flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;overflow:auto;background:#000;gap:14px}
-.ed-preview img,.ed-preview video{max-width:100%;max-height:76vh;border-radius:10px}
-.ed-preview audio{width:92%;max-width:460px}
-.media-ctrl-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;background:#161b22;border:1px solid #30363d;padding:8px 12px;border-radius:12px}
-.pdf-toolbar{display:flex;align-items:center;gap:10px;background:#161b22;border:1px solid #30363d;padding:6px 14px;border-radius:10px;color:#e6edf3;font-size:13px}
-#pdfCanvas{max-width:100%;height:auto;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.6)}
-
-/* Hex Viewer */
-.hex-wrap{width:100%;max-width:820px;background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:14px;overflow:auto;max-height:80vh;font-family:"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;line-height:1.55;color:#e6edf3;align-self:stretch;margin:0 auto}
-.hex-row{display:grid;grid-template-columns:76px 1fr 150px;gap:14px;white-space:pre;border-bottom:1px solid rgba(48,54,61,.4);padding:2px 0}
-.hex-off{color:#58a6ff;user-select:none}
-.hex-bytes{color:#d2a8ff}
-.hex-ascii{color:#7ee787}
-
-.arch-list{width:100%;max-width:680px;background:#161b22;border-radius:12px;border:1px solid #30363d;overflow:hidden;align-self:start;margin:0 auto}
-.arch-item{padding:10px 14px;border-bottom:1px solid #21262d;display:flex;justify-content:space-between;font-size:13.5px;color:#e6edf3;font-family:"SF Mono",monospace}
-
-/* Pro Suite Modal (Terminal, Disk Analytics, Share Links, Audit Log) */
-.suite-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);z-index:130;display:none;place-items:center;padding:14px}
-.suite-modal.show{display:grid}
-.suite-box{width:100%;max-width:760px;max-height:88vh;background:#161b22;border:1px solid #30363d;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.75)}
-.suite-head{padding:12px 16px;background:#0d1117;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.suite-head h3{margin:0;font-size:16px;font-weight:700;color:#fff;display:flex;align-items:center;gap:8px}
-.suite-body{padding:16px;overflow-y:auto;flex:1;color:#e6edf3;font-size:14px}
-
-.disk-grid{display:grid;grid-template-columns:210px 1fr;gap:20px;align-items:center}
-@media (max-width:560px){.disk-grid{grid-template-columns:1fr;justify-items:center}}
-.donut-box{position:relative;width:190px;height:190px;display:grid;place-items:center}
-.donut-center{position:absolute;text-align:center;line-height:1.25}
-.donut-center b{font-size:20px;color:#fff;display:block}
-.donut-center span{font-size:11.5px;color:var(--muted)}
-.legend-list{width:100%;display:flex;flex-direction:column;gap:8px}
-.legend-item{display:flex;align-items:center;justify-content:space-between;background:#0d1117;padding:8px 12px;border-radius:8px;border:1px solid #21262d;font-size:13px}
-.legend-left{display:flex;align-items:center;gap:8px}
-.legend-dot{width:11px;height:11px;border-radius:3px;flex:none}
-
-.term-frame{width:100%;height:420px;border:1px solid #30363d;border-radius:10px;background:#000;overflow:hidden}
-.audit-table{width:100%;border-collapse:collapse;font-size:12.5px;font-family:"SF Mono",monospace}
-.audit-table th,.audit-table td{padding:8px 10px;border-bottom:1px solid #21262d;text-align:left;word-break:break-all}
-.audit-table th{color:#8b949e;background:#0d1117;position:sticky;top:0}
-.badge-m{padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700}
-.badge-PUT,.badge-SNAPSHOT,.badge-SHARE_CREATE{background:rgba(48,209,88,.18);color:#30d158}
-.badge-DELETE,.badge-SHARE_REVOKE{background:rgba(255,69,58,.18);color:#ff453a}
-.badge-GET,.badge-SHARE_DL{background:rgba(10,132,255,.18);color:#58a6ff}
-
-.empty{display:none;text-align:center;padding:42px 20px;color:var(--muted);font-size:15px}
-.empty.show{display:block}
-.stat{text-align:center;color:var(--muted);font-size:13px;margin:18px 0 6px}
-.toast{
-  position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);
-  background:rgba(44,44,46,.96);color:#fff;padding:9px 18px;border-radius:20px;font-size:13.5px;font-weight:500;
-  opacity:0;pointer-events:none;transition:all .22s ease;z-index:260;box-shadow:0 6px 20px rgba(0,0,0,.5);
-}
-.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
-<div class="drop-zone">📥 Drop files anywhere to upload</div>
+<div class="drop-zone">Drop files anywhere to upload</div>
 <div class="container">
   <div id="nav" class="nav">
     <a id="back" class="back" href="../">
@@ -389,7 +195,6 @@ body.grid-mode .ic.folder svg{width:48px;height:40px}
     </button>
   </div>
 
-  <!-- Hàng 3A: Các thao tác File cơ bản -->
   <div class="action-bar">
     <button id="btnNewFile" class="act-btn" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>
@@ -406,12 +211,23 @@ body.grid-mode .ic.folder svg{width:48px;height:40px}
     <input id="fileInput" type="file" multiple style="display:none">
   </div>
 
-  <!-- Hàng 3B: System Operations & Security Bar -->
   <div class="sys-bar">
-    <button id="btnSysTerm" class="act-btn sys" type="button"><span class="em">💻</span><span>Terminal</span></button>
-    <button id="btnSysDisk" class="act-btn sys" type="button"><span class="em">📊</span><span>Storage</span></button>
-    <button id="btnSysSnap" class="act-btn sys" type="button"><span class="em">⚡</span><span>Quick Zip</span></button>
-    <button id="btnSysAudit" class="act-btn sys" type="button"><span class="em">🛡️</span><span>Audit &amp; Shares</span></button>
+    <button id="btnSysTerm" class="act-btn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>
+      <span>Terminal</span>
+    </button>
+    <button id="btnSysDisk" class="act-btn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+      <span>Storage</span>
+    </button>
+    <button id="btnSysSnap" class="act-btn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+      <span>Quick Zip</span>
+    </button>
+    <button id="btnSysAudit" class="act-btn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+      <span>Audit &amp; Shares</span>
+    </button>
   </div>
 
   <div id="uploadProg" class="upload-prog">
