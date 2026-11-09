@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Sign In • OmniDrive Pro</title>
+<style>
+:root {
+  --bg:#000; --card:rgba(28,28,30,.78); --input:rgba(44,44,46,.85);
+  --sep:rgba(84,84,88,.45); --text:#fff; --muted:#8e8e93;
+  --blue:#0a84ff; --green:#30d158; --red:#ff453a;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+body{
+  display:grid;place-items:center;padding:20px;position:relative;
+  background:radial-gradient(circle at 20% 15%,rgba(10,132,255,.22),transparent 45%),
+             radial-gradient(circle at 80% 85%,rgba(94,92,230,.18),transparent 50%),#000;
+}
+.login-card{
+  width:100%;max-width:390px;background:var(--card);
+  -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
+  border:1px solid rgba(255,255,255,.14);border-radius:26px;padding:30px 24px 26px;
+  box-shadow:0 24px 60px rgba(0,0,0,.75);text-align:center;
+  animation:popIn .32s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes popIn{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.logo-wrap{
+  width:68px;height:68px;margin:0 auto 16px;border-radius:18px;
+  background:linear-gradient(145deg,#0f172a,#1e293b);border:1px solid rgba(56,189,248,.5);
+  box-shadow:0 10px 28px rgba(10,132,255,.32);display:grid;place-items:center;
+}
+.logo-wrap svg{width:38px;height:38px}
+h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.02em}
+.host-pill{
+  display:inline-flex;align-items:center;gap:5px;margin:7px 0 22px;padding:4px 11px;
+  border-radius:12px;background:rgba(10,132,255,.14);border:.5px solid rgba(10,132,255,.35);
+  color:#5ac8fa;font-size:12px;font-weight:600;
+}
+.field-group{text-align:left;margin-bottom:14px}
+.field-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:0 0 6px 4px;text-transform:uppercase;letter-spacing:.04em}
+.input-wrap{position:relative;display:flex;align-items:center}
+.input-wrap svg.ic-left{position:absolute;left:13px;width:18px;height:18px;color:var(--muted);pointer-events:none}
+.inp{
+  width:100%;height:46px;padding:0 42px 0 40px;border-radius:13px;border:1px solid rgba(255,255,255,.08);
+  background:var(--input);color:var(--text);font-size:16px;outline:none;transition:border-color .15s,background .15s;
+}
+.inp:focus{border-color:var(--blue);background:rgba(58,58,60,.95)}
+.eye-btn{
+  position:absolute;right:8px;width:32px;height:32px;border:0;border-radius:8px;
+  background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;
+}
+.eye-btn svg{width:18px;height:18px}
+.rem-row{display:flex;align-items:center;justify-content:space-between;margin:6px 2px 18px;font-size:13.5px;color:var(--muted)}
+.rem-row label{display:inline-flex;align-items:center;gap:8px;cursor:pointer;color:#e5e5ea}
+.rem-row input{width:17px;height:17px;accent-color:var(--blue)}
+.err-box{
+  display:none;margin-bottom:14px;padding:10px 12px;border-radius:11px;
+  background:rgba(255,69,58,.16);border:.5px solid var(--red);color:#ff6961;font-size:13px;font-weight:500;
+}
+.err-box.show{display:block}
+.btn-submit{
+  width:100%;height:48px;border:0;border-radius:14px;background:var(--blue);color:#fff;
+  font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 6px 20px rgba(10,132,255,.38);
+  transition:transform .12s,opacity .15s;display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-submit:active{transform:scale(.98)}
+.btn-submit:disabled{opacity:.55}
+.proto-foot{
+  margin-top:20px;padding-top:15px;border-top:.5px solid var(--sep);
+  display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;
+}
+.proto-badge{font-size:11px;font-weight:600;color:var(--muted);background:rgba(255,255,255,.05);padding:3px 8px;border-radius:6px}
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="logo-wrap">
+      <svg viewBox="0 0 36 36" fill="none">
+        <path d="M5 10C5 8.3 6.3 7 8 7h6.2l2.6 2.8H28c1.7 0 3 1.3 3 3v14.2c0 1.7-1.3 3-3 3H8c-1.7 0-3-1.3-3-3V10z" fill="#0284c7" fill-opacity="0.28" stroke="#38bdf8" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="M15 22v-6m0 0l-2.5 2.5M15 16l2.5 2.5M21 16v6m0 0l-2.5-2.5M21 22l2.5-2.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1>OmniDrive Pro</h1>
+    <div class="host-pill">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span id="hostLabel">Home Assistant Storage Gateway</span>
+    </div>
+
+    <div id="errBox" class="err-box">Invalid username or password</div>
+
+    <form id="loginForm">
+      <div class="field-group">
+        <span class="field-label">Username</span>
+        <div class="input-wrap">
+          <svg class="ic-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <input id="inpUser" class="inp" type="text" placeholder="Enter username" autocomplete="username" required autofocus>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <span class="field-label">Password</span>
+        <div class="input-wrap">
+          <svg class="ic-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <input id="inpPass" class="inp" type="password" placeholder="Enter password" autocomplete="current-password" required>
+          <button id="btnEye" class="eye-btn" type="button" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="rem-row">
+        <label><input id="inpRem" type="checkbox" checked> Keep me signed in (30 days)</label>
+      </div>
+
+      <button id="btnSubmit" class="btn-submit" type="submit">
+        <span>Sign In</span>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </button>
+    </form>
+
+    <div class="proto-foot">
+      <span class="proto-badge">WebDAV</span>
+      <span class="proto-badge">SMB / Samba</span>
+      <span class="proto-badge">SFTP</span>
+      <span class="proto-badge">FTP</span>
+    </div>
+  </div>
+
+<script>
+(function () {
+  document.getElementById('hostLabel').textContent = location.host || 'Protected Gateway';
+  var inpPass = document.getElementById('inpPass');
+  document.getElementById('btnEye').addEventListener('click', function () {
+    inpPass.type = inpPass.type === 'password' ? 'text' : 'password';
+  });
+
+  var form = document.getElementById('loginForm'), errBox = document.getElementById('errBox'), btn = document.getElementById('btnSubmit');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errBox.classList.remove('show');
+    btn.disabled = true;
+    btn.querySelector('span').textContent = 'Signing in...';
+
+    fetch('/__wpro_api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('inpUser').value.trim(),
+        password: inpPass.value,
+        remember: document.getElementById('inpRem').checked
+      })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (res && res.ok) {
+        var params = new URLSearchParams(location.search);
+        location.replace(params.get('rd') || '/');
+      } else {
+        errBox.textContent = (res && res.error) || 'Invalid username or password';
+        errBox.classList.add('show');
+        btn.disabled = false;
+        btn.querySelector('span').textContent = 'Sign In';
+      }
+    }).catch(function () {
+      errBox.textContent = 'Connection error. Please try again.';
+      errBox.classList.add('show');
+      btn.disabled = false;
+      btn.querySelector('span').textContent = 'Sign In';
+    });
+  });
+})();
+</script>
+</body>
+</html>
