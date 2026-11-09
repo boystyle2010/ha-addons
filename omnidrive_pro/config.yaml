@@ -1,7 +1,7 @@
-name: "OmniDrive Pro (Multi-Protocol Storage & IDE)"
-version: "1.0.1"
+name: "OmniDrive Pro (Multi-Protocol Storage)"
+version: "1.0.0"
 slug: "omnidrive_pro"
-description: "All-in-one Home Assistant Storage Hub: WebDAV, SMB/Samba (iOS Files/macOS/Windows), SFTP, FTP, iOS Glass Login UI, Cloud IDE, Terminal & Share Links."
+description: "All-in-one Multi-Protocol Storage Hub (WebDAV, SMB/Samba, SFTP, FTP), Cloud IDE, Web Terminal, Disk Analytics & Share Links for Home Assistant."
 url: "https://github.com/boystyle2010/ha-addons"
 arch:
   - aarch64
@@ -85,9 +85,9 @@ options:
       allowed_users: []
 schema:
   unified_root: bool
-  smb_enabled: bool?
-  sftp_enabled: bool?
-  ftp_enabled: bool?
+  smb_enabled: bool
+  sftp_enabled: bool
+  ftp_enabled: bool
   ssl: bool
   certfile: str
   keyfile: str
