@@ -1,5 +1,5 @@
 name: "OmniDrive Pro (Multi-Protocol Storage & IDE)"
-version: "1.0.0"
+version: "1.0.1"
 slug: "omnidrive_pro"
 description: "All-in-one Home Assistant Storage Hub: WebDAV, SMB/Samba (iOS Files/macOS/Windows), SFTP, FTP, iOS Glass Login UI, Cloud IDE, Terminal & Share Links."
 url: "https://github.com/boystyle2010/ha-addons"

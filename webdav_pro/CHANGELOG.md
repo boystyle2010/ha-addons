@@ -1,3 +1,6 @@
+## [1.0.1] - 2026-11-09
+- **Maintenance & Improvements:** Update CHANGELOG.md
+
 ## [1.0.0] - 2026-11-08
 - **Initial Release:** Launched **WebDAV Server Pro** for Home Assistant (`aarch64` & `amd64`).
 - **Full System Directory Mapping:** Unlocked read/write access to `config` (`/homeassistant`), `addon_configs`, `addons`, `backup`, `media`, `share`, and `ssl` with Unified Root support.
