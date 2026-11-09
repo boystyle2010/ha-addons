@@ -1,6 +1,6 @@
 # Home Assistant Add-on: WebDAV Server Pro — Documentation
 
-**WebDAV Server Pro** combines a compliant **Class 1 & 2 WebDAV Server** (port `8080`) with an **iOS 18 Dark File Manager & Cloud Code IDE** accessible directly from the Home Assistant sidebar (Ingress port `8099`).
+**WebDAV Server Pro** combines a compliant **Class 1 & 2 WebDAV Server** (port `8090`) with an **iOS 27 Dark File Manager & Cloud Code IDE** accessible directly from the Home Assistant sidebar (Ingress port `8099`).
 
 ---
 
@@ -37,20 +37,20 @@ Open **WebDAV Pro** from your Home Assistant sidebar to access the workspace wit
 
 ---
 
-## 🌐 2. Connecting External Devices (WebDAV Port `8080`)
+## 🌐 2. Connecting External Devices (WebDAV Port `8090`)
 
 ### A. Local Network (LAN)
-- **Unified Root URL:** `http://<HOME_ASSISTANT_IP>:8080/`
-- **Direct Share URL:** `http://<HOME_ASSISTANT_IP>:8080/config/`
+- **Unified Root URL:** `http://<HOME_ASSISTANT_IP>:8090/`
+- **Direct Share URL:** `http://<HOME_ASSISTANT_IP>:8090/config/`
 
 ### B. Remote Access via Cloudflare Zero Trust Tunnel
 Because WebDAV operates over standard HTTP/HTTPS, it works seamlessly over Cloudflare Tunnels without opening router ports:
 1. Open your **Cloudflare Zero Trust Dashboard** -> **Networks** -> **Tunnels**.
-2. Create a Public Hostname (e.g., `dav.yourdomain.com`) pointing to `http://localhost:8080` (or `http://<HOME_ASSISTANT_IP>:8080`).
+2. Create a Public Hostname (e.g., `dav.yourdomain.com`) pointing to `http://localhost:8090` (or `http://<HOME_ASSISTANT_IP>:8090`).
 3. Connect from anywhere using `https://dav.yourdomain.com/`.
 
 ### C. Mounting as a Native Drive
-- **iOS / iPadOS (Files App, FE File Explorer, Documents):** Tap the `•••` menu -> **Connect to Server** -> Enter `http://<HOME_ASSISTANT_IP>:8080/` (or your `https://` tunnel domain) -> Sign in with your configured `users` credentials.
+- **iOS / iPadOS (Files App, FE File Explorer, Documents):** Tap the `•••` menu -> **Connect to Server** -> Enter `http://<HOME_ASSISTANT_IP>:8090/` (or your `https://` tunnel domain) -> Sign in with your configured `users` credentials.
 - **macOS (Finder):** Press `Cmd + K` -> Enter the WebDAV URL -> Click **Connect**.
 - **Windows (File Explorer):** Right-click **This PC** -> **Map network drive** -> Enter the WebDAV URL and check *Connect using different credentials*.
 
