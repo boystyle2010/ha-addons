@@ -724,6 +724,10 @@ http {
     server_tokens off;
     etag off;
 
+    # QUAN TRỌNG: Ngăn Nginx tự gắn cổng :8090 vào URL khi chạy sau Cloudflare Tunnel / Reverse Proxy
+    absolute_redirect off;
+    port_in_redirect off;
+    
     client_max_body_size ${MAX_UPLOAD};
     client_body_temp_path /var/lib/nginx/tmp/client_body;
 
