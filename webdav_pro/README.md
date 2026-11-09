@@ -23,7 +23,7 @@ This add-on tracks official Alpine Linux and Nginx upstream releases and updates
 - **Real-Time YAML Syntax Linter:** Powered by `js-yaml`, automatically validates Home Assistant YAML files as you type and warns of exact line errors before saving.
 - **Live Markdown Renderer (`👁️ Preview`):** Instant GitHub-styled preview for `.md` files (`README.md`, `CHANGELOG.md`, `DOCS.md`) with one-tap toggle between preview and code editor.
 - **Backup & Archive Inspector (`.tar` / `.zip`):** Peek inside Home Assistant `.tar` backups and `.zip` archives directly in the browser without downloading gigabytes of data.
-- **iOS 18 Files Dark UI (Ingress):** Native-feeling mobile & desktop interface with List/Grid view toggle, sorting (`Name A–Z`, `Newest`, `Largest`), instant search filter, pill breadcrumbs with one-tap path copy, and header app icon integration.
+- **iOS 27 Files Dark UI (Ingress):** Native-feeling mobile & desktop interface with List/Grid view toggle, sorting (`Name A–Z`, `Newest`, `Largest`), instant search filter, pill breadcrumbs with one-tap path copy, and header app icon integration.
 - **Complete File & Batch Operations:** Create files/folders, Duplicate, Rename, Copy, Cut/Move across directories, and **Multi-Select (`Select`)** for batch Copy, Move, and Delete.
 - **Smart Upload Engine:** Multi-file upload with real-time progress bar (`%`), **Drag & Drop** anywhere on screen, and direct **Clipboard Paste (`Cmd/Ctrl + V`)**.
 - **Quick Look Media & PDF Player:** Built-in viewer for images, video streams, audio files (`.mp3`, `.wav`, `.m4a`, `.flac`), and PDF documents.
