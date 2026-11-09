@@ -1,8 +1,10 @@
 #!/usr/bin/with-contenv bashio
 set -e
 
+ADDON_VERSION=$(bashio::addon.version)
+
 bashio::log.info "---------------------------------------------------"
-bashio::log.info " Initializing Home Assistant WebDAV Server Pro..."
+bashio::log.info " Initializing Home Assistant WebDAV Server Pro v2.1.2"
 bashio::log.info "---------------------------------------------------"
 
 CONFIG_PATH=/data/options.json
@@ -12,7 +14,6 @@ ROOT_DIR=/var/webdav_root
 WEBDAV_PORT=8090
 INGRESS_PORT=8099
 API_PORT=8098
-TTYD_PORT=8097
 WPRO_DATA=/data/wpro
 
 mkdir -p "$WPRO_DATA"
@@ -106,13 +107,12 @@ for (( i=0; i<SHARES_COUNT; i++ )); do
     ln -sfn "$SHARE_PATH" "${ROOT_DIR}/${SHARE_NAME}"
 done
 
-# Configure Git safe.directory so Git Status works across all mounted folders
 git config --system --add safe.directory '*' || true
 
-# 6. Create the Python Backend API service (Disk Stats, Quick Zip, Git Status, Share Links, Audit Log, Shell Fallback)
+# 6. Create the Python Backend API service
 cat << 'PYEOF' > /usr/local/bin/wpro_api.py
 #!/usr/bin/env python3
-import os, sys, json, time, shutil, secrets, subprocess, urllib.parse
+import os, sys, json, time, shutil, secrets, tempfile, subprocess, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 
@@ -174,7 +174,7 @@ class WProHandler(BaseHTTPRequestHandler):
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
@@ -190,7 +190,7 @@ class WProHandler(BaseHTTPRequestHandler):
         route = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
 
-        # Public Temporary Share Download: /s/<token> or /__wpro_api/share_dl?token=...
+        # Public Temporary Share Download (Supports both Files and Folders as .zip)
         if route.startswith("/s/") or route == "/__wpro_api/share_dl":
             token = route.split("/s/")[1].split("/")[0] if route.startswith("/s/") else (qs.get("token", [""])[0])
             shares = load_shares()
@@ -202,19 +202,40 @@ class WProHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Share link expired or invalid.")
                 return
             try:
-                target = safe_resolve(info["path"])
-                if not os.path.isfile(target):
+                target = os.path.realpath(safe_resolve(info["path"]))
+                if os.path.isdir(target):
+                    folder_name = os.path.basename(target.rstrip("/")) or "archive"
+                    tmp_fd, tmp_zip = tempfile.mkstemp(suffix=".zip")
+                    os.close(tmp_fd)
+                    try:
+                        subprocess.run(["zip", "-r", "-q", tmp_zip, ".", "-x", "*.db*", "*.log*"], cwd=target, check=False, timeout=90)
+                        fsize = os.path.getsize(tmp_zip)
+                        append_audit("share-link", "SHARE_DL", info["path"], 200, self.headers.get("X-Real-IP", self.client_address[0]))
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/zip")
+                        self.send_header("Content-Disposition", f'attachment; filename="{folder_name}.zip"')
+                        self.send_header("Content-Length", str(fsize))
+                        self.end_headers()
+                        with open(tmp_zip, "rb") as f:
+                            shutil.copyfileobj(f, self.wfile)
+                    finally:
+                        if os.path.exists(tmp_zip):
+                            os.remove(tmp_zip)
+                    return
+                elif os.path.isfile(target):
+                    fname = os.path.basename(target)
+                    fsize = os.path.getsize(target)
+                    append_audit("share-link", "SHARE_DL", info["path"], 200, self.headers.get("X-Real-IP", self.client_address[0]))
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                    self.send_header("Content-Length", str(fsize))
+                    self.end_headers()
+                    with open(target, "rb") as f:
+                        shutil.copyfileobj(f, self.wfile)
+                    return
+                else:
                     raise FileNotFoundError()
-                fname = os.path.basename(target)
-                fsize = os.path.getsize(target)
-                append_audit("share-link", "SHARE_DL", info["path"], 200, self.headers.get("X-Real-IP", self.client_address[0]))
-                self.send_response(200)
-                self.send_header("Content-Type", "application/octet-stream")
-                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
-                self.send_header("Content-Length", str(fsize))
-                self.end_headers()
-                with open(target, "rb") as f:
-                    shutil.copyfileobj(f, self.wfile)
             except Exception:
                 self.send_response(404)
                 self.end_headers()
@@ -296,9 +317,11 @@ class WProHandler(BaseHTTPRequestHandler):
                             continue
                         try:
                             obj = json.loads(ln)
-                            # Ignore internal asset/API polling noise
                             p_str = obj.get("path", "")
-                            if p_str.startswith("/.fancyindex") or p_str.startswith("/__wpro_api") or p_str.startswith("/__wpro_ttyd"):
+                            m_str = obj.get("method", "")
+                            if p_str.startswith("/.fancyindex") or p_str.startswith("/__wpro_api"):
+                                continue
+                            if m_str == "GET" and p_str.endswith("/"):
                                 continue
                             logs.append(obj)
                         except Exception:
@@ -355,20 +378,24 @@ class WProHandler(BaseHTTPRequestHandler):
             ttl = int(body.get("ttl", 3600))
             try:
                 full = safe_resolve(rel_path)
-                if not os.path.isfile(full):
-                    self.send_json({"ok": False, "error": "Only files can be shared via direct link"}, 400)
+                if not os.path.exists(full):
+                    self.send_json({"ok": False, "error": "Target path does not exist"}, 400)
                     return
-                token = secrets.token_urlsafe(12)
+                is_dir = os.path.isdir(full)
+                base_name = os.path.basename(full.rstrip("/")) or "root"
+                display_name = (base_name + ".zip") if is_dir else base_name
+                token = secrets.token_urlsafe(10)
                 now = int(time.time())
                 shares[token] = {
                     "path": rel_path,
-                    "name": os.path.basename(full),
+                    "name": display_name,
+                    "is_dir": is_dir,
                     "created": now,
                     "exp": now + ttl
                 }
                 save_shares(shares)
                 append_audit("admin", "SHARE_CREATE", rel_path, 200)
-                self.send_json({"ok": True, "token": token, "exp": now + ttl, "name": os.path.basename(full)})
+                self.send_json({"ok": True, "token": token, "exp": now + ttl, "name": display_name, "is_dir": is_dir})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, 500)
             return
@@ -395,12 +422,12 @@ class WProHandler(BaseHTTPRequestHandler):
                 proc = subprocess.run(
                     cmd_str, shell=True, cwd=cwd_full,
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    timeout=20, text=True
+                    timeout=25, text=True
                 )
-                append_audit("admin", "TERMINAL_CMD", cmd_str[:80], proc.returncode)
+                append_audit("admin", "TERM_CMD", cmd_str[:80], proc.returncode)
                 self.send_json({"output": proc.stdout, "code": proc.returncode})
             except subprocess.TimeoutExpired:
-                self.send_json({"output": "Command timed out after 20s.\n", "code": 124})
+                self.send_json({"output": "Command timed out after 25s.\n", "code": 124})
             except Exception as e:
                 self.send_json({"output": f"Error: {e}\n", "code": 1})
             return
@@ -413,16 +440,12 @@ if __name__ == "__main__":
 PYEOF
 chmod +x /usr/local/bin/wpro_api.py
 
-# 7. Start the Python API server & ttyd WebSocket Terminal in the background
+# 7. Start the Python API server in the background
 python3 /usr/local/bin/wpro_api.py "${API_PORT}" &
 bashio::log.info "Started WebDAV Pro API service on 127.0.0.1:${API_PORT}"
 
-if command -v ttyd >/dev/null 2>&1; then
-    ttyd -i 127.0.0.1 -p "${TTYD_PORT}" -W -b /__wpro_ttyd bash -l >/dev/null 2>&1 &
-    bashio::log.info "Started Web Terminal (ttyd WebSocket) on 127.0.0.1:${TTYD_PORT}"
-fi
-
-# 8. Generate the main Nginx configuration (with JSON Audit Log & Proxy routes)
+# 8. Generate the main Nginx configuration
+# CRITICAL: subrequest_output_buffer_size 512k prevents Nginx FancyIndex from truncating header.html / footer.html!
 cat <<EOF > "$NGINX_CONF"
 load_module /usr/lib/nginx/modules/ngx_http_dav_ext_module.so;
 load_module /usr/lib/nginx/modules/ngx_http_fancyindex_module.so;
@@ -439,6 +462,8 @@ events {
 http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
+
+    subrequest_output_buffer_size 512k;
 
     log_format wpro_audit escape=json '{"time":"\$time_iso8601","user":"\$remote_user","ip":"\$remote_addr","method":"\$request_method","path":"\$uri","status":\$status}';
     map \$request_method \$is_mutating_or_dl {
@@ -459,16 +484,12 @@ http {
     tcp_nodelay on;
     keepalive_timeout 65;
     server_tokens off;
+    etag off;
 
     client_max_body_size ${MAX_UPLOAD};
     client_body_temp_path /var/lib/nginx/tmp/client_body;
 
-    map \$http_upgrade \$connection_upgrade {
-        default upgrade;
-        ''      close;
-    }
-
-    # File lock memory zone (macOS Finder, iOS Files & Windows Explorer)
+    # File lock memory zone
     dav_ext_lock_zone zone=davlock:10m;
 
     # Brute-force protection
@@ -482,6 +503,8 @@ http {
         allow 172.30.32.2;
         deny all;
 
+        add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+
         location /.fancyindex/ {
             alias /usr/share/nginx/fancyindex/;
             access_log off;
@@ -491,16 +514,6 @@ http {
             proxy_pass http://127.0.0.1:${API_PORT};
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
-            access_log off;
-        }
-
-        location ^~ /__wpro_ttyd {
-            proxy_pass http://127.0.0.1:${TTYD_PORT};
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection \$connection_upgrade;
-            proxy_set_header Host \$host;
-            proxy_read_timeout 86400;
             access_log off;
         }
 
@@ -534,7 +547,8 @@ http {
         ${SSL_DIRECTIVES}
         server_name _;
 
-        # Serve the FancyIndex UI assets without asking for a password
+        add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+
         location ^~ /.fancyindex/ {
             alias /usr/share/nginx/fancyindex/;
             auth_basic off;
@@ -549,25 +563,12 @@ http {
             proxy_set_header X-Real-IP \$remote_addr;
         }
 
-        # Authenticated Pro API & Web Terminal on External Port
         location ^~ /__wpro_api/ {
             auth_basic "Home Assistant WebDAV Pro";
             auth_basic_user_file ${HTPASSWD_FILE};
             proxy_pass http://127.0.0.1:${API_PORT};
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
-            access_log off;
-        }
-
-        location ^~ /__wpro_ttyd {
-            auth_basic "Home Assistant WebDAV Pro";
-            auth_basic_user_file ${HTPASSWD_FILE};
-            proxy_pass http://127.0.0.1:${TTYD_PORT};
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade \$http_upgrade;
-            proxy_set_header Connection \$connection_upgrade;
-            proxy_set_header Host \$host;
-            proxy_read_timeout 86400;
             access_log off;
         }
 
@@ -675,5 +676,5 @@ if ! nginx -t 2>&1; then
 fi
 bashio::log.info "Nginx configuration is valid."
 
-bashio::log.info "WebDAV Server Pro is ready on port ${WEBDAV_PORT} (and Ingress on port ${INGRESS_PORT})!"
+bashio::log.info "WebDAV Server Pro v${ADDON_VERSION} is ready on port ${WEBDAV_PORT} (and Ingress on port ${INGRESS_PORT})!"
 exec nginx -g "daemon off;"
