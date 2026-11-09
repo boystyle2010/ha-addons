@@ -1,0 +1,71 @@
+#include <tunables/global>
+
+profile webdav_pro flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # Capabilities & General File Access (Bắt buộc phải có 'file,' cho S6-Overlay v3)
+  file,
+  network,
+  signal (send) set=(kill,term,int,hup,cont,usr1,usr2,winch),
+  signal (receive),
+
+  capability chown,
+  capability dac_override,
+  capability dac_read_search,
+  capability fowner,
+  capability fsetid,
+  capability kill,
+  capability net_bind_service,
+  capability setgid,
+  capability setuid,
+  capability setpcap,
+  capability sys_chroot,
+  capability audit_write,
+  capability sys_admin,
+
+  # S6-Overlay v3
+  /init rix,
+  /run.sh rix,
+  /bin/** rix,
+  /sbin/** rix,
+  /usr/bin/** rix,
+  /usr/sbin/** rix,
+  /run/{s6,s6-rc*,service}/** rix,
+  /package/** rix,
+  /command/** rix,
+  /etc/services.d/** rwix,
+  /etc/cont-init.d/** rwix,
+  /etc/cont-finish.d/** rwix,
+  /etc/s6-overlay/** rwix,
+  /run/{,**} rwk,
+  /dev/tty rw,
+
+  # Bashio & Temp
+  /usr/lib/bashio/** rix,
+  /tmp/** rwk,
+
+  # Home Assistant Mapped Directories
+  /data/** rwk,
+  /homeassistant/** rwk,
+  /config/** rwk,
+  /addon_configs/** rwk,
+  /addons/** rwk,
+  /backup/** rwk,
+  /media/** rwk,
+  /share/** rwk,
+  /ssl/** rwk,
+
+  # Multi-Protocol Services (Nginx, Samba/SMB, SFTP, FTP & User Management)
+  /etc/** rwk,
+  /var/** rwk,
+  /usr/local/bin/** rix,
+  /usr/share/nginx/** r,
+  /usr/lib/** rm,
+  /lib/** rm,
+  /proc/** r,
+  /dev/urandom r,
+  /dev/random r,
+  /dev/null rw,
+  /dev/pts/{,*} rw,
+  /dev/ptmx rw,
+}
