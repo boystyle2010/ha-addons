@@ -209,15 +209,7 @@ jobs:
           echo "new_ver=${NEW_VER}" >> "$GITHUB_OUTPUT"
           echo "need_commit=${NEED_COMMIT}" >> "$GITHUB_OUTPUT"
           echo "update_type=${UPDATE_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "summary_reason=${SUMMARY_REASON}" >> "$GITHUB_OUTPUT"
-
-          # Tự động đồng bộ số hiển thị trên huy hiệu (Badges) trong webdav_pro/README.md
-          if [ -f "webdav_pro/README.md" ]; then
-            SAFE_NGINX=$(echo "$LATEST_NGINX" | sed 's/-/--/g')
-            sed -i "s/badge\/version-[0-9.]\+-blue/badge\/version-${NEW_VER}-blue/g" webdav_pro/README.md
-            sed -i "s/badge\/nginx-[^-]*--\?[^-]*-009639/badge\/nginx-${SAFE_NGINX}-009639/g" webdav_pro/README.md
-            sed -i "s/badge\/alpine%20base-[0-9.]\+-0D597F/badge\/alpine%20base-${LATEST_ALPINE}-0D597F/g" webdav_pro/README.md
-          fi
+          echo "summary_reason=${SUMMARY_REASON}" >> "$
 
       - name: "🐳 5. Test Docker Build Before Commit"
         id: docker_test
