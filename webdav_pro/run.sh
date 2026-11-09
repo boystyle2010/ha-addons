@@ -2,10 +2,9 @@
 set -e
 
 ADDON_VERSION=$(bashio::addon.version)
-
-bashio::log.info "---------------------------------------------------"
-bashio::log.info " Initializing Home Assistant WebDAV Server Pro v2.1.2"
-bashio::log.info "---------------------------------------------------"
+bashio::log.info "--------------------------------------------------------"
+bashio::log.info " Initializing OmniDrive Pro v${ADDON_VERSION} (Multi-Protocol)"
+bashio::log.info "--------------------------------------------------------"
 
 CONFIG_PATH=/data/options.json
 HTPASSWD_FILE=/etc/nginx/webdav.htpasswd
@@ -20,8 +19,11 @@ mkdir -p "$WPRO_DATA"
 touch "$WPRO_DATA/audit.jsonl"
 [ ! -f "$WPRO_DATA/shares.json" ] && echo "{}" > "$WPRO_DATA/shares.json"
 
-# 1. Read configuration from the Home Assistant UI
+# 1. Read configuration from Home Assistant UI
 UNIFIED_ROOT=$(bashio::config 'unified_root')
+SMB_ENABLED=$(bashio::config 'smb_enabled')
+SFTP_ENABLED=$(bashio::config 'sftp_enabled')
+FTP_ENABLED=$(bashio::config 'ftp_enabled')
 SSL=$(bashio::config 'ssl')
 CERTFILE=$(bashio::config 'certfile')
 KEYFILE=$(bashio::config 'keyfile')
@@ -30,7 +32,24 @@ FANCY_UI=$(bashio::config 'fancy_ui')
 SHOW_DOTFILES=$(bashio::config 'show_dotfiles')
 LOG_LEVEL=$(bashio::config 'log_level')
 
-# 2. Create the account list with Bcrypt hashing
+# 2. Prepare the unified root directory (/var/webdav_root)
+mkdir -p "$ROOT_DIR"
+rm -rf "${ROOT_DIR:?}"/*
+
+SHARES_COUNT=$(jq '.shares | length' "$CONFIG_PATH")
+for (( i=0; i<SHARES_COUNT; i++ )); do
+    SHARE_NAME=$(jq -r ".shares[$i].name" "$CONFIG_PATH")
+    SHARE_PATH=$(jq -r ".shares[$i].path" "$CONFIG_PATH")
+
+    if [ ! -d "$SHARE_PATH" ]; then
+        bashio::log.warning "Folder ${SHARE_PATH} does not exist, creating it..."
+        mkdir -p "$SHARE_PATH"
+    fi
+
+    ln -sfn "$SHARE_PATH" "${ROOT_DIR}/${SHARE_NAME}"
+done
+
+# 3. Create users for WebDAV (htpasswd) AND Linux System Users (for SMB, SFTP & FTP)
 rm -f "$HTPASSWD_FILE"
 touch "$HTPASSWD_FILE"
 
@@ -39,16 +58,123 @@ if [ "$USERS_COUNT" -eq 0 ]; then
     bashio::exit.nok "Error: you must define at least one account under 'users'!"
 fi
 
+FIRST_USER=""
 for (( i=0; i<USERS_COUNT; i++ )); do
     USERNAME=$(jq -r ".users[$i].username" "$CONFIG_PATH")
     PASSWORD=$(jq -r ".users[$i].password" "$CONFIG_PATH")
     if [ -n "$USERNAME" ] && [ -n "$PASSWORD" ]; then
+        [ -z "$FIRST_USER" ] && FIRST_USER="$USERNAME"
         htpasswd -Bb "$HTPASSWD_FILE" "$USERNAME" "$PASSWORD" >/dev/null 2>&1
-        bashio::log.info "Enabled WebDAV account: ${USERNAME}"
+
+        # Create/update system user mapped to root (UID 0) or standard shell so they can read/write HA folders via SMB/SFTP/FTP
+        if ! id "$USERNAME" >/dev/null 2>&1; then
+            adduser -D -H -h "$ROOT_DIR" -s /bin/bash -G root "$USERNAME" >/dev/null 2>&1 || true
+        fi
+        echo "${USERNAME}:${PASSWORD}" | chpasswd >/dev/null 2>&1 || true
+        # Add to Samba password database
+        (echo "$PASSWORD"; echo "$PASSWORD") | smbpasswd -a -s "$USERNAME" >/dev/null 2>&1 || true
+        smbpasswd -e "$USERNAME" >/dev/null 2>&1 || true
+
+        bashio::log.info "Provisioned multi-protocol account: ${USERNAME}"
     fi
 done
 
-# 3. SSL/TLS configuration
+chmod -R 775 "$ROOT_DIR" || true
+
+# 4. Start SMB / Samba Server (Port 445) if enabled
+if bashio::var.true "$SMB_ENABLED"; then
+    cat <<EOF > /etc/samba/smb.conf
+[global]
+   workgroup = WORKGROUP
+   server string = OmniDrive Pro (Home Assistant)
+   security = user
+   map to guest = Never
+   smb encrypt = desired
+   min protocol = SMB2
+   unix extensions = no
+   wide links = yes
+   follow symlinks = yes
+   force user = root
+   force group = root
+   create mask = 0664
+   directory mask = 0775
+   load printers = no
+   printing = bsd
+   printcap name = /dev/null
+   disable spoolss = yes
+
+[OmniDrive]
+   path = ${ROOT_DIR}
+   browseable = yes
+   writable = yes
+   guest ok = no
+EOF
+
+    for (( i=0; i<SHARES_COUNT; i++ )); do
+        SHARE_NAME=$(jq -r ".shares[$i].name" "$CONFIG_PATH")
+        SHARE_PATH=$(jq -r ".shares[$i].path" "$CONFIG_PATH")
+        READ_ONLY=$(jq -r ".shares[$i].read_only" "$CONFIG_PATH")
+        WRITABLE="yes"
+        [ "$READ_ONLY" = "true" ] && WRITABLE="no"
+        cat <<EOF >> /etc/samba/smb.conf
+
+[${SHARE_NAME}]
+   path = ${SHARE_PATH}
+   browseable = yes
+   writable = ${WRITABLE}
+   guest ok = no
+   force user = root
+   force group = root
+EOF
+    done
+
+    smbd --foreground --no-process-group </dev/null >/dev/null 2>&1 &
+    bashio::log.info "Protocol [SMB/Samba] active on port 445 (iOS Files, macOS Finder, Windows Explorer)"
+fi
+
+# 5. Start SFTP / OpenSSH Server (Port 2222) if enabled
+if bashio::var.true "$SFTP_ENABLED"; then
+    ssh-keygen -A >/dev/null 2>&1
+    cat <<EOF > /etc/ssh/sshd_config
+Port 2222
+Protocol 2
+PermitRootLogin no
+PasswordAuthentication yes
+PubkeyAuthentication yes
+ChallengeResponseAuthentication no
+UsePAM no
+Subsystem sftp internal-sftp
+AllowTcpForwarding no
+X11Forwarding no
+ForceCommand internal-sftp -d ${ROOT_DIR}
+EOF
+    /usr/sbin/sshd -D -e >/dev/null 2>&1 &
+    bashio::log.info "Protocol [SFTP] active on port 2222 (SSH File Transfer)"
+fi
+
+# 6. Start FTP / vsftpd Server (Port 2121, Passive 21000-21002) if enabled
+if bashio::var.true "$FTP_ENABLED"; then
+    cat <<EOF > /etc/vsftpd/vsftpd.conf
+listen=YES
+listen_ipv6=NO
+listen_port=2121
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+local_root=${ROOT_DIR}
+chroot_local_user=YES
+allow_writeable_chroot=YES
+pasv_enable=YES
+pasv_min_port=21000
+pasv_max_port=21002
+seccomp_sandbox=NO
+EOF
+    vsftpd /etc/vsftpd/vsftpd.conf >/dev/null 2>&1 &
+    bashio::log.info "Protocol [FTP] active on port 2121 (Passive ports: 21000-21002)"
+fi
+
+# 7. SSL/TLS configuration for WebDAV & Web UI
 LISTEN_DIRECTIVE="listen ${WEBDAV_PORT};"
 SSL_DIRECTIVES=""
 if bashio::var.true "$SSL"; then
@@ -67,7 +193,7 @@ else
     bashio::log.info "Connection mode: standard HTTP (compatible with Cloudflare Tunnel / reverse proxy)."
 fi
 
-# 4. File browser UI (FancyIndex vs AutoIndex)
+# 8. File browser UI (FancyIndex vs AutoIndex)
 DOTFILES_RULE=""
 if ! bashio::var.true "$SHOW_DOTFILES"; then
     DOTFILES_RULE="location ~ /\. { deny all; }"
@@ -90,36 +216,61 @@ else
     "
 fi
 
-# 5. Prepare the unified root directory (/var/webdav_root)
-mkdir -p "$ROOT_DIR"
-rm -rf "${ROOT_DIR:?}"/*
-
-SHARES_COUNT=$(jq '.shares | length' "$CONFIG_PATH")
-for (( i=0; i<SHARES_COUNT; i++ )); do
-    SHARE_NAME=$(jq -r ".shares[$i].name" "$CONFIG_PATH")
-    SHARE_PATH=$(jq -r ".shares[$i].path" "$CONFIG_PATH")
-
-    if [ ! -d "$SHARE_PATH" ]; then
-        bashio::log.warning "Folder ${SHARE_PATH} does not exist, creating it..."
-        mkdir -p "$SHARE_PATH"
-    fi
-
-    ln -sfn "$SHARE_PATH" "${ROOT_DIR}/${SHARE_NAME}"
-done
-
 git config --system --add safe.directory '*' || true
 
-# 6. Create the Python Backend API service
+# 9. Create the Python Backend API + Hybrid Auth Engine (Web Cookie + Basic Auth)
 cat << 'PYEOF' > /usr/local/bin/wpro_api.py
 #!/usr/bin/env python3
-import os, sys, json, time, shutil, secrets, tempfile, subprocess, urllib.parse
+import os, sys, json, time, hmac, hashlib, base64, shutil, secrets, tempfile, subprocess, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from http.cookies import SimpleCookie
 from datetime import datetime
 
 ROOT_DIR = "/var/webdav_root"
 DATA_DIR = "/data/wpro"
+CONFIG_PATH = "/data/options.json"
 SHARES_FILE = os.path.join(DATA_DIR, "shares.json")
 AUDIT_FILE = os.path.join(DATA_DIR, "audit.jsonl")
+SECRET_FILE = os.path.join(DATA_DIR, "session.secret")
+
+if not os.path.exists(SECRET_FILE):
+    with open(SECRET_FILE, "w") as f:
+        f.write(secrets.token_hex(32))
+with open(SECRET_FILE, "r") as f:
+    SESSION_SECRET = f.read().strip().encode("utf-8")
+
+def get_config():
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def verify_credentials(username, password):
+    cfg = get_config()
+    for u in cfg.get("users", []):
+        if u.get("username") == username and u.get("password") == password:
+            return True
+    return False
+
+def create_session_token(username, ttl=2592000):
+    exp = int(time.time()) + ttl
+    payload = f"{username}|{exp}"
+    sig = hmac.new(SESSION_SECRET, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(f"{payload}|{sig}".encode("utf-8")).decode("utf-8")
+
+def verify_session_token(token):
+    try:
+        raw = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+        username, exp_str, sig = raw.split("|", 2)
+        if int(exp_str) < time.time():
+            return None
+        expected = hmac.new(SESSION_SECRET, f"{username}|{exp_str}".encode("utf-8"), hashlib.sha256).hexdigest()
+        if hmac.compare_digest(sig, expected):
+            return username
+    except Exception:
+        pass
+    return None
 
 def load_shares():
     try:
@@ -170,11 +321,39 @@ class WProHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
-    def send_json(self, payload, code=200):
+    def get_auth_user(self):
+        # 1. Check Session Cookie
+        cookie_hdr = self.headers.get("Cookie", "")
+        if cookie_hdr:
+            c = SimpleCookie()
+            try:
+                c.load(cookie_hdr)
+                if "wpro_sess" in c:
+                    u = verify_session_token(c["wpro_sess"].value)
+                    if u:
+                        return u
+            except Exception:
+                pass
+        # 2. Check Basic Auth Header (for native WebDAV apps like Finder / iOS Files / Windows Explorer)
+        auth_hdr = self.headers.get("Authorization", "")
+        if auth_hdr.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth_hdr[6:].strip()).decode("utf-8")
+                uname, upass = decoded.split(":", 1)
+                if verify_credentials(uname, upass):
+                    return uname
+            except Exception:
+                pass
+        return None
+
+    def send_json(self, payload, code=200, extra_headers=None):
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        if extra_headers:
+            for k, v in extra_headers.items():
+                self.send_header(k, v)
         self.send_header("Content-Length", str(len(raw)))
         self.end_headers()
         self.wfile.write(raw)
@@ -190,7 +369,34 @@ class WProHandler(BaseHTTPRequestHandler):
         route = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
 
-        # Public Temporary Share Download (Supports both Files and Folders as .zip)
+        # Nginx auth_request endpoint for Dual Web/WebDAV Authentication
+        if route == "/__wpro_api/auth_check":
+            user = self.get_auth_user()
+            if user:
+                self.send_response(200)
+                self.send_header("X-WPro-User", user)
+                self.end_headers()
+            else:
+                self.send_response(401)
+                self.end_headers()
+            return
+
+        if route == "/__wpro_api/protocols":
+            cfg = get_config()
+            users = cfg.get("users", [])
+            first_user = users[0].get("username", "admin") if users else "admin"
+            shares = [s.get("name") for s in cfg.get("shares", [])]
+            self.send_json({
+                "webdav": True,
+                "smb": bool(cfg.get("smb_enabled", True)),
+                "sftp": bool(cfg.get("sftp_enabled", True)),
+                "ftp": bool(cfg.get("ftp_enabled", True)),
+                "default_user": first_user,
+                "shares": shares
+            })
+            return
+
+        # Public Temporary Share Download
         if route.startswith("/s/") or route == "/__wpro_api/share_dl":
             token = route.split("/s/")[1].split("/")[0] if route.startswith("/s/") else (qs.get("token", [""])[0])
             shares = load_shares()
@@ -338,6 +544,27 @@ class WProHandler(BaseHTTPRequestHandler):
         route = parsed.path
         body = self.read_json_body()
 
+        if route == "/__wpro_api/login":
+            uname = body.get("username", "").strip()
+            upass = body.get("password", "")
+            remember = bool(body.get("remember", True))
+            ip = self.headers.get("X-Real-IP", self.client_address[0])
+            if verify_credentials(uname, upass):
+                ttl = 2592000 if remember else 86400
+                tok = create_session_token(uname, ttl)
+                cookie_val = f"wpro_sess={tok}; Path=/; Max-Age={ttl}; HttpOnly; SameSite=Lax"
+                append_audit(uname, "WEB_LOGIN", "/", 200, ip)
+                self.send_json({"ok": True, "user": uname}, 200, {"Set-Cookie": cookie_val})
+            else:
+                append_audit(uname or "unknown", "LOGIN_FAIL", "/", 401, ip)
+                self.send_json({"ok": False, "error": "Invalid username or password"}, 401)
+            return
+
+        if route == "/__wpro_api/logout":
+            cookie_val = "wpro_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
+            self.send_json({"ok": True}, 200, {"Set-Cookie": cookie_val})
+            return
+
         if route == "/__wpro_api/snapshot":
             target_mode = body.get("target", "config")
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -440,12 +667,13 @@ if __name__ == "__main__":
 PYEOF
 chmod +x /usr/local/bin/wpro_api.py
 
-# 7. Start the Python API server in the background
+# 10. Start the Python API server in the background
 python3 /usr/local/bin/wpro_api.py "${API_PORT}" &
-bashio::log.info "Started WebDAV Pro API service on 127.0.0.1:${API_PORT}"
+bashio::log.info "Started OmniDrive Pro API & Hybrid Auth Engine on 127.0.0.1:${API_PORT}"
 
-# 8. Generate the main Nginx configuration
-# CRITICAL: subrequest_output_buffer_size 512k prevents Nginx FancyIndex from truncating header.html / footer.html!
+# 11. Generate the main Nginx configuration
+# Uses auth_request so Browsers see the iOS Glass Login Page instead of ugly Basic Auth popups,
+# while native WebDAV apps (Finder, Windows Explorer, iOS Files) still authenticate seamlessly!
 cat <<EOF > "$NGINX_CONF"
 load_module /usr/lib/nginx/modules/ngx_http_dav_ext_module.so;
 load_module /usr/lib/nginx/modules/ngx_http_fancyindex_module.so;
@@ -465,7 +693,17 @@ http {
 
     subrequest_output_buffer_size 512k;
 
-    log_format wpro_audit escape=json '{"time":"\$time_iso8601","user":"\$remote_user","ip":"\$remote_addr","method":"\$request_method","path":"\$uri","status":\$status}';
+    # Detect whether client is a Web Browser (HTML) or a Native WebDAV Client (Finder/Explorer/iOS Files)
+    map \$http_accept \$is_browser_client {
+        default 0;
+        "~*text/html" 1;
+    }
+    map \$is_browser_client \$dav_www_auth {
+        1 "";
+        0 'Basic realm="OmniDrive Pro WebDAV"';
+    }
+
+    log_format wpro_audit escape=json '{"time":"\$time_iso8601","user":"\$upstream_http_x_wpro_user","ip":"\$remote_addr","method":"\$request_method","path":"\$uri","status":\$status}';
     map \$request_method \$is_mutating_or_dl {
         default 0;
         PUT     1;
@@ -489,14 +727,11 @@ http {
     client_max_body_size ${MAX_UPLOAD};
     client_body_temp_path /var/lib/nginx/tmp/client_body;
 
-    # File lock memory zone
     dav_ext_lock_zone zone=davlock:10m;
-
-    # Brute-force protection
-    limit_req_zone \$binary_remote_addr zone=dav_auth_limit:10m rate=15r/s;
+    limit_req_zone \$binary_remote_addr zone=dav_auth_limit:10m rate=20r/s;
 
     # =========================================================
-    # SERVER 1: HOME ASSISTANT INGRESS (Full WebDAV + Pro Suite)
+    # SERVER 1: HOME ASSISTANT INGRESS (Port 8099)
     # =========================================================
     server {
         listen 8099;
@@ -540,7 +775,7 @@ http {
     }
 
     # =========================================================
-    # SERVER 2: MAIN WEBDAV SERVER (port ${WEBDAV_PORT})
+    # SERVER 2: EXTERNAL PORT & CLOUDFLARE TUNNEL (${WEBDAV_PORT})
     # =========================================================
     server {
         ${LISTEN_DIRECTIVE}
@@ -549,23 +784,56 @@ http {
 
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
 
+        # Serve FancyIndex UI & Custom iOS Glass Login Page without password
         location ^~ /.fancyindex/ {
             alias /usr/share/nginx/fancyindex/;
-            auth_basic off;
             access_log off;
         }
 
-        # Public Temporary Share Links (no WebDAV password required)
+        # Public Login / Logout Endpoints
+        location = /__wpro_api/login {
+            limit_req zone=dav_auth_limit burst=15 nodelay;
+            proxy_pass http://127.0.0.1:${API_PORT};
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            access_log off;
+        }
+        location = /__wpro_api/logout {
+            proxy_pass http://127.0.0.1:${API_PORT};
+            proxy_set_header Host \$host;
+            access_log off;
+        }
+
+        # Internal subrequest for Hybrid Cookie + Basic Auth verification
+        location = /__wpro_auth_check {
+            internal;
+            proxy_pass http://127.0.0.1:${API_PORT}/__wpro_api/auth_check;
+            proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
+            proxy_set_header Cookie \$http_cookie;
+            proxy_set_header Authorization \$http_authorization;
+        }
+
+        # Redirect unauthenticated Browsers to sleek iOS Login UI, or prompt Basic Auth for WebDAV apps
+        location @login_or_basic {
+            add_header WWW-Authenticate \$dav_www_auth always;
+            if (\$is_browser_client = 1) {
+                return 302 /.fancyindex/login.html?rd=\$request_uri;
+            }
+            return 401 "Authentication required";
+        }
+
+        # Public Temporary Share Links
         location ^~ /s/ {
-            auth_basic off;
             proxy_pass http://127.0.0.1:${API_PORT};
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
         }
 
+        # Protected Pro API
         location ^~ /__wpro_api/ {
-            auth_basic "Home Assistant WebDAV Pro";
-            auth_basic_user_file ${HTPASSWD_FILE};
+            auth_request /__wpro_auth_check;
+            error_page 401 = @login_or_basic;
             proxy_pass http://127.0.0.1:${API_PORT};
             proxy_set_header Host \$host;
             proxy_set_header X-Real-IP \$remote_addr;
@@ -573,17 +841,13 @@ http {
         }
 
         ${DOTFILES_RULE}
-EOF
 
-# 9. Unified Root mode vs. separate per-share permissions
-if bashio::var.true "$UNIFIED_ROOT"; then
-    cat <<EOF >> "$NGINX_CONF"
         location / {
             limit_req zone=dav_auth_limit burst=40 nodelay;
-            root ${ROOT_DIR};
-            auth_basic "Home Assistant WebDAV Pro";
-            auth_basic_user_file ${HTPASSWD_FILE};
+            auth_request /__wpro_auth_check;
+            error_page 401 = @login_or_basic;
 
+            root ${ROOT_DIR};
             ${INDEX_CONFIG}
 
             dav_methods PUT DELETE MKCOL COPY MOVE;
@@ -596,78 +860,11 @@ if bashio::var.true "$UNIFIED_ROOT"; then
                 rewrite ^(.*[^/])$ \$1/ break;
             }
         }
-EOF
-    bashio::log.info "Unified Root mode: all folders merged under the root path '/'."
-else
-    cat <<EOF >> "$NGINX_CONF"
-        location = / {
-            auth_basic "Home Assistant WebDAV Pro";
-            auth_basic_user_file ${HTPASSWD_FILE};
-            root ${ROOT_DIR};
-            ${INDEX_CONFIG}
-        }
-EOF
-    for (( i=0; i<SHARES_COUNT; i++ )); do
-        SHARE_NAME=$(jq -r ".shares[$i].name" "$CONFIG_PATH")
-        SHARE_PATH=$(jq -r ".shares[$i].path" "$CONFIG_PATH")
-        READ_ONLY=$(jq -r ".shares[$i].read_only" "$CONFIG_PATH")
-        ALLOWED_COUNT=$(jq ".shares[$i].allowed_users | length" "$CONFIG_PATH")
-
-        AUTH_FILE="$HTPASSWD_FILE"
-        if [ "$ALLOWED_COUNT" -gt 0 ]; then
-            AUTH_FILE="/etc/nginx/webdav_${SHARE_NAME}.htpasswd"
-            rm -f "$AUTH_FILE"
-            touch "$AUTH_FILE"
-            for (( j=0; j<ALLOWED_COUNT; j++ )); do
-                ALLOWED_USER=$(jq -r ".shares[$i].allowed_users[$j]" "$CONFIG_PATH")
-                grep "^${ALLOWED_USER}:" "$HTPASSWD_FILE" >> "$AUTH_FILE" || true
-            done
-        fi
-
-        if [ "$READ_ONLY" = "true" ]; then
-            DAV_CONFIG="
-                dav_ext_methods PROPFIND OPTIONS;
-                limit_except GET HEAD OPTIONS PROPFIND {
-                    deny all;
-                }
-            "
-            MODE_TEXT="Read-Only"
-        else
-            DAV_CONFIG="
-                dav_methods PUT DELETE MKCOL COPY MOVE;
-                dav_ext_methods PROPFIND OPTIONS LOCK UNLOCK;
-                dav_ext_lock zone=davlock;
-                create_full_put_path on;
-                dav_access user:rw group:rw all:r;
-            "
-            MODE_TEXT="Read/Write"
-        fi
-
-        cat <<EOF >> "$NGINX_CONF"
-        location ^~ /${SHARE_NAME} {
-            limit_req zone=dav_auth_limit burst=40 nodelay;
-            alias ${SHARE_PATH};
-            auth_basic "WebDAV - ${SHARE_NAME}";
-            auth_basic_user_file ${AUTH_FILE};
-
-            ${INDEX_CONFIG}
-            ${DAV_CONFIG}
-
-            if (-d \$request_filename) {
-                rewrite ^(.*[^/])$ \$1/ break;
-            }
-        }
-EOF
-        bashio::log.info "Mapped share: /${SHARE_NAME} -> ${SHARE_PATH} [${MODE_TEXT}]"
-    done
-fi
-
-cat <<EOF >> "$NGINX_CONF"
     }
 }
 EOF
 
-# 10. Validate the Nginx configuration before starting
+# 12. Validate the Nginx configuration before starting
 bashio::log.info "Checking Nginx configuration syntax..."
 if ! nginx -t 2>&1; then
     bashio::log.error "Invalid Nginx configuration, see the details in the log lines above."
@@ -676,5 +873,5 @@ if ! nginx -t 2>&1; then
 fi
 bashio::log.info "Nginx configuration is valid."
 
-bashio::log.info "WebDAV Server Pro v${ADDON_VERSION} is ready on port ${WEBDAV_PORT} (and Ingress on port ${INGRESS_PORT})!"
+bashio::log.info "OmniDrive Pro v${ADDON_VERSION} is ready on port ${WEBDAV_PORT} (and Ingress on port ${INGRESS_PORT})!"
 exec nginx -g "daemon off;"
