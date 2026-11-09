@@ -1,3 +1,6 @@
+## [2.3.10] - 2026-11-09
+- **Maintenance & Improvements:** Update Dockerfile
+
 ## [2.3.9] - 2026-11-09
 - **Maintenance & Improvements:** Create login.html
 
