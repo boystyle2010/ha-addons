@@ -1,6 +1,20 @@
-  </div>
+</div>
   <div id="empty" class="empty">No matching items found</div>
   <div id="stat" class="stat"></div>
+
+  <!-- Thanh phát nhạc nền (Background Audio Player) -->
+  <div id="bgAudioBar" class="bg-audio-bar">
+    <div class="clip-info">
+      <b>🎵 BACKGROUND AUDIO (<span id="bgAudioSpeedLabel">1.0x</span>)</b>
+      <span id="bgAudioTitle">audio.mp3</span>
+    </div>
+    <div class="clip-btns">
+      <button id="btnBgPlayPause" class="clip-btn paste" type="button">Pause</button>
+      <button id="btnBgSpeed" class="clip-btn cancel" type="button">1.0x</button>
+      <button id="btnBgStop" class="clip-btn danger" type="button">✕</button>
+    </div>
+    <audio id="bgAudioEl" style="display:none"></audio>
+  </div>
 
   <div id="batchBar" class="batch-bar">
     <div class="clip-info"><b>BATCH SELECTION</b><span id="batchCount">0 items selected</span></div>
@@ -24,6 +38,8 @@
     <div class="sheet-group">
       <div id="sheetTitle" class="sheet-head">filename.yaml</div>
       <button id="actEdit" class="sheet-btn" type="button"><span>Open in Code Editor</span><span>✏️</span></button>
+      <button id="actHex" class="sheet-btn" type="button"><span>Hex / Binary Inspector</span><span>🔢</span></button>
+      <button id="actShareLink" class="sheet-btn" type="button"><span>Create Expiry Share Link</span><span>⏳</span></button>
       <button id="actCopy" class="sheet-btn" type="button"><span>Copy</span><span>📋</span></button>
       <button id="actCut" class="sheet-btn" type="button"><span>Move (Cut)</span><span>✂️</span></button>
       <button id="actDup" class="sheet-btn" type="button"><span>Duplicate</span><span>📑</span></button>
@@ -37,6 +53,7 @@
     </div>
   </div>
 
+  <!-- IDE & SMART VIEWER MODAL -->
   <div id="editorModal" class="editor-modal">
     <div class="ed-top">
       <button id="edClose" class="ed-btn close" type="button">Done</button>
@@ -53,20 +70,37 @@
         <button id="edUndo" class="ed-chip" type="button">↶</button>
         <button id="edRedo" class="ed-chip" type="button">↷</button>
         <button id="edFind" class="ed-chip" type="button">🔍 Find</button>
+        <button id="edMultiCursor" class="ed-chip" type="button" title="Add cursor to next line (or hold Alt/Option + Click)">✚ Cursor</button>
         <button id="edTab" class="ed-chip" type="button">⇥ Tab</button>
         <button id="edComment" class="ed-chip" type="button">#</button>
         <button id="edFontUp" class="ed-chip" type="button">A+</button>
         <button id="edFontDown" class="ed-chip" type="button">A-</button>
         <button id="edWrap" class="ed-chip" type="button">↵ Wrap</button>
+        <button id="edMinimapToggle" class="ed-chip active" type="button">🗺️ Map</button>
         <button id="edZen" class="ed-chip" type="button">⛶ Zen</button>
       </div>
       <span id="edStatus" class="ed-status">UTF-8</span>
     </div>
     <div class="ed-body">
       <div id="aceContainer"></div>
+      <div id="minimapWrap" class="minimap-wrap">
+        <canvas id="minimapCanvas"></canvas>
+        <div id="minimapVp" class="minimap-vp"></div>
+      </div>
       <textarea id="edArea" class="ed-textarea" spellcheck="false"></textarea>
       <div id="mdView" class="md-view"></div>
       <div id="edPreview" class="ed-preview"></div>
+    </div>
+  </div>
+
+  <!-- PRO SUITE MODAL (Terminal / Storage Donut / Snapshot / Share & Audit) -->
+  <div id="suiteModal" class="suite-modal">
+    <div class="suite-box">
+      <div class="suite-head">
+        <h3 id="suiteTitle">System Tool</h3>
+        <button id="suiteClose" class="ed-btn close" type="button">Close</button>
+      </div>
+      <div id="suiteBody" class="suite-body"></div>
     </div>
   </div>
 
@@ -83,7 +117,8 @@
     zip:'<path d="M3.5 8h17v11.5h-17zM3 4.5h18V8H3zM10 12h4"/>',
     cfg:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
     code:'<path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/>',
-    md:'<path d="M4 7h16v10H4z"/><path d="M7 14V10l2 2 2-2v4M15 14v-4M13.5 12.5L15 14l1.5-1.5"/>'
+    md:'<path d="M4 7h16v10H4z"/><path d="M7 14V10l2 2 2-2v4M15 14v-4M13.5 12.5L15 14l1.5-1.5"/>',
+    hex:'<path d="M4 6h16M4 12h16M4 18h16M8 4v16M16 4v16"/>'
   };
   var T = [
     ['img','img','jpg jpeg png gif webp heic bmp svg ico'],
@@ -94,13 +129,15 @@
     ['ppt','doc','ppt pptx key'],['txt','txt','txt log'],
     ['zip','zip','zip tar gz tgz rar 7z xz'],
     ['cfg','cfg','yaml yml json conf cfg ini toml env lock'],
-    ['code','code','py js ts sh html css xml php sql dockerfile']
+    ['code','code','py js ts sh html css xml php sql dockerfile'],
+    ['hex','hex','db sqlite sqlite3 bin dat so wasm pyc']
   ];
   var EDITABLE_EXT = /^(yaml|yml|json|conf|cfg|ini|toml|env|lock|txt|md|markdown|log|py|js|ts|sh|bash|html|htm|css|xml|php|sql|csv|gitignore|dockerignore|htaccess)$/i;
   var IMG_EXT = /^(jpg|jpeg|png|gif|webp|bmp|svg|ico)$/i;
   var VID_EXT = /^(mp4|webm|mov|m4v)$/i;
   var AUD_EXT = /^(mp3|wav|m4a|ogg|aac|flac)$/i;
   var ARCH_EXT = /^(zip|tar)$/i;
+  var BIN_HEX_EXT = /^(db|sqlite|sqlite3|bin|dat|so|wasm|pyc)$/i;
   var ACE_MODES = {yaml:'yaml',yml:'yaml',json:'json',py:'python',sh:'sh',bash:'sh',js:'javascript',ts:'typescript',html:'html',htm:'html',css:'css',php:'php',xml:'xml',sql:'sql',md:'markdown',markdown:'markdown',ini:'ini',conf:'sh',cfg:'ini',toml:'toml',dockerfile:'dockerfile'};
 
   var MAP = {};
@@ -116,13 +153,18 @@
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function up(n) { return n > 0 ? new Array(n + 1).join('../') : './'; }
+  function fmtBytes(b) {
+    if (!b || b <= 0) return '0 B';
+    var u = ['B','KB','MB','GB','TB'], i = Math.floor(Math.log(b) / Math.log(1024));
+    return (b / Math.pow(1024, i)).toFixed(i > 1 ? 2 : 1) + ' ' + u[i];
+  }
   function showToast(msg) {
     var t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
-    setTimeout(function () { t.classList.remove('show'); }, 2200);
+    setTimeout(function () { t.classList.remove('show'); }, 2400);
   }
 
-  // 1. Gắn App Icon lên thanh tiêu đề Home Assistant (cạnh nút 3 gạch ☰)
+  // 1. Gắn App Icon lên thanh tiêu đề Home Assistant
   function injectTopBarIcon() {
     try {
       if (!window.parent || window.parent === window) return;
@@ -150,7 +192,7 @@
   }
   injectTopBarIcon(); setTimeout(injectTopBarIcon, 400);
 
-  // 2. Đường dẫn Ingress & WebDAV
+  // 2. Đường dẫn Ingress, WebDAV & API
   var ingressMatch = location.pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
   var ingressPrefix = ingressMatch ? ingressMatch[1] : '';
   var p = location.pathname.replace(/^\/api\/hassio_ingress\/[^\/]+/, '') || '/';
@@ -161,6 +203,7 @@
     if (relPath.indexOf('/') === 0) return ingressPrefix + relPath;
     return location.pathname.replace(/\/?$/, '/') + relPath;
   }
+  function apiUrl(endpoint) { return ingressPrefix + '/__wpro_api/' + endpoint; }
   function buildDestinationHeader(targetInternalPath) { return location.origin + targetInternalPath; }
 
   // 3. Tiêu đề, Back & Breadcrumbs
@@ -183,9 +226,9 @@
     if (b && navigator.clipboard) { navigator.clipboard.writeText(b.getAttribute('data-copy')); showToast('🔗 Copied path: ' + b.getAttribute('data-copy')); }
   });
 
-  // 4. Danh sách hàng & Multi-Select
+  // 4. Danh sách hàng, Multi-Select & Git Status Integration
   var rows = [].slice.call(document.querySelectorAll('#list tbody tr'));
-  var nd = 0, nf = 0, selectMode = false, selectedSet = [];
+  var nd = 0, nf = 0, selectMode = false, selectedSet = [], rowMapByName = {};
   var btnSelectMode = document.getElementById('btnSelectMode'), batchBar = document.getElementById('batchBar'), batchCountEl = document.getElementById('batchCount');
 
   function updateBatchUI() {
@@ -208,8 +251,9 @@
     if (tr.classList.contains('parent') || href === '../') { tr.classList.add('parent'); return; }
     var isDir = /\/$/.test(href), label = name.replace(/\/$/, '');
     if (isDir) { tr.classList.add('dir'); nd++; } else { nf++; }
-    a.innerHTML = CHECK_ICON + (isDir ? FOLDER : fileIcon(label)) + '<span class="nm">' + esc(label) + '</span>';
+    a.innerHTML = CHECK_ICON + (isDir ? FOLDER : fileIcon(label)) + '<span class="nm"><span class="nm-txt">' + esc(label) + '</span></span>';
     tr.setAttribute('data-n', label.toLowerCase());
+    rowMapByName[label] = tr;
     var itemObj = { name: label, href: href, isDir: isDir, internalPath: p + encodeURIComponent(label) + (isDir ? '/' : '') };
 
     var moreBtn = document.createElement('button');
@@ -235,13 +279,113 @@
   document.getElementById('stat').textContent = summaryText;
   document.getElementById('subStat').textContent = (segs.length ? '/' + segs.join('/') : 'Root Storage') + ' • ' + summaryText;
 
-  // 5. Trình sửa Code (Ace IDE + YAML Linter + Markdown + Archive Viewer + Zen + A+/A-)
+  // Quét Git Status của thư mục hiện tại để hiển thị chấm vàng 🟡 (Modified) / chấm xanh 🟢 (Added/Untracked)
+  fetch(apiUrl('git_status?path=' + encodeURIComponent(p))).then(function (r) { return r.json(); }).then(function (data) {
+    if (!data || !data.is_git) return;
+    var pill = document.getElementById('gitRepoPill');
+    document.getElementById('gitBranchName').textContent = data.branch || 'git';
+    pill.classList.add('show');
+    var st = data.statuses || {};
+    Object.keys(st).forEach(function (fname) {
+      var tr = rowMapByName[fname];
+      if (!tr) return;
+      var nmSpan = tr.querySelector('.nm');
+      if (!nmSpan || nmSpan.querySelector('.git-dot')) return;
+      var dot = document.createElement('span');
+      var isMod = st[fname] === 'modified';
+      dot.className = 'git-dot ' + (isMod ? 'mod' : 'add');
+      dot.title = isMod ? 'Git: Modified (Đã chỉnh sửa)' : 'Git: Added / Untracked (Đã thêm mới)';
+      nmSpan.appendChild(dot);
+    });
+  }).catch(function () {});
+
+  // 5. Background Audio Player
+  var bgAudioBar = document.getElementById('bgAudioBar'), bgAudioEl = document.getElementById('bgAudioEl');
+  var bgAudioTitle = document.getElementById('bgAudioTitle'), bgAudioSpeedLabel = document.getElementById('bgAudioSpeedLabel');
+  var btnBgPlayPause = document.getElementById('btnBgPlayPause'), btnBgSpeed = document.getElementById('btnBgSpeed');
+  var SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0], curSpeedIdx = 2;
+
+  function startBackgroundAudio(title, src, currentTime, rate) {
+    bgAudioTitle.textContent = title;
+    bgAudioEl.src = src;
+    bgAudioEl.currentTime = currentTime || 0;
+    bgAudioEl.playbackRate = rate || 1.0;
+    bgAudioSpeedLabel.textContent = (rate || 1.0) + 'x';
+    btnBgSpeed.textContent = (rate || 1.0) + 'x';
+    bgAudioBar.classList.add('show');
+    bgAudioEl.play().catch(function () {});
+    btnBgPlayPause.textContent = 'Pause';
+    showToast('🎵 Playing in background');
+  }
+  btnBgPlayPause.addEventListener('click', function () {
+    if (bgAudioEl.paused) { bgAudioEl.play(); btnBgPlayPause.textContent = 'Pause'; }
+    else { bgAudioEl.pause(); btnBgPlayPause.textContent = 'Play'; }
+  });
+  btnBgSpeed.addEventListener('click', function () {
+    curSpeedIdx = (curSpeedIdx + 1) % SPEEDS.length;
+    var sp = SPEEDS[curSpeedIdx];
+    bgAudioEl.playbackRate = sp;
+    bgAudioSpeedLabel.textContent = sp + 'x';
+    btnBgSpeed.textContent = sp + 'x';
+  });
+  document.getElementById('btnBgStop').addEventListener('click', function () {
+    bgAudioEl.pause(); bgAudioEl.src = ''; bgAudioBar.classList.remove('show');
+  });
+
+  // 6. Trình sửa Code (Ace IDE + Mini Map + Multi-Cursor + YAML Linter + Markdown + PDF.js + Hex Viewer)
   var editorModal = document.getElementById('editorModal'), edTitle = document.getElementById('edTitle'), edLang = document.getElementById('edLang');
   var aceContainer = document.getElementById('aceContainer'), edArea = document.getElementById('edArea'), mdView = document.getElementById('mdView');
   var edPreview = document.getElementById('edPreview'), edSave = document.getElementById('edSave'), edMdToggle = document.getElementById('edMdToggle');
   var edSubbar = document.getElementById('edSubbar'), edStatus = document.getElementById('edStatus'), yamlAlert = document.getElementById('yamlAlert');
-  var aceEditor = null, currentEditHref = '', currentExt = '', isMarkdownFile = false, mdPreviewActive = false;
+  var minimapWrap = document.getElementById('minimapWrap'), minimapCanvas = document.getElementById('minimapCanvas'), minimapVp = document.getElementById('minimapVp');
+  var aceEditor = null, currentEditHref = '', currentExt = '', isMarkdownFile = false, mdPreviewActive = false, minimapEnabled = true;
   var editorFontSize = parseInt(localStorage.getItem('wpro_fsize') || '14', 10);
+
+  function renderMinimap() {
+    if (!aceEditor || !minimapEnabled || !minimapWrap.classList.contains('show')) return;
+    var rect = minimapWrap.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    minimapCanvas.width = 64;
+    minimapCanvas.height = rect.height;
+    var ctx = minimapCanvas.getContext('2d');
+    ctx.clearRect(0, 0, 64, rect.height);
+    var lines = aceEditor.session.getDocument().getAllLines();
+    var total = Math.max(lines.length, 1);
+    var step = Math.max(2, Math.min(4, rect.height / total));
+    for (var i = 0; i < lines.length; i++) {
+      var y = i * step;
+      if (y > rect.height) break;
+      var ln = lines[i];
+      if (!ln || !ln.trim()) continue;
+      var indent = ln.search(/\S|$/);
+      var len = Math.min(54, Math.ceil((ln.length - indent) * 0.65));
+      var trimmed = ln.trim();
+      ctx.fillStyle = trimmed.indexOf('#') === 0 ? '#484f58' : (trimmed.indexOf(':') !== -1 ? '#58a6ff' : '#8b949e');
+      ctx.fillRect(Math.min(20, 4 + indent * 1.5), y, Math.max(4, len), Math.max(1.2, step - 0.8));
+    }
+    var firstVis = aceEditor.getFirstVisibleRow();
+    var lastVis = aceEditor.getLastVisibleRow();
+    var vpTop = Math.min(rect.height - 20, (firstVis / total) * rect.height);
+    var vpH = Math.max(20, ((lastVis - firstVis + 1) / total) * rect.height);
+    minimapVp.style.top = vpTop + 'px';
+    minimapVp.style.height = Math.min(rect.height, vpH) + 'px';
+  }
+
+  minimapWrap.addEventListener('mousedown', function (e) {
+    if (!aceEditor) return;
+    var jump = function (ev) {
+      var r = minimapWrap.getBoundingClientRect();
+      var ratio = Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height));
+      var targetRow = Math.floor(ratio * aceEditor.session.getLength());
+      aceEditor.scrollToLine(targetRow, true, true, function () {});
+      renderMinimap();
+    };
+    jump(e);
+    var move = function (ev) { jump(ev); };
+    var upEv = function () { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', upEv); };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', upEv);
+  });
 
   function validateYamlContent() {
     if (!/^(yaml|yml)$/i.test(currentExt) || !window.jsyaml) { yamlAlert.classList.remove('show'); return true; }
@@ -263,19 +407,37 @@
     ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/');
     aceEditor = ace.edit('aceContainer');
     aceEditor.setTheme('ace/theme/one_dark');
-    aceEditor.setOptions({ fontSize: editorFontSize + 'px', fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace', showPrintMargin: false, tabSize: 2, useSoftTabs: true, wrap: false, scrollPastEnd: 0.3 });
-    aceEditor.session.on('change', function () { validateYamlContent(); });
+    aceEditor.setOptions({
+      fontSize: editorFontSize + 'px',
+      fontFamily: '"SF Mono", Menlo, Monaco, Consolas, monospace',
+      showPrintMargin: false,
+      tabSize: 2,
+      useSoftTabs: true,
+      wrap: false,
+      scrollPastEnd: 0.3,
+      enableMultiselect: true
+    });
+    aceEditor.session.on('change', function () { validateYamlContent(); renderMinimap(); });
+    aceEditor.session.on('changeScrollTop', function () { renderMinimap(); });
+    aceEditor.selection.on('changeCursor', function () {
+      var ranges = aceEditor.selection.getAllRanges ? aceEditor.selection.getAllRanges() : [];
+      var curPos = aceEditor.getCursorPosition();
+      edStatus.textContent = (ranges.length > 1 ? ranges.length + ' cursors • ' : '') + 'Ln ' + (curPos.row + 1) + ', Col ' + (curPos.column + 1);
+    });
     aceEditor.commands.addCommand({ name: 'saveFile', bindKey: { win: 'Ctrl-S', mac: 'Command-S' }, exec: function () { saveCurrentFile(); } });
   }
+
   function getEditorContent() { return aceEditor ? aceEditor.getValue() : edArea.value; }
   function setEditorContent(val, ext) {
     initAce();
     if (aceEditor) {
       aceContainer.style.display = 'block'; edArea.style.display = 'none';
+      minimapWrap.classList.toggle('show', minimapEnabled);
       aceEditor.session.setMode('ace/mode/' + (ACE_MODES[ext] || 'yaml'));
       aceEditor.setValue(val, -1); aceEditor.resize();
+      setTimeout(renderMinimap, 60);
     } else {
-      aceContainer.style.display = 'none'; edArea.style.display = 'block'; edArea.value = val;
+      aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'block'; edArea.value = val;
     }
     validateYamlContent();
   }
@@ -287,10 +449,11 @@
     if (mdPreviewActive) {
       var rawMd = getEditorContent();
       mdView.innerHTML = window.marked ? marked.parse(rawMd) : '<pre>' + esc(rawMd) + '</pre>';
-      mdView.style.display = 'block'; aceContainer.style.display = 'none'; edArea.style.display = 'none';
+      mdView.style.display = 'block'; aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none';
     } else {
       mdView.style.display = 'none';
-      if (aceEditor) { aceContainer.style.display = 'block'; aceEditor.resize(); } else edArea.style.display = 'block';
+      if (aceEditor) { aceContainer.style.display = 'block'; minimapWrap.classList.toggle('show', minimapEnabled); aceEditor.resize(); setTimeout(renderMinimap, 50); }
+      else edArea.style.display = 'block';
     }
   }
   edMdToggle.addEventListener('click', function () { toggleMarkdownPreview(); });
@@ -301,18 +464,101 @@
     if (IMG_EXT.test(ext)) { openMediaModal(label, href, 'img', ext); return; }
     if (VID_EXT.test(ext)) { openMediaModal(label, href, 'vid', ext); return; }
     if (AUD_EXT.test(ext)) { openMediaModal(label, href, 'aud', ext); return; }
-    if (ext === 'pdf') { openMediaModal(label, href, 'pdf', ext); return; }
+    if (ext === 'pdf') { openPdfJsModal(label, href); return; }
     if (ARCH_EXT.test(ext)) { openArchiveInspector(label, href, ext); return; }
+    if (BIN_HEX_EXT.test(ext)) { openHexViewer(label, href); return; }
     if (EDITABLE_EXT.test(ext) || EDITABLE_EXT.test(label) || !ext) openCodeEditor(label, href, ext || 'yaml');
-    else openActionSheet(item);
+    else openHexViewer(label, href);
   }
 
+  // 6A. Trình xem PDF trực tiếp bằng PDF.js Canvas
+  function openPdfJsModal(label, href) {
+    edTitle.textContent = label; edLang.textContent = 'PDF.JS DIRECT VIEWER';
+    editorModal.classList.add('show');
+    aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
+    edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
+    edPreview.style.display = 'flex';
+    edPreview.innerHTML =
+      '<div class="pdf-toolbar">' +
+        '<button id="pdfPrev" class="ed-chip" type="button">◀ Prev</button>' +
+        '<span id="pdfPageInfo">Loading PDF...</span>' +
+        '<button id="pdfNext" class="ed-chip" type="button">Next ▶</button>' +
+        '<button id="pdfZoomOut" class="ed-chip" type="button">−</button>' +
+        '<button id="pdfZoomIn" class="ed-chip" type="button">＋</button>' +
+      '</div>' +
+      '<div style="overflow:auto;max-width:100%;max-height:78vh;display:grid;place-items:center"><canvas id="pdfCanvas"></canvas></div>';
+
+    if (!window.pdfjsLib) {
+      edPreview.innerHTML = '<iframe src="' + href + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
+      return;
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    var pdfDoc = null, pageNum = 1, scale = 1.35;
+    var canvas = document.getElementById('pdfCanvas'), ctx = canvas.getContext('2d'), info = document.getElementById('pdfPageInfo');
+
+    function renderPage(num) {
+      pdfDoc.getPage(num).then(function (page) {
+        var viewport = page.getViewport({ scale: scale });
+        canvas.height = viewport.height; canvas.width = viewport.width;
+        page.render({ canvasContext: ctx, viewport: viewport });
+        info.textContent = 'Page ' + num + ' / ' + pdfDoc.numPages + ' (' + Math.round(scale * 100) + '%)';
+      });
+    }
+    pdfjsLib.getDocument(href).promise.then(function (doc) {
+      pdfDoc = doc; renderPage(pageNum);
+    }).catch(function () {
+      edPreview.innerHTML = '<iframe src="' + href + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
+    });
+
+    document.getElementById('pdfPrev').addEventListener('click', function () { if (pdfDoc && pageNum > 1) { pageNum--; renderPage(pageNum); } });
+    document.getElementById('pdfNext').addEventListener('click', function () { if (pdfDoc && pageNum < pdfDoc.numPages) { pageNum++; renderPage(pageNum); } });
+    document.getElementById('pdfZoomIn').addEventListener('click', function () { if (pdfDoc) { scale = Math.min(3.0, scale + 0.25); renderPage(pageNum); } });
+    document.getElementById('pdfZoomOut').addEventListener('click', function () { if (pdfDoc) { scale = Math.max(0.6, scale - 0.25); renderPage(pageNum); } });
+  }
+
+  // 6B. Trình xem Hex / Binary cho file hệ thống
+  function openHexViewer(label, href) {
+    edTitle.textContent = label; edLang.textContent = 'HEX / BINARY INSPECTOR';
+    editorModal.classList.add('show');
+    aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
+    edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
+    edPreview.style.display = 'flex';
+    edPreview.innerHTML = '<div style="color:#8b949e">Reading binary stream...</div>';
+
+    fetch(href, { headers: { 'Range': 'bytes=0-16383' } }).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+      var bytes = new Uint8Array(buf), maxLen = Math.min(bytes.length, 8192), rowsHtml = [];
+      for (var offset = 0; offset < maxLen; offset += 16) {
+        var offHex = ('00000000' + offset.toString(16)).slice(-8).toUpperCase();
+        var hexPart = [], asciiPart = '';
+        for (var i = 0; i < 16; i++) {
+          if (offset + i < maxLen) {
+            var b = bytes[offset + i];
+            hexPart.push(('0' + b.toString(16)).slice(-2).toUpperCase());
+            asciiPart += (b >= 32 && b <= 126) ? esc(String.fromCharCode(b)) : '·';
+          } else {
+            hexPart.push('  ');
+            asciiPart += ' ';
+          }
+          if (i === 7) hexPart.push('');
+        }
+        rowsHtml.push('<div class="hex-row"><span class="hex-off">' + offHex + '</span><span class="hex-bytes">' + hexPart.join(' ') + '</span><span class="hex-ascii">' + asciiPart + '</span></div>');
+      }
+      var headNote = '<div style="display:flex;justify-content:space-between;margin-bottom:10px;color:#8b949e;font-size:12px"><span>Showing first ' + fmtBytes(maxLen) + ' (Total fetched: ' + fmtBytes(bytes.length) + ')</span><button id="btnForceTextEdit" class="ed-chip" type="button">✏️ Force Open in Text Editor</button></div>';
+      edPreview.innerHTML = '<div class="hex-wrap">' + headNote + (rowsHtml.join('') || '<div>Empty file (0 bytes)</div>') + '</div>';
+      var forceBtn = document.getElementById('btnForceTextEdit');
+      if (forceBtn) forceBtn.addEventListener('click', function () { openCodeEditor(label, href, 'txt'); });
+    }).catch(function (e) {
+      edPreview.innerHTML = '<div style="color:var(--red)">Failed to read binary file: ' + esc(e.message) + '</div>';
+    });
+  }
+
+  // 6C. Trình xem Archive (.zip / .tar)
   function openArchiveInspector(label, href, ext) {
     edTitle.textContent = label; edLang.textContent = ext.toUpperCase() + ' ARCHIVE INSPECTOR';
     editorModal.classList.add('show');
-    aceContainer.style.display = 'none'; edArea.style.display = 'none'; mdView.style.display = 'none';
+    aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
     edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
-    edPreview.style.display = 'grid'; edPreview.innerHTML = '<div style="color:#8b949e">Reading archive contents...</div>';
+    edPreview.style.display = 'flex'; edPreview.innerHTML = '<div style="color:#8b949e">Reading archive contents...</div>';
 
     fetch(href).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
       if (ext === 'zip' && window.JSZip) {
@@ -322,7 +568,6 @@
           edPreview.innerHTML = '<div class="arch-list">' + (items.join('') || '<div class="arch-item">Empty archive</div>') + '</div>';
         });
       } else {
-        // Đọc header chuẩn POSIX ustar của file .tar (Backup Home Assistant)
         var view = new Uint8Array(buf), pos = 0, items = [];
         while (pos + 512 <= view.length && items.length < 300) {
           var name = '';
@@ -339,16 +584,48 @@
     }).catch(function (e) { edPreview.innerHTML = '<div style="color:var(--red)">Could not inspect archive: ' + esc(e.message) + '</div>'; });
   }
 
+  // 6D. Trình phát Media nâng cao (Tốc độ 0.5x -> 2.0x, Tua ±10s, Background Audio)
   function openMediaModal(label, href, type, ext) {
-    edTitle.textContent = label; edLang.textContent = ext.toUpperCase() + ' PREVIEW';
+    edTitle.textContent = label; edLang.textContent = ext.toUpperCase() + ' MEDIA PLAYER';
     editorModal.classList.add('show');
-    aceContainer.style.display = 'none'; edArea.style.display = 'none'; mdView.style.display = 'none';
+    aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
     edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
-    edPreview.style.display = 'grid';
-    if (type === 'img') edPreview.innerHTML = '<img src="' + href + '" alt="' + esc(label) + '">';
-    else if (type === 'vid') edPreview.innerHTML = '<video src="' + href + '" controls autoplay playsinline></video>';
-    else if (type === 'aud') edPreview.innerHTML = '<audio src="' + href + '" controls autoplay></audio>';
-    else if (type === 'pdf') edPreview.innerHTML = '<iframe src="' + href + '"></iframe>';
+    edPreview.style.display = 'flex';
+    if (type === 'img') {
+      edPreview.innerHTML = '<img src="' + href + '" alt="' + esc(label) + '">';
+      return;
+    }
+    var tag = type === 'vid' ? '<video id="proMediaEl" src="' + href + '" controls autoplay playsinline></video>' : '<audio id="proMediaEl" src="' + href + '" controls autoplay></audio>';
+    var speedBtns = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map(function (s) {
+      return '<button class="ed-chip spd-btn' + (s === 1.0 ? ' active' : '') + '" data-spd="' + s + '" type="button">' + s + 'x</button>';
+    }).join('');
+    var ctrlBar =
+      '<div class="media-ctrl-bar">' +
+        '<button id="medBack10" class="ed-chip" type="button">⏪ -10s</button>' +
+        '<button id="medFwd10" class="ed-chip" type="button">⏩ +10s</button>' +
+        speedBtns +
+        '<button id="medBgPlay" class="ed-chip" style="border-color:var(--blue);color:#58a6ff" type="button">🎵 Background Audio</button>' +
+      '</div>';
+    edPreview.innerHTML = tag + ctrlBar;
+
+    var mediaEl = document.getElementById('proMediaEl');
+    document.getElementById('medBack10').addEventListener('click', function () { mediaEl.currentTime = Math.max(0, mediaEl.currentTime - 10); });
+    document.getElementById('medFwd10').addEventListener('click', function () { mediaEl.currentTime = Math.min(mediaEl.duration || 99999, mediaEl.currentTime + 10); });
+    [].slice.call(edPreview.querySelectorAll('.spd-btn')).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var sp = parseFloat(this.getAttribute('data-spd'));
+        mediaEl.playbackRate = sp;
+        [].slice.call(edPreview.querySelectorAll('.spd-btn')).forEach(function (x) { x.classList.remove('active'); });
+        this.classList.add('active');
+      });
+    });
+    document.getElementById('medBgPlay').addEventListener('click', function () {
+      var curT = mediaEl.currentTime || 0, curR = mediaEl.playbackRate || 1.0;
+      mediaEl.pause();
+      editorModal.classList.remove('show', 'zen');
+      edPreview.innerHTML = '';
+      startBackgroundAudio(label, href, curT, curR);
+    });
   }
 
   function openCodeEditor(label, href, ext) {
@@ -391,6 +668,11 @@
   document.getElementById('edUndo').addEventListener('click', function () { if (aceEditor) aceEditor.undo(); });
   document.getElementById('edRedo').addEventListener('click', function () { if (aceEditor) aceEditor.redo(); });
   document.getElementById('edFind').addEventListener('click', function () { if (aceEditor) aceEditor.execCommand('find'); });
+  document.getElementById('edMultiCursor').addEventListener('click', function () {
+    if (!aceEditor) return;
+    aceEditor.execCommand('selectMoreAfter');
+    showToast('Multi-Cursor: Hold Alt/Option + Click or tap ✚ Cursor');
+  });
   document.getElementById('edTab').addEventListener('click', function () { if (aceEditor) aceEditor.indent(); });
   document.getElementById('edComment').addEventListener('click', function () { if (aceEditor) aceEditor.toggleCommentLines(); });
   document.getElementById('edFontUp').addEventListener('click', function () {
@@ -408,12 +690,236 @@
   document.getElementById('edWrap').addEventListener('click', function () {
     if (aceEditor) { var w = aceEditor.session.getUseWrapMode(); aceEditor.session.setUseWrapMode(!w); showToast(!w ? 'Word Wrap: On' : 'Word Wrap: Off'); }
   });
+  document.getElementById('edMinimapToggle').addEventListener('click', function () {
+    minimapEnabled = !minimapEnabled;
+    this.classList.toggle('active', minimapEnabled);
+    minimapWrap.classList.toggle('show', minimapEnabled && !mdPreviewActive);
+    if (aceEditor) setTimeout(function () { aceEditor.resize(); renderMinimap(); }, 40);
+  });
   document.getElementById('edZen').addEventListener('click', function () {
     editorModal.classList.toggle('zen');
-    if (aceEditor) setTimeout(function () { aceEditor.resize(); }, 50);
+    if (aceEditor) setTimeout(function () { aceEditor.resize(); renderMinimap(); }, 50);
   });
 
-  // 6. Tạo File, Tạo Folder, Upload, Kéo-Thả (Drag & Drop) & Dán Clipboard (Cmd+V)
+  // 7. System Operations & Security Suite Modal
+  var suiteModal = document.getElementById('suiteModal'), suiteTitle = document.getElementById('suiteTitle'), suiteBody = document.getElementById('suiteBody');
+  function openSuiteModal(title, htmlContent) {
+    suiteTitle.innerHTML = title;
+    suiteBody.innerHTML = htmlContent;
+    suiteModal.classList.add('show');
+  }
+  document.getElementById('suiteClose').addEventListener('click', function () { suiteModal.classList.remove('show'); suiteBody.innerHTML = ''; });
+  suiteModal.addEventListener('click', function (e) { if (e.target === suiteModal) { suiteModal.classList.remove('show'); suiteBody.innerHTML = ''; } });
+
+  // 7A. Web Terminal (ttyd WebSocket + Interactive xterm.js Shell)
+  document.getElementById('btnSysTerm').addEventListener('click', function () {
+    var ttydUrl = ingressPrefix + '/__wpro_ttyd';
+    openSuiteModal('💻 Web Terminal (Bash / Git / System Shell)',
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">' +
+        '<span style="font-size:12.5px;color:#8b949e">Working directory: <code>' + esc(p) + '</code></span>' +
+        '<div style="display:flex;gap:6px">' +
+          '<button id="btnQuickDf" class="ed-chip" type="button">df -h</button>' +
+          '<button id="btnQuickGit" class="ed-chip" type="button">git status</button>' +
+          '<button id="btnQuickGitPull" class="ed-chip" type="button">git pull</button>' +
+          '<button id="btnSwitchTermMode" class="ed-chip" type="button">⇄ Switch Engine</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="termHost" class="term-frame"></div>'
+    );
+
+    var termHost = document.getElementById('termHost'), useIframe = true;
+    function mountWebSocketIframe() {
+      termHost.innerHTML = '<iframe src="' + ttydUrl + '" style="width:100%;height:100%;border:0;background:#000"></iframe>';
+    }
+    function mountXtermConsole(initialCmd) {
+      termHost.innerHTML = '<div id="xtermBox" style="width:100%;height:365px;padding:6px"></div>' +
+        '<form id="termCmdForm" style="display:flex;border-top:1px solid #30363d;background:#0d1117">' +
+          '<span style="padding:8px 10px;color:#30d158;font-family:monospace;font-weight:700">$</span>' +
+          '<input id="termCmdInput" type="text" placeholder="Type command (e.g. git pull, df -h, ls -la) and press Enter..." style="flex:1;background:transparent;border:0;color:#fff;font-family:monospace;font-size:13.5px;outline:none">' +
+          '<button type="submit" class="ed-btn save" style="border-radius:0;height:36px">Run</button>' +
+        '</form>';
+      var term = window.Terminal ? new Terminal({ cursorBlink: true, fontSize: 13, theme: { background: '#000000' } }) : null;
+      var box = document.getElementById('xtermBox');
+      if (term) { term.open(box); term.writeln('\x1b[1;36mWebDAV Pro Interactive Shell\x1b[0m — CWD: ' + p); }
+      else { box.style.cssText = 'height:365px;overflow:auto;padding:10px;font-family:monospace;white-space:pre-wrap;color:#e6edf3'; box.textContent = 'WebDAV Pro Shell — CWD: ' + p + '\n'; }
+
+      function runCmd(cmd) {
+        if (!cmd) return;
+        if (term) term.writeln('\r\n\x1b[1;32m$ ' + cmd + '\x1b[0m');
+        else box.textContent += '\n$ ' + cmd + '\n';
+        fetch(apiUrl('exec'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: cmd, cwd: p }) })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            var out = (res.output || '').replace(/\r?\n/g, '\r\n');
+            if (term) term.write(out);
+            else { box.textContent += res.output || ''; box.scrollTop = box.scrollHeight; }
+          });
+      }
+      document.getElementById('termCmdForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var inp = document.getElementById('termCmdInput');
+        var c = inp.value.trim(); inp.value = '';
+        runCmd(c);
+      });
+      if (initialCmd) runCmd(initialCmd);
+    }
+
+    mountWebSocketIframe();
+    document.getElementById('btnSwitchTermMode').addEventListener('click', function () {
+      useIframe = !useIframe;
+      if (useIframe) mountWebSocketIframe(); else mountXtermConsole();
+    });
+    document.getElementById('btnQuickDf').addEventListener('click', function () { useIframe = false; mountXtermConsole('df -h'); });
+    document.getElementById('btnQuickGit').addEventListener('click', function () { useIframe = false; mountXtermConsole('git status'); });
+    document.getElementById('btnQuickGitPull').addEventListener('click', function () { useIframe = false; mountXtermConsole('git pull'); });
+  });
+
+  // 7B. Disk Usage Analytics (Donut Chart)
+  document.getElementById('btnSysDisk').addEventListener('click', function () {
+    openSuiteModal('📊 Disk Usage Analytics (NVMe Storage)', '<div style="text-align:center;padding:30px;color:#8b949e">Calculating folder sizes...</div>');
+    fetch(apiUrl('disk')).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) throw new Error(d.error);
+      var palette = ['#0a84ff', '#30d158', '#ff9f0a', '#bf5af2', '#ff453a', '#5ac8fa', '#ffd60a', '#64d2ff'];
+      var folders = (d.folders || []).sort(function (a, b) { return b.bytes - a.bytes; });
+      var R = 74, C = 2 * Math.PI * R, offset = 0;
+      var circles = '', legend = '';
+      var denom = Math.max(d.total || 1, 1);
+
+      folders.forEach(function (f, idx) {
+        var col = palette[idx % palette.length];
+        var frac = Math.max(0, Math.min(1, f.bytes / denom));
+        var dash = frac * C;
+        circles += '<circle r="' + R + '" cx="95" cy="95" fill="transparent" stroke="' + col + '" stroke-width="24" stroke-dasharray="' + dash.toFixed(2) + ' ' + C.toFixed(2) + '" stroke-dashoffset="' + (-offset).toFixed(2) + '" transform="rotate(-90 95 95)"/>';
+        offset += dash;
+        legend += '<div class="legend-item"><div class="legend-left"><span class="legend-dot" style="background:' + col + '"></span><b>/' + esc(f.name) + '</b></div><span>' + fmtBytes(f.bytes) + '</span></div>';
+      });
+
+      var usedPct = Math.round((d.used / denom) * 100);
+      suiteBody.innerHTML =
+        '<div style="display:flex;justify-content:space-between;background:#0d1117;padding:12px 16px;border-radius:10px;border:1px solid #21262d;margin-bottom:16px;flex-wrap:wrap;gap:10px">' +
+          '<div><span style="color:#8b949e;font-size:12px">TOTAL NVME</span><div style="font-size:16px;font-weight:700">' + fmtBytes(d.total) + '</div></div>' +
+          '<div><span style="color:#8b949e;font-size:12px">USED (' + usedPct + '%)</span><div style="font-size:16px;font-weight:700;color:var(--orange)">' + fmtBytes(d.used) + '</div></div>' +
+          '<div><span style="color:#8b949e;font-size:12px">FREE AVAILABLE</span><div style="font-size:16px;font-weight:700;color:var(--green)">' + fmtBytes(d.free) + '</div></div>' +
+        '</div>' +
+        '<div class="disk-grid">' +
+          '<div class="donut-box">' +
+            '<svg width="190" height="190" viewBox="0 0 190 190">' +
+              '<circle r="' + R + '" cx="95" cy="95" fill="transparent" stroke="#21262d" stroke-width="24"/>' +
+              circles +
+            '</svg>' +
+            '<div class="donut-center"><b>' + usedPct + '%</b><span>Used</span></div>' +
+          '</div>' +
+          '<div class="legend-list">' + legend + '</div>' +
+        '</div>';
+    }).catch(function (e) {
+      suiteBody.innerHTML = '<div style="color:var(--red)">Error loading disk analytics: ' + esc(e.message) + '</div>';
+    });
+  });
+
+  // 7C. Quick Snapshot / Backup to Zip
+  document.getElementById('btnSysSnap').addEventListener('click', function () {
+    openSuiteModal('⚡ Quick Snapshot / Backup to Zip',
+      '<p style="margin-top:0;color:#8b949e">Create an instant 1-tap <code>.zip</code> snapshot directly inside your <code>/backup</code> folder before editing YAML or code.</p>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0">' +
+        '<button id="btnSnapConfig" class="act-btn primary" style="height:54px;font-size:14.5px" type="button">📦 Backup Entire /config</button>' +
+        '<button id="btnSnapAuto" class="act-btn" style="height:54px;font-size:14.5px" type="button">⚙️ Backup Automations &amp; Scripts</button>' +
+      '</div>' +
+      '<div id="snapStatus" style="padding:12px;border-radius:10px;background:#0d1117;border:1px solid #21262d;font-family:monospace;font-size:13px;color:#8b949e">Ready to create snapshot.</div>'
+    );
+    function triggerSnap(target) {
+      var st = document.getElementById('snapStatus');
+      st.style.color = '#58a6ff';
+      st.textContent = '⏳ Compressing files into /backup ... Please wait...';
+      fetch(apiUrl('snapshot'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: target }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.error || 'Snapshot failed');
+          st.style.color = '#30d158';
+          st.innerHTML = '✅ Snapshot created: <b>' + esc(res.path) + '</b> (' + res.size_kb + ' KB)';
+          showToast('⚡ Saved to ' + res.path);
+        }).catch(function (e) {
+          st.style.color = 'var(--red)';
+          st.textContent = '❌ Error: ' + e.message;
+        });
+    }
+    document.getElementById('btnSnapConfig').addEventListener('click', function () { triggerSnap('config'); });
+    document.getElementById('btnSnapAuto').addEventListener('click', function () { triggerSnap('automations'); });
+  });
+
+  // 7D. Audit Log & Active Share Links Manager
+  function openAuditAndSharesModal() {
+    openSuiteModal('🛡️ Security Audit Log &amp; Expiry Share Links', '<div style="text-align:center;padding:24px;color:#8b949e">Loading security records...</div>');
+    Promise.all([
+      fetch(apiUrl('shares')).then(function (r) { return r.json(); }),
+      fetch(apiUrl('audit?limit=120')).then(function (r) { return r.json(); })
+    ]).then(function (results) {
+      var shares = (results[0] && results[0].shares) || [];
+      var logs = (results[1] && results[1].logs) || [];
+
+      var sharesHtml = shares.length ? shares.map(function (s) {
+        var minsLeft = Math.max(0, Math.round((s.exp - Date.now() / 1000) / 60));
+        var publicUrl = location.origin + '/s/' + s.token;
+        return '<div class="legend-item" style="gap:10px;flex-wrap:wrap">' +
+          '<div><b>📄 ' + esc(s.name) + '</b> <span style="color:#8b949e;font-size:12px">(' + esc(s.path) + ' • expires in ' + minsLeft + 'm)</span></div>' +
+          '<div style="display:flex;gap:6px">' +
+            '<button class="ed-chip copy-share-btn" data-url="' + esc(publicUrl) + '" type="button">🔗 Copy URL</button>' +
+            '<button class="ed-chip revoke-share-btn" style="color:var(--red)" data-tok="' + esc(s.token) + '" type="button">Revoke</button>' +
+          '</div>' +
+        '</div>';
+      }).join('') : '<div style="color:#8b949e;font-size:13px;padding:8px 0">No active temporary share links. Tap <b>⋯ → Create Expiry Share Link</b> on any file to create one.</div>';
+
+      var logsHtml = logs.map(function (l) {
+        var m = esc(l.method || 'INFO');
+        return '<tr>' +
+          '<td>' + esc((l.time || '').replace('T', ' ').slice(0, 19)) + '</td>' +
+          '<td><b>' + esc(l.user || 'ingress') + '</b></td>' +
+          '<td><span class="badge-m badge-' + m + '">' + m + '</span></td>' +
+          '<td>' + esc(l.path || '') + '</td>' +
+          '<td>' + esc(l.ip || '') + '</td>' +
+        '</tr>';
+      }).join('');
+
+      suiteBody.innerHTML =
+        '<div style="margin-bottom:18px">' +
+          '<h4 style="margin:0 0 8px;color:#58a6ff">⏳ Active Expiry Share Links</h4>' +
+          '<div class="legend-list">' + sharesHtml + '</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+            '<h4 style="margin:0;color:#58a6ff">📋 Access &amp; Modification Audit Log</h4>' +
+            '<button id="btnClearAudit" class="ed-chip" style="color:var(--red)" type="button">🗑️ Clear Log</button>' +
+          '</div>' +
+          '<div style="max-height:320px;overflow:auto;border:1px solid #21262d;border-radius:10px">' +
+            '<table class="audit-table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>File / Path</th><th>IP</th></tr></thead>' +
+            '<tbody>' + (logsHtml || '<tr><td colspan="5" style="text-align:center;color:#8b949e">No audit events recorded yet</td></tr>') + '</tbody></table>' +
+          '</div>' +
+        '</div>';
+
+      [].slice.call(suiteBody.querySelectorAll('.copy-share-btn')).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var u = this.getAttribute('data-url');
+          if (navigator.clipboard) navigator.clipboard.writeText(u);
+          showToast('🔗 Copied Share Link!');
+        });
+      });
+      [].slice.call(suiteBody.querySelectorAll('.revoke-share-btn')).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var tok = this.getAttribute('data-tok');
+          fetch(apiUrl('share'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'revoke', token: tok }) })
+            .then(function () { openAuditAndSharesModal(); showToast('Revoked share link'); });
+        });
+      });
+      var clrBtn = document.getElementById('btnClearAudit');
+      if (clrBtn) clrBtn.addEventListener('click', function () {
+        if (!confirm('Clear all audit log entries?')) return;
+        fetch(apiUrl('audit_clear'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+          .then(function () { openAuditAndSharesModal(); });
+      });
+    });
+  }
+  document.getElementById('btnSysAudit').addEventListener('click', openAuditAndSharesModal);
+
+  // 8. Tạo File, Tạo Folder, Upload, Kéo-Thả (Drag & Drop) & Dán Clipboard (Cmd+V)
   document.getElementById('btnNewFile').addEventListener('click', function () {
     var name = prompt('Enter new file name (e.g. script.yaml, README.md):');
     if (!name || !name.trim()) return;
@@ -453,26 +959,26 @@
   document.getElementById('btnUpload').addEventListener('click', function () { fileInput.click(); });
   fileInput.addEventListener('change', function () { uploadFileList([].slice.call(this.files)); });
 
-  // Kéo-Thả file vào cửa sổ trình duyệt
   window.addEventListener('dragover', function (e) { e.preventDefault(); document.body.classList.add('dragging'); });
   window.addEventListener('dragleave', function (e) { if (e.relatedTarget === null) document.body.classList.remove('dragging'); });
   window.addEventListener('drop', function (e) {
     e.preventDefault(); document.body.classList.remove('dragging');
     if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) uploadFileList([].slice.call(e.dataTransfer.files));
   });
-  // Dán ảnh/file từ Clipboard (Cmd+V)
   window.addEventListener('paste', function (e) {
-    if (editorModal.classList.contains('show') || document.activeElement === document.getElementById('q')) return;
+    if (editorModal.classList.contains('show') || suiteModal.classList.contains('show') || document.activeElement === document.getElementById('q')) return;
     var items = e.clipboardData && e.clipboardData.files;
     if (items && items.length) uploadFileList([].slice.call(items));
   });
 
-  // 7. iOS Action Sheet & Clipboard
+  // 9. iOS Action Sheet, Hex Trigger, Expiry Share Link & Clipboard
   var backdrop = document.getElementById('backdrop'), sheet = document.getElementById('sheet'), selectedItem = null;
   function openActionSheet(item) {
     selectedItem = item;
     document.getElementById('sheetTitle').textContent = item.name + (item.isDir ? '/' : '');
     document.getElementById('actEdit').style.display = item.isDir ? 'none' : 'flex';
+    document.getElementById('actHex').style.display = item.isDir ? 'none' : 'flex';
+    document.getElementById('actShareLink').style.display = item.isDir ? 'none' : 'flex';
     document.getElementById('actDownload').style.display = item.isDir ? 'none' : 'flex';
     backdrop.classList.add('show'); sheet.classList.add('show');
   }
@@ -485,6 +991,53 @@
     var extMatch = /\.([a-z0-9]+)$/i.exec(selectedItem.name);
     openCodeEditor(selectedItem.name, selectedItem.href, extMatch ? extMatch[1].toLowerCase() : 'yaml');
   });
+  document.getElementById('actHex').addEventListener('click', function () {
+    if (!selectedItem) return; closeActionSheet();
+    openHexViewer(selectedItem.name, selectedItem.href);
+  });
+  document.getElementById('actShareLink').addEventListener('click', function () {
+    if (!selectedItem) return; var item = selectedItem; closeActionSheet();
+    openSuiteModal('⏳ Create Temporary Share Link',
+      '<p style="margin-top:0;color:#8b949e">Generate a direct download URL for <b>' + esc(item.name) + '</b> that automatically expires without exposing your WebDAV password.</p>' +
+      '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0">' +
+        '<button class="act-btn ttl-btn" data-ttl="3600" type="button">1 Hour</button>' +
+        '<button class="act-btn ttl-btn" data-ttl="21600" type="button">6 Hours</button>' +
+        '<button class="act-btn primary ttl-btn" data-ttl="86400" type="button">24 Hours</button>' +
+        '<button class="act-btn ttl-btn" data-ttl="604800" type="button">7 Days</button>' +
+      '</div>' +
+      '<div id="shareResultBox" style="padding:12px;border-radius:10px;background:#0d1117;border:1px solid #21262d;font-family:monospace;font-size:13px;color:#8b949e">Select an expiration duration above.</div>'
+    );
+    [].slice.call(suiteBody.querySelectorAll('.ttl-btn')).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var ttl = parseInt(this.getAttribute('data-ttl'), 10);
+        var box = document.getElementById('shareResultBox');
+        box.textContent = 'Generating secure token...';
+        fetch(apiUrl('share'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', path: decodeURIComponent(item.internalPath), ttl: ttl }) })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.ok) throw new Error(res.error || 'Failed');
+            var externalShareUrl = location.protocol + '//' + location.hostname + ':8090/s/' + res.token;
+            var currentOriginUrl = location.origin + ingressPrefix + '/s/' + res.token;
+            box.innerHTML =
+              '<div style="color:#30d158;margin-bottom:8px">✅ Share link created!</div>' +
+              '<div style="margin-bottom:8px"><b>Direct Port 8090 / Cloudflare URL:</b><br><input type="text" readonly value="' + esc(externalShareUrl) + '" style="width:100%;margin-top:4px;padding:7px;background:#161b22;border:1px solid #30363d;color:#fff;border-radius:6px;font-family:monospace"></div>' +
+              '<div style="display:flex;gap:8px">' +
+                '<button id="btnCopyExtShare" class="ed-btn save" type="button">🔗 Copy Public Link</button>' +
+                '<button id="btnCopyIngShare" class="ed-btn close" type="button">Copy Ingress Link</button>' +
+              '</div>';
+            document.getElementById('btnCopyExtShare').addEventListener('click', function () {
+              if (navigator.clipboard) navigator.clipboard.writeText(externalShareUrl);
+              showToast('🔗 Copied Public Share URL!');
+            });
+            document.getElementById('btnCopyIngShare').addEventListener('click', function () {
+              if (navigator.clipboard) navigator.clipboard.writeText(currentOriginUrl);
+              showToast('🔗 Copied Ingress Share URL!');
+            });
+          }).catch(function (err) { box.style.color = 'var(--red)'; box.textContent = 'Error: ' + err.message; });
+      });
+    });
+  });
+
   document.getElementById('actCopyPath').addEventListener('click', function () {
     if (!selectedItem) return; closeActionSheet();
     var cleanPath = decodeURIComponent(selectedItem.internalPath);
@@ -554,7 +1107,7 @@
     })).then(function () { if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip'); location.reload(); });
   });
 
-  // 8. Search, Sort & Grid/List View
+  // 10. Search, Sort & Grid/List View
   var qInput = document.getElementById('q'), clearBtn = document.getElementById('clearBtn'), emptyEl = document.getElementById('empty');
   function filterRows() {
     var v = qInput.value.trim().toLowerCase(); clearBtn.classList.toggle('show', v.length > 0); var c = 0;
