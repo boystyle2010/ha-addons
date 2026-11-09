@@ -1,3 +1,6 @@
+## [2.2.2] - 2026-11-09
+- **Maintenance & Improvements:** Update footer.html
+
 ## [2.2.1] - 2026-11-09
 - **Maintenance & Improvements:** Update footer.html
 
