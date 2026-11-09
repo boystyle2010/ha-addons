@@ -19,6 +19,9 @@ profile webdav_pro flags=(attach_disconnected,mediate_deleted) {
   capability setgid,
   capability setuid,
   capability setpcap,
+  capability sys_chroot,
+  capability audit_write,
+  capability sys_admin,
 
   # S6-Overlay v3
   /init rix,
@@ -51,4 +54,18 @@ profile webdav_pro flags=(attach_disconnected,mediate_deleted) {
   /media/** rwk,
   /share/** rwk,
   /ssl/** rwk,
+
+  # Multi-Protocol Services (Nginx, Samba/SMB, SFTP, FTP & User Management)
+  /etc/** rwk,
+  /var/** rwk,
+  /usr/local/bin/** rix,
+  /usr/share/nginx/** r,
+  /usr/lib/** rm,
+  /lib/** rm,
+  /proc/** r,
+  /dev/urandom r,
+  /dev/random r,
+  /dev/null rw,
+  /dev/pts/{,*} rw,
+  /dev/ptmx rw,
 }
