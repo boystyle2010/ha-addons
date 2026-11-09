@@ -141,7 +141,7 @@
   .snap-ic svg{width:22px;height:22px}
   .snap-txt{min-width:0;flex:1}
   .snap-txt b{display:block;font-size:15px;font-weight:600;color:#fff;margin-bottom:2px}
-  .snap-txt span{display:block;font-size:12.5px;color:var(--muted);line-height:1.3}
+  .snap-txt span{display:block;font-size:12.5px;color:var(--muted);line-height:1.3;word-break:break-all}
 
   .disk-grid{display:grid;grid-template-columns:190px minmax(0,1fr);gap:18px;align-items:center}
   @media (max-width:540px){.disk-grid{grid-template-columns:minmax(0,1fr);justify-items:center}}
@@ -168,8 +168,8 @@
   .ios-row-more svg{width:16px;height:16px}
 
   .badge-m{padding:2px 7px;border-radius:5px;font-size:10.5px;font-weight:700;flex:none;white-space:nowrap;font-family:"SF Mono",monospace}
-  .badge-PUT,.badge-SNAPSHOT,.badge-SHARE_CREATE,.badge-MKCOL{background:rgba(48,209,88,.18);color:#30d158}
-  .badge-DELETE,.badge-SHARE_REVOKE{background:rgba(255,69,58,.18);color:#ff453a}
+  .badge-PUT,.badge-SNAPSHOT,.badge-SHARE_CREATE,.badge-MKCOL,.badge-WEB_LOGIN{background:rgba(48,209,88,.18);color:#30d158}
+  .badge-DELETE,.badge-SHARE_REVOKE,.badge-LOGIN_FAIL{background:rgba(255,69,58,.18);color:#ff453a}
   .badge-GET,.badge-SHARE_DL,.badge-COPY,.badge-MOVE,.badge-TERM_CMD{background:rgba(10,132,255,.18);color:#58a6ff}
   .term-frame{width:100%;border:1px solid #30363d;border-radius:12px;background:#000;overflow:hidden}
   .empty{display:none;text-align:center;padding:42px 20px;color:var(--muted);font-size:15px}
@@ -182,7 +182,6 @@
   <div id="empty" class="empty">No matching items found</div>
   <div id="stat" class="stat"></div>
 
-  <!-- Khóa cứng style="display:none" mặc định để tuyệt đối không bao giờ lộ ra ở đáy trang -->
   <div id="bgAudioBar" class="bg-audio-bar" style="display:none">
     <div class="bga-art">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -390,7 +389,8 @@
         var nodes = root.querySelectorAll ? root.querySelectorAll('.main-title, [slot="title"], .title') : [];
         for (var i = 0; i < nodes.length; i++) {
           var el = nodes[i];
-          if (el.textContent && el.textContent.trim().indexOf('WebDAV') !== -1 && !el.querySelector('.wpro-ha-ic')) {
+          var txt = el.textContent ? el.textContent.trim() : '';
+          if ((txt.indexOf('WebDAV') !== -1 || txt.indexOf('OmniDrive') !== -1) && !el.querySelector('.wpro-ha-ic')) {
             el.style.display = 'inline-flex'; el.style.alignItems = 'center'; el.style.gap = '9px';
             var span = doc.createElement('span');
             span.className = 'wpro-ha-ic';
@@ -408,12 +408,22 @@
   }
   injectTopBarIcon(); setTimeout(injectTopBarIcon, 400);
 
-  // 2. Đường dẫn Ingress, WebDAV & API
+  // 2. Đường dẫn Ingress, WebDAV & Nút Sign Out khi mở ngoài trình duyệt (dav.minhhuahome.com)
   var ingressMatch = location.pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
   var ingressPrefix = ingressMatch ? ingressMatch[1] : '';
   var p = location.pathname.replace(/^\/api\/hassio_ingress\/[^\/]+/, '') || '/';
   if (!/\/$/.test(p)) p += '/';
   var segs = p.split('/').filter(Boolean).map(function (s) { try { return decodeURIComponent(s); } catch (e) { return s; } });
+
+  var btnLogout = document.getElementById('btnLogout');
+  if (!ingressPrefix && btnLogout) {
+    btnLogout.classList.add('show');
+    btnLogout.addEventListener('click', function () {
+      fetch('/__wpro_api/logout', { method: 'POST' }).then(function () {
+        location.replace('/.fancyindex/login.html');
+      });
+    });
+  }
 
   function buildWebdavUrl(relPath) {
     if (relPath.indexOf('/') === 0) return ingressPrefix + relPath;
@@ -423,7 +433,7 @@
   function buildDestinationHeader(targetInternalPath) { return location.origin + targetInternalPath; }
 
   // 3. Tiêu đề, Back & Breadcrumbs
-  document.getElementById('title').textContent = segs.length ? segs[segs.length - 1] : 'WebDAV Server Pro';
+  document.getElementById('title').textContent = segs.length ? segs[segs.length - 1] : 'OmniDrive Pro';
   var nav = document.getElementById('nav'), back = document.getElementById('back');
   if (segs.length) {
     back.querySelector('span').textContent = segs.length > 1 ? segs[segs.length - 2] : 'Home';
@@ -923,11 +933,12 @@
     if (aceEditor) setTimeout(function () { aceEditor.resize(); renderMinimap(); }, 50);
   });
 
-  // 7. System Operations & Security Suite Modal
+  // 7. System Operations, Multi-Protocol Connect Hub & Security Suite Modal
   var suiteModal = document.getElementById('suiteModal'), suiteTitle = document.getElementById('suiteTitle'), suiteBody = document.getElementById('suiteBody');
   var IC_TERM = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="M7 9l3 3-3 3M12 15h5"/></svg>';
   var IC_DISK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>';
   var IC_SNAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>';
+  var IC_GLOBE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
   var IC_SHIELD = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>';
   var IC_SHARE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
 
@@ -965,17 +976,17 @@
     var term = window.Terminal ? new Terminal({ cursorBlink: true, fontSize: 12.5, rows: 17, theme: { background: '#000000' } }) : null;
     if (term) {
       term.open(box);
-      term.writeln('\x1b[1;36mHome Assistant WebDAV Pro Shell\x1b[0m');
+      term.writeln('\x1b[1;36mOmniDrive Pro System Shell\x1b[0m');
       term.writeln('Working directory: \x1b[1;33m' + p + '\x1b[0m');
     } else {
       box.style.cssText = 'height:310px;overflow:auto;padding:10px;font-family:monospace;white-space:pre-wrap;color:#e6edf3;font-size:12.5px';
-      box.textContent = 'Home Assistant WebDAV Pro Shell\nWorking directory: ' + p + '\n';
+      box.textContent = 'OmniDrive Pro System Shell\nWorking directory: ' + p + '\n';
     }
 
     function runCmd(cmd) {
       if (!cmd) return;
-      if (term) term.writeln('\r\n\x1b[1;32mroot@webdav-pro:' + p + '# \x1b[0m' + cmd);
-      else box.textContent += '\nroot@webdav-pro:' + p + '# ' + cmd + '\n';
+      if (term) term.writeln('\r\n\x1b[1;32mroot@omnidrive:' + p + '# \x1b[0m' + cmd);
+      else box.textContent += '\nroot@omnidrive:' + p + '# ' + cmd + '\n';
       fetch(apiUrl('exec'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd: cmd, cwd: p }) })
         .then(function (r) { return r.json(); })
         .then(function (res) {
@@ -1074,9 +1085,51 @@
     document.getElementById('btnSnapAuto').addEventListener('click', function () { triggerSnap('automations'); });
   });
 
-  // 7D. Audit Log & Active Share Links Manager
+  // 7D. Multi-Protocol Connect Hub (WebDAV + SMB/Samba + SFTP + FTP)
+  document.getElementById('btnSysConnect').addEventListener('click', function () {
+    openSuiteModal(IC_GLOBE + '<span>Multi-Protocol Connect Hub</span>', '<div style="text-align:center;padding:24px;color:var(--muted)">Loading active protocols...</div>');
+    fetch(apiUrl('protocols')).then(function (r) { return r.json(); }).then(function (info) {
+      var host = location.hostname || 'homeassistant.local';
+      var webdavUrl = location.protocol + '//' + host + ':8090/';
+      var smbUrl = 'smb://' + host + '/OmniDrive';
+      var winUnc = '\\\\' + host + '\\OmniDrive';
+      var sftpUrl = 'sftp://' + (info.default_user || 'admin') + '@' + host + ':2222/';
+      var ftpUrl = 'ftp://' + (info.default_user || 'admin') + '@' + host + ':2121/';
+
+      suiteBody.innerHTML =
+        '<p style="margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.45">Tap any protocol card below to copy its connection address. All protocols share your same <b>users</b> credentials.</p>' +
+        '<div class="snap-stack">' +
+          '<button class="snap-card primary proto-copy" data-copy="' + esc(smbUrl) + '" type="button">' +
+            '<div class="snap-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>' +
+            '<div class="snap-txt"><b>SMB / Samba • Port 445 (' + (info.smb ? 'Active' : 'Disabled') + ')</b><span>iOS Files ("Connect to Server"), macOS Finder &amp; Infuse: <code>' + esc(smbUrl) + '</code><br>Windows Explorer: <code>' + esc(winUnc) + '</code></span></div>' +
+          '</button>' +
+          '<button class="snap-card proto-copy" data-copy="' + esc(sftpUrl) + '" type="button">' +
+            '<div class="snap-ic">' + IC_TERM + '</div>' +
+            '<div class="snap-txt"><b>SFTP (SSH File Transfer) • Port 2222 (' + (info.sftp ? 'Active' : 'Disabled') + ')</b><span>Termius, Cyberduck, FileZilla, FE File Explorer: <code>' + esc(sftpUrl) + '</code></span></div>' +
+          '</button>' +
+          '<button class="snap-card proto-copy" data-copy="' + esc(ftpUrl) + '" type="button">' +
+            '<div class="snap-ic">' + IC_SHARE + '</div>' +
+            '<div class="snap-txt"><b>FTP Server • Port 2121 (' + (info.ftp ? 'Active' : 'Disabled') + ')</b><span>Standard FTP Clients &amp; Network Scanners: <code>' + esc(ftpUrl) + '</code></span></div>' +
+          '</button>' +
+          '<button class="snap-card proto-copy" data-copy="' + esc(webdavUrl) + '" type="button">' +
+            '<div class="snap-ic">' + IC_GLOBE + '</div>' +
+            '<div class="snap-txt"><b>WebDAV / HTTPS • Port 8090 (Active)</b><span>Cloudflare Tunnel &amp; WebDAV Clients: <code>' + esc(webdavUrl) + '</code></span></div>' +
+          '</button>' +
+        '</div>';
+
+      [].slice.call(suiteBody.querySelectorAll('.proto-copy')).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var val = this.getAttribute('data-copy');
+          if (navigator.clipboard) navigator.clipboard.writeText(val);
+          showToast('Copied: ' + val);
+        });
+      });
+    });
+  });
+
+  // 7E. Audit Log & Active Share Links Manager
   function openAuditAndSharesModal() {
-    openSuiteModal(IC_SHIELD + '<span>Audit &amp; Share Links</span>', '<div style="text-align:center;padding:24px;color:var(--muted)">Loading security records...</div>');
+    openSuiteModal(IC_SHIELD + '<span>Security Audit &amp; Share Links</span>', '<div style="text-align:center;padding:24px;color:var(--muted)">Loading security records...</div>');
     Promise.all([
       fetch(apiUrl('shares')).then(function (r) { return r.json(); }),
       fetch(apiUrl('audit?limit=120')).then(function (r) { return r.json(); })
@@ -1254,7 +1307,7 @@
     if (!selectedItem) return; var item = selectedItem; closeActionSheet();
     var desc = item.isDir
       ? 'Generate a temporary download URL for folder <b>/' + esc(item.name) + '</b> (automatically packaged as a <code>.zip</code> archive on download).'
-      : 'Generate a temporary direct download URL for <b>' + esc(item.name) + '</b> without exposing your WebDAV password.';
+      : 'Generate a temporary direct download URL for <b>' + esc(item.name) + '</b> without exposing your password.';
     openSuiteModal(IC_SHARE + '<span>Create Expiry Share Link</span>',
       '<p style="margin:0 0 12px;color:var(--muted);font-size:13.5px;line-height:1.45">' + desc + '</p>' +
       '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:14px">' +
