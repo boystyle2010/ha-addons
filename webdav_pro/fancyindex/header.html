@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<title>WebDAV Server Pro</title>
+<title>OmniDrive Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-searchbox.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
@@ -47,7 +47,7 @@ body.dragging .drop-zone{display:grid}
 .back{display:inline-flex;align-items:center;gap:5px;color:var(--blue);text-decoration:none;font-size:17px;font-weight:500;max-width:80%;padding:6px 0}
 .back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-.hero{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 2px 12px}
+.hero{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 2px 12px}
 .hero-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
 .app-badge{
   width:42px;height:42px;border-radius:11px;flex:none;
@@ -56,15 +56,22 @@ body.dragging .drop-zone{display:grid}
 }
 .app-badge svg{width:25px;height:25px}
 .hero-titles{min-width:0;flex:1}
-.title{font-size:24px;font-weight:700;letter-spacing:-.022em;line-height:1.2;margin:0;color:var(--text);word-break:break-word}
+.title{font-size:23px;font-weight:700;letter-spacing:-.022em;line-height:1.2;margin:0;color:var(--text);word-break:break-word}
 .subtitle{font-size:12.5px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .git-repo-pill{display:none;align-items:center;gap:4px;background:rgba(48,209,88,.14);color:var(--green);padding:2px 7px;border-radius:6px;font-size:11px;font-weight:600}
 .git-repo-pill.show{display:inline-flex}
+.hero-right{display:flex;align-items:center;gap:6px;flex:none}
 .select-toggle{
   height:32px;padding:0 13px;border-radius:16px;border:0;background:var(--card);color:var(--blue);
   font-size:14px;font-weight:600;cursor:pointer;flex:none;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.1);
 }
 .select-toggle.active{background:var(--blue);color:#fff}
+.logout-btn{
+  width:32px;height:32px;border-radius:16px;border:0;background:var(--card);color:var(--red);
+  display:none;place-items:center;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.1);
+}
+.logout-btn.show{display:grid}
+.logout-btn svg{width:15px;height:15px}
 
 .search-wrap{position:relative;margin:0 0 10px}
 .search{
@@ -78,8 +85,12 @@ body.dragging .drop-zone{display:grid}
 .clear-btn.show{display:grid}
 
 .action-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 8px}
-.sys-bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 12px}
-@media (max-width:520px){.sys-bar{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.sys-bar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:0 0 12px}
+@media (max-width:620px){
+  .sys-bar{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .sys-bar>.act-btn:nth-child(1),.sys-bar>.act-btn:nth-child(2),.sys-bar>.act-btn:nth-child(3){grid-column:span 2}
+  .sys-bar>.act-btn:nth-child(4),.sys-bar>.act-btn:nth-child(5){grid-column:span 3}
+}
 .act-btn{
   height:36px;padding:0 10px;border:0;border-radius:10px;background:var(--card);color:var(--blue);
   display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;font-weight:600;
@@ -178,14 +189,19 @@ body.select-mode .sel-chk{display:grid}
         </svg>
       </div>
       <div class="hero-titles">
-        <h2 id="title" class="title">WebDAV Server Pro</h2>
+        <h2 id="title" class="title">OmniDrive Pro</h2>
         <div class="subtitle">
-          <span id="subStat">Home Assistant Storage Gateway</span>
+          <span id="subStat">Multi-Protocol Storage Hub</span>
           <span id="gitRepoPill" class="git-repo-pill">⎇ <span id="gitBranchName">main</span></span>
         </div>
       </div>
     </div>
-    <button id="btnSelectMode" class="select-toggle" type="button">Select</button>
+    <div class="hero-right">
+      <button id="btnSelectMode" class="select-toggle" type="button">Select</button>
+      <button id="btnLogout" class="logout-btn" type="button" title="Sign Out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
   </div>
 
   <div class="search-wrap">
@@ -224,9 +240,13 @@ body.select-mode .sel-chk{display:grid}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
       <span>Quick Zip</span>
     </button>
+    <button id="btnSysConnect" class="act-btn" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      <span>Connect</span>
+    </button>
     <button id="btnSysAudit" class="act-btn" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
-      <span>Audit &amp; Shares</span>
+      <span>Security</span>
     </button>
   </div>
 
