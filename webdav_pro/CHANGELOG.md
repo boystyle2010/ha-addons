@@ -1,3 +1,6 @@
+## [2.0.21] - 2026-11-09
+- **Maintenance & Improvements:** Update DOCS.md
+
 ## [2.0.20] - 2026-11-09
 - **Maintenance & Improvements:** Rename webdav_pro.yaml to webdav_pro.yml
 
