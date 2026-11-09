@@ -1,0 +1,369 @@
+name: OmniDrive Pro - Auto Update & Verify
+
+on:
+  schedule:
+    # Tự động kiểm tra bản mới vào 07:00 UTC hàng ngày
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "omnidrive_pro/**"
+      - ".github/workflows/omnidrive_pro.yaml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: omnidrive_pro_workflow
+  cancel-in-progress: false
+
+jobs:
+  update_and_verify:
+    name: "🚀 OmniDrive Pro CI/CD Pipeline"
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - name: "📥 1. Checkout Repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: "🎨 2. Generate OmniDrive Pro PNG Icon & Logo"
+        id: gen_icons
+        run: |
+          set -e
+          echo "::group::🎨 Kiểm tra & Khởi tạo bộ Icon/Logo OmniDrive Pro chuẩn PNG 32-bit"
+          ICONS_CREATED="false"
+          ICON_STATUS="✅ Đã có sẵn (Giữ nguyên)"
+
+          # Tự động tạo mới nếu chưa có hoặc nếu vẫn còn chữ WebDAV cũ
+          if [ ! -f "omnidrive_pro/icon.png" ] || [ ! -f "omnidrive_pro/logo.png" ] || [ ! -f "omnidrive_pro/.omnidrive_art_v3" ]; then
+            echo "⏳ Đang cài đặt librsvg2-bin và kết xuất bộ nhận diện OmniDrive Pro mới..."
+            sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin
+
+            cat << 'EOF' > /tmp/icon.svg
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+              <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#0b1120"/>
+                  <stop offset="50%" stop-color="#0f172a"/>
+                  <stop offset="100%" stop-color="#1e1b4b"/>
+                </linearGradient>
+                <linearGradient id="cyanBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38bdf8"/>
+                  <stop offset="100%" stop-color="#0a84ff"/>
+                </linearGradient>
+                <linearGradient id="purplePink" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#a855f7"/>
+                  <stop offset="100%" stop-color="#6366f1"/>
+                </linearGradient>
+              </defs>
+              <!-- iOS Squircle Background -->
+              <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.42"/>
+              <!-- Outer Multi-Protocol Orbit Ring -->
+              <circle cx="256" cy="256" r="168" fill="none" stroke="url(#purplePink)" stroke-width="8" stroke-dasharray="22 14" stroke-opacity="0.65"/>
+              <!-- 4 Protocol Nodes (WebDAV, SMB, SFTP, FTP) -->
+              <circle cx="256" cy="88" r="16" fill="#38bdf8"/>
+              <circle cx="424" cy="256" r="16" fill="#30d158"/>
+              <circle cx="256" cy="424" r="16" fill="#a855f7"/>
+              <circle cx="88" cy="256" r="16" fill="#ff9f0a"/>
+              <!-- Central Storage Drive / Server Core -->
+              <rect x="142" y="152" width="228" height="92" rx="26" fill="#1e293b" stroke="url(#cyanBlue)" stroke-width="14"/>
+              <circle cx="186" cy="198" r="12" fill="#30d158"/>
+              <circle cx="222" cy="198" r="12" fill="#38bdf8"/>
+              <line x1="264" y1="198" x2="332" y2="198" stroke="#94a3b8" stroke-width="12" stroke-linecap="round"/>
+              <rect x="142" y="268" width="228" height="92" rx="26" fill="#1e293b" stroke="url(#cyanBlue)" stroke-width="14"/>
+              <circle cx="186" cy="314" r="12" fill="#38bdf8"/>
+              <circle cx="222" cy="314" r="12" fill="#a855f7"/>
+              <line x1="264" y1="314" x2="332" y2="314" stroke="#94a3b8" stroke-width="12" stroke-linecap="round"/>
+            </svg>
+          EOF
+
+            cat << 'EOF' > /tmp/logo.svg
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" width="1024" height="512">
+              <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#0b1120"/>
+                  <stop offset="100%" stop-color="#1e1b4b"/>
+                </linearGradient>
+                <linearGradient id="cyanBlue" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38bdf8"/>
+                  <stop offset="100%" stop-color="#0a84ff"/>
+                </linearGradient>
+                <linearGradient id="purplePink" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#a855f7"/>
+                  <stop offset="100%" stop-color="#6366f1"/>
+                </linearGradient>
+              </defs>
+              <rect x="36" y="56" width="400" height="400" rx="92" fill="url(#bg)" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.5"/>
+              <circle cx="236" cy="256" r="142" fill="none" stroke="url(#purplePink)" stroke-width="7" stroke-dasharray="18 12" stroke-opacity="0.65"/>
+              <circle cx="236" cy="114" r="13" fill="#38bdf8"/>
+              <circle cx="378" cy="256" r="13" fill="#30d158"/>
+              <circle cx="236" cy="398" r="13" fill="#a855f7"/>
+              <circle cx="94" cy="256" r="13" fill="#ff9f0a"/>
+              <rect x="138" y="168" width="196" height="78" rx="22" fill="#1e293b" stroke="url(#cyanBlue)" stroke-width="12"/>
+              <circle cx="176" cy="207" r="10" fill="#30d158"/>
+              <circle cx="206" cy="207" r="10" fill="#38bdf8"/>
+              <line x1="242" y1="207" x2="300" y2="207" stroke="#94a3b8" stroke-width="10" stroke-linecap="round"/>
+              <rect x="138" y="266" width="196" height="78" rx="22" fill="#1e293b" stroke="url(#cyanBlue)" stroke-width="12"/>
+              <circle cx="176" cy="305" r="10" fill="#38bdf8"/>
+              <circle cx="206" cy="305" r="10" fill="#a855f7"/>
+              <line x1="242" y1="305" x2="300" y2="305" stroke="#94a3b8" stroke-width="10" stroke-linecap="round"/>
+              <text x="476" y="242" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="102" font-weight="800" fill="#38bdf8">OmniDrive</text>
+              <text x="476" y="348" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="78" font-weight="700" fill="#a855f7">Storage Hub Pro</text>
+            </svg>
+          EOF
+
+            rsvg-convert -w 256 -h 256 /tmp/icon.svg -o omnidrive_pro/icon.png
+            rsvg-convert -w 512 -h 256 /tmp/logo.svg -o omnidrive_pro/logo.png
+            touch omnidrive_pro/.omnidrive_art_v3
+            ICONS_CREATED="true"
+            ICON_STATUS="🆕 Đã tạo mới bộ nhận diện OmniDrive Pro: icon.png (256x256) & logo.png (512x256)"
+            echo "✅ Đã tạo thành công omnidrive_pro/icon.png và omnidrive_pro/logo.png!"
+          else
+            echo "✅ File icon.png và logo.png của OmniDrive Pro đã tồn tại."
+          fi
+          echo "::endgroup::"
+
+          echo "icons_created=${ICONS_CREATED}" >> "$GITHUB_OUTPUT"
+          echo "icon_status=${ICON_STATUS}" >> "$GITHUB_OUTPUT"
+
+      - name: "🔍 3. Check Latest Alpine Base & Nginx Upstream Version"
+        id: check_upstream
+        run: |
+          set -e
+          echo "::group::🔍 Truy vấn phiên bản Alpine Linux & Nginx Upstream"
+          BUILD_FILE="omnidrive_pro/build.yaml"
+
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+          CURRENT_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+
+          echo "┌──────────────────────────────────────────────┐"
+          echo "│ Phiên bản hiện tại trong Repo:               │"
+          echo "│ - Alpine Base : ${CURRENT_ALPINE}"
+          echo "│ - Nginx Pkg   : ${CURRENT_NGINX}"
+          echo "└──────────────────────────────────────────────┘"
+
+          LATEST_ALPINE=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/latest-releases.yaml" | grep -oP 'version:\s*\K[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "$CURRENT_ALPINE")
+          if [ -z "$LATEST_ALPINE" ]; then LATEST_ALPINE="$CURRENT_ALPINE"; fi
+
+          if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" >/dev/null 2>&1; then
+            echo "⚠️ Home Assistant chưa có base image cho Alpine ${LATEST_ALPINE}, giữ nguyên ${CURRENT_ALPINE}"
+            LATEST_ALPINE="$CURRENT_ALPINE"
+          fi
+
+          LATEST_NGINX=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/v${LATEST_ALPINE}/main/aarch64/APKINDEX.tar.gz" | tar -Oxz APKINDEX 2>/dev/null | awk -F: '$1=="P" && $2=="nginx" {getline; if ($1=="V") print $2}' | head -n1 | tr -d '[:space:]' || true)
+
+          if [[ ! "$LATEST_NGINX" =~ ^[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]; then
+            echo "⚠️ Không đọc được APKINDEX hoặc định dạng lạ (${LATEST_NGINX}), giữ nguyên ${CURRENT_NGINX}"
+            LATEST_NGINX="$CURRENT_NGINX"
+          fi
+
+          echo "┌──────────────────────────────────────────────┐"
+          echo "│ Phiên bản mới nhất từ Upstream:              │"
+          echo "│ - Alpine Base : ${LATEST_ALPINE}"
+          echo "│ - Nginx Pkg   : ${LATEST_NGINX}"
+          echo "└──────────────────────────────────────────────┘"
+          echo "::endgroup::"
+
+          echo "current_alpine=${CURRENT_ALPINE}" >> "$GITHUB_OUTPUT"
+          echo "current_nginx=${CURRENT_NGINX}" >> "$GITHUB_OUTPUT"
+          echo "latest_alpine=${LATEST_ALPINE}" >> "$GITHUB_OUTPUT"
+          echo "latest_nginx=${LATEST_NGINX}" >> "$GITHUB_OUTPUT"
+
+          if [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ] || [ "$LATEST_NGINX" != "$CURRENT_NGINX" ]; then
+            echo "upstream_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upstream_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "🏷️ 4. Calculate Version & Update Changelog"
+        id: calc_version
+        run: |
+          set -e
+          echo "::group::🏷️ Tính toán Phiên bản & Cập nhật CHANGELOG.md"
+          CONFIG_FILE="omnidrive_pro/config.yaml"
+          BUILD_FILE="omnidrive_pro/build.yaml"
+          CHANGELOG_FILE="omnidrive_pro/CHANGELOG.md"
+          [ ! -f "$CHANGELOG_FILE" ] && echo "# Changelog" > "$CHANGELOG_FILE"
+
+          CURRENT_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VER"
+
+          UPSTREAM_CHANGED="${{ steps.check_upstream.outputs.upstream_changed }}"
+          ICONS_CREATED="${{ steps.gen_icons.outputs.icons_created }}"
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          NEED_COMMIT="false"
+          NEW_VER="$CURRENT_VER"
+          UPDATE_TYPE="⏸️ Không có thay đổi phiên bản (Up-to-date)"
+          SUMMARY_REASON="Mã nguồn và gói Upstream đã ở phiên bản mới nhất."
+
+          if [ "$UPSTREAM_CHANGED" = "true" ]; then
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_VER="${NEW_MAJOR}.0.0"
+            NEED_COMMIT="true"
+            UPDATE_TYPE="🚀 Nâng cấp Major Version (Upstream Release)"
+            SUMMARY_REASON="Nâng cấp Nginx lên \`${LATEST_NGINX}\` (Alpine Base \`${LATEST_ALPINE}\`)."
+
+            sed -i "s/aarch64-base:[0-9.]\+/aarch64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/amd64-base:[0-9.]\+/amd64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/NGINX_VERSION: \".*\"/NGINX_VERSION: \"${LATEST_NGINX}\"/g" "$BUILD_FILE"
+            sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Upstream Update:** Upgraded Nginx to \`${LATEST_NGINX}\` on Home Assistant Alpine Base \`${LATEST_ALPINE}\`.\n- Updated multi-protocol modules (WebDAV, Samba, OpenSSH, vsftpd) with latest security patches.\n"
+            awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+            echo "✅ Đã nâng Major Version: ${CURRENT_VER} -> ${NEW_VER}"
+
+          elif [ "${{ github.event_name }}" = "push" ] || [ "$ICONS_CREATED" = "true" ]; then
+            PREV_VER=$(git show HEAD~1:omnidrive_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "")
+            if [ "$ICONS_CREATED" = "true" ] || { [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ]; }; then
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VER="${MAJOR}.${MINOR}.${NEW_PATCH}"
+              NEED_COMMIT="true"
+              COMMIT_MSG=$(git log -1 --pretty=%B | head -n1 | tr -d '"`')
+              UPDATE_TYPE="🔧 Nâng cấp Patch Version (Local Edit / Assets)"
+              SUMMARY_REASON="Cập nhật nội bộ: ${COMMIT_MSG}"
+
+              sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Maintenance & Improvements:** ${COMMIT_MSG}\n"
+              awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+              echo "✅ Đã tự động nâng Patch Version: ${CURRENT_VER} -> ${NEW_VER}"
+            fi
+          fi
+
+          README_FILE="omnidrive_pro/README.md"
+          README_CHANGED="false"
+          README_STATUS="⚠️ Không tìm thấy ${README_FILE}"
+          if [ -f "$README_FILE" ]; then
+            BADGE_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
+            BADGE_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+            BADGE_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+            SAFE_NGINX=$(echo "$BADGE_NGINX" | sed 's/-/--/g')
+
+            if [ -n "$BADGE_VER" ]; then
+              sed -i -E "s#badge/version-[0-9][0-9.]*-#badge/version-${BADGE_VER}-#g" "$README_FILE"
+            fi
+            if [ -n "$BADGE_NGINX" ]; then
+              sed -i -E "s#badge/nginx-[0-9][0-9.]*(--r[0-9]+)?-#badge/nginx-${SAFE_NGINX}-#g" "$README_FILE"
+            fi
+            if [ -n "$BADGE_ALPINE" ]; then
+              sed -i -E "s#badge/alpine(%20|_| )base-[0-9][0-9.]*-#badge/alpine\1base-${BADGE_ALPINE}-#g" "$README_FILE"
+            fi
+
+            if git diff --quiet -- "$README_FILE"; then
+              README_STATUS="✅ Huy hiệu đã khớp (v${BADGE_VER} / nginx ${BADGE_NGINX} / alpine ${BADGE_ALPINE})"
+            else
+              README_CHANGED="true"
+              README_STATUS="🔧 Đã tự sửa huy hiệu cho khớp (v${BADGE_VER} / nginx ${BADGE_NGINX} / alpine ${BADGE_ALPINE})"
+            fi
+          fi
+          echo "::endgroup::"
+
+          echo "old_ver=${CURRENT_VER}" >> "$GITHUB_OUTPUT"
+          echo "new_ver=${NEW_VER}" >> "$GITHUB_OUTPUT"
+          echo "need_commit=${NEED_COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "update_type=${UPDATE_TYPE}" >> "$GITHUB_OUTPUT"
+          echo "summary_reason=${SUMMARY_REASON}" >> "$GITHUB_OUTPUT"
+          echo "readme_changed=${README_CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "readme_status=${README_STATUS}" >> "$GITHUB_OUTPUT"
+
+      - name: "🐳 5. Test Docker Build Before Commit"
+        id: docker_test
+        run: |
+          set -e
+          echo "::group::🐳 Kiểm thử đóng gói Docker Image (Zero-Broken-Build)"
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          docker build \
+            --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" \
+            --build-arg NGINX_VERSION="${LATEST_NGINX}" \
+            -t omnidrive-pro-verify:latest \
+            ./omnidrive_pro
+          echo "✅ Docker Build thành công 100%!"
+          echo "::endgroup::"
+
+      - name: "📤 6. Commit & Push Changes to Main"
+        id: git_push
+        if: steps.calc_version.outputs.need_commit == 'true' || steps.gen_icons.outputs.icons_created == 'true' || steps.calc_version.outputs.readme_changed == 'true'
+        run: |
+          set -e
+          echo "::group::📤 Đồng bộ & Đẩy bản phát hành lên nhánh Main"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add omnidrive_pro/
+          NEW_VER="${{ steps.calc_version.outputs.new_ver }}"
+
+          mkdir -p .git/info
+          echo "omnidrive_pro/CHANGELOG.md merge=union" >> .git/info/attributes
+
+          if ! git diff --cached --quiet; then
+            if [ "${{ steps.calc_version.outputs.need_commit }}" = "true" ]; then
+              git commit -m "chore(omnidrive_pro): release version ${NEW_VER} [skip ci]"
+            else
+              git commit -m "chore(omnidrive_pro): sync README & assets [skip ci]"
+            fi
+            if ! git pull --rebase --autostash origin main; then
+              for f in $(git diff --name-only --diff-filter=U); do
+                if [ "$f" = "omnidrive_pro/config.yaml" ]; then
+                  git checkout --ours -- "$f"
+                  sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$f"
+                else
+                  git checkout --theirs -- "$f"
+                fi
+                git add "$f"
+              done
+              GIT_EDITOR=true git rebase --continue
+            fi
+            git push origin HEAD:main
+            echo "✅ Đã đẩy thành công phiên bản ${NEW_VER} lên nhánh main!"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️ Không có thay đổi nào cần commit."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::endgroup::"
+
+      - name: "📊 7. Generate Visual Execution Dashboard (Job Summary)"
+        if: always()
+        run: |
+          PUSH_STATE="⏸️ Không cần Push (Không có thay đổi)"
+          if [ "${{ steps.git_push.outputs.pushed }}" = "true" ]; then
+            PUSH_STATE="✅ Đã Commit & Push lên \`main\` (\`v${{ steps.calc_version.outputs.new_ver }}\`)"
+          elif [ "${{ job.status }}" != "success" ]; then
+            PUSH_STATE="❌ Quá trình bị dừng do có lỗi"
+          fi
+
+          cat << EOF >> "$GITHUB_STEP_SUMMARY"
+          # 🌐 Báo Cáo Thực Thi: OmniDrive Pro CI/CD
+
+          | Hạng mục kiểm tra | Trạng thái / Kết quả |
+          | :--- | :--- |
+          | **1. Kết quả Pipeline** | **${{ job.status == 'success' && '🟢 THÀNH CÔNG (SUCCESS)' || '🔴 THẤT BẠI (FAILED)' }}** |
+          | **2. Sự kiện kích hoạt (Trigger)** | \`${{ github.event_name }}\` |
+          | **3. Bộ nhận diện Icon & Logo** | ${{ steps.gen_icons.outputs.icon_status }} |
+          | **4. Kiến trúc & Alpine Base** | \`${{ steps.check_upstream.outputs.current_alpine }}\` ➡️ **\`${{ steps.check_upstream.outputs.latest_alpine }}\`** |
+          | **5. Phiên bản Gói Nginx** | \`${{ steps.check_upstream.outputs.current_nginx }}\` ➡️ **\`${{ steps.check_upstream.outputs.latest_nginx }}\`** |
+          | **6. Phiên bản Add-on (\`config.yaml\`)** | \`v${{ steps.calc_version.outputs.old_ver }}\` ➡️ **\`v${{ steps.calc_version.outputs.new_ver }}\`** |
+          | **7. Phân loại Cập nhật** | ${{ steps.calc_version.outputs.update_type }} |
+          | **8. Kiểm thử Docker Build** | ${{ steps.docker_test.outcome == 'success' && '✅ Đạt chuẩn (Zero-Broken-Build Verified)' || '❌ Lỗi đóng gói Docker' }} |
+          | **9. Đồng bộ GitHub (\`main\`)** | ${PUSH_STATE} |
+          | **10. Huy hiệu README** | ${{ steps.calc_version.outputs.readme_status }} |
+
+          ---
+
+          ### 📝 Chi tiết công việc đã thực hiện
+          - **Lý do cập nhật:** ${{ steps.calc_version.outputs.summary_reason }}
+          - **Thời gian hoàn tất (UTC):** \`$(date -u +"%Y-%m-%d %H:%M:%S UTC")\`
+
+          ### 📜 Nhật ký CHANGELOG.md mới nhất
+          \`\`\`markdown
+          $(head -n 12 omnidrive_pro/CHANGELOG.md)
+          \`\`\`
+          EOF
