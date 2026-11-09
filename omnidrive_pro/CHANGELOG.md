@@ -1,3 +1,6 @@
+## [1.0.2] - 2026-11-09
+- **Maintenance & Improvements:** Update run.sh
+
 ## [1.0.1] - 2026-11-09
 - **Maintenance & Improvements:** Create omnidrive_pro.yml
 
