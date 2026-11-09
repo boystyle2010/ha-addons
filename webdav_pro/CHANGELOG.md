@@ -1,3 +1,6 @@
+## [2.3.5] - 2026-11-09
+- **Maintenance & Improvements:** Update apparmor.txt
+
 ## [2.3.4] - 2026-11-09
 - **Maintenance & Improvements:** Update footer.html
 
