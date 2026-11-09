@@ -24,12 +24,12 @@ Click **WebDAV Pro** in your Home Assistant sidebar to open the full workspace w
 ## 🌐 Connecting External Devices (WebDAV Port `8080`)
 
 ### 1. Local Network (LAN)
-- **Unified Root URL:** `http://<HOME_ASSISTANT_IP>:8080/`
-- **Individual Share URL:** `http://<HOME_ASSISTANT_IP>:8080/config/`
+- **Unified Root URL:** `http://<HOME_ASSISTANT_IP>:8090/`
+- **Individual Share URL:** `http://<HOME_ASSISTANT_IP>:8090/config/`
 
 ### 2. Remote Access via Cloudflare Zero Trust Tunnel
 1. Open **Cloudflare Zero Trust** -> **Networks** -> **Tunnels**.
-2. Add a Public Hostname (e.g., `dav.yourdomain.com`) pointing to `http://localhost:8080`.
+2. Add a Public Hostname (e.g., `dav.yourdomain.com`) pointing to `http://localhost:8090`.
 3. Mount `https://dav.yourdomain.com/` from anywhere in the world over HTTPS.
 
 ### 3. Mounting on Apple & Windows Devices
