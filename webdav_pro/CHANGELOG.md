@@ -1,3 +1,6 @@
+## [2.0.30] - 2026-11-09
+- **Maintenance & Improvements:** Update DOCS.md
+
 ## [2.0.29] - 2026-11-09
 - **Maintenance & Improvements:** Update CHANGELOG.md
 
