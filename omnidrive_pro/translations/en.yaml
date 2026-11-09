@@ -1,10 +1,19 @@
 configuration:
   unified_root:
     name: Unified Root Directory
-    description: When enabled, mounts all shares under a single root path "/" so you can browse and move files across all Home Assistant directories (config, addon_configs, addons, backup, media, share, ssl) from a single connection. Disable this if you want per-folder Read-Only or per-user access control.
+    description: Mounts all shares under a single root path "/" so you can browse and move files across all Home Assistant directories (config, addon_configs, addons, backup, media, share, ssl) from a single connection.
+  smb_enabled:
+    name: Enable SMB / Samba Server (Port 445)
+    description: Enables native network drive mounting on iOS Files ("Connect to Server"), macOS Finder (smb://), Windows Explorer (\\ip\), and media players like Infuse or VLC.
+  sftp_enabled:
+    name: Enable SFTP Server (Port 2222)
+    description: Enables encrypted SSH File Transfer Protocol for pro clients such as FileZilla, Cyberduck, Transmit, WinSCP, Termius, and FE File Explorer.
+  ftp_enabled:
+    name: Enable FTP Server (Port 2121)
+    description: Enables standard high-speed FTP file transfers (with Passive ports 21000–21002) for legacy apps, network scanners, and cameras.
   ssl:
     name: Enable SSL (HTTPS)
-    description: Encrypt WebDAV connections using SSL certificates from the /ssl directory (Keep disabled if routing through Cloudflare Tunnel or a Reverse Proxy).
+    description: Encrypt WebDAV and Web UI connections using SSL certificates from the /ssl directory (Keep disabled if routing through Cloudflare Tunnel or a Reverse Proxy).
   certfile:
     name: Certificate File
     description: Certificate file name located in /ssl (default is fullchain.pem).
@@ -15,19 +24,25 @@ configuration:
     name: Maximum Upload Size
     description: Set to "0" for unlimited file upload size (recommended for large Home Assistant backups), or specify a limit like "5G" or "500M".
   fancy_ui:
-    name: FancyIndex Dark Web UI
-    description: Enables a modern dark-mode web directory browser with instant search when accessed via a web browser or the Home Assistant Ingress sidebar.
+    name: iOS Dark Web UI & Cloud IDE
+    description: Enables the modern iOS Dark UI with built-in Ace Code Editor, Web Terminal, Disk Analytics, and Share Links when accessed via browser or Home Assistant Ingress.
   show_dotfiles:
     name: Show Hidden Files (Dotfiles)
-    description: Allows viewing and editing hidden files and folders starting with a dot (e.g., .storage, .cloud).
+    description: Allows viewing and editing hidden files and folders starting with a dot (e.g., .storage, .cloud, .git).
   log_level:
     name: Log Level
-    description: Controls the verbosity of Nginx server logs.
+    description: Controls the verbosity of server logs.
   users:
     name: User Accounts
-    description: List of usernames and passwords authorized to connect to the WebDAV server (hashed with Bcrypt).
+    description: List of usernames and passwords authorized across all protocols (Web UI, WebDAV, SMB, SFTP, and FTP).
   shares:
     name: Shared Directories
-    description: Configure Home Assistant system directories exposed via WebDAV, including read-only mode and allowed users per share.
+    description: Configure Home Assistant system directories exposed across OmniDrive Pro, including read-only mode and allowed users per share.
 network:
-  8080/tcp: WebDAV Server Port (HTTP/HTTPS)
+  8090/tcp: Web UI, WebDAV Server & Public Share Links (HTTP/HTTPS)
+  445/tcp: SMB / Samba Server Port (iOS Files, macOS Finder, Windows Explorer)
+  2222/tcp: SFTP Server Port (SSH File Transfer Protocol)
+  2121/tcp: FTP Control Port
+  21000/tcp: FTP Passive Data Port 1
+  21001/tcp: FTP Passive Data Port 2
+  21002/tcp: FTP Passive Data Port 3
