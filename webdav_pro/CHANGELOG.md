@@ -1,3 +1,6 @@
+## [2.1.2] - 2026-11-09
+- **Maintenance & Improvements:** Update run.sh
+
 ## [2.1.1] - 2026-11-09
 - **Maintenance & Improvements:** Update Dockerfile
 
