@@ -1,3 +1,6 @@
+## [2.0.22] - 2026-11-09
+- **Maintenance & Improvements:** Update README.md
+
 ## [2.0.21] - 2026-11-09
 - **Maintenance & Improvements:** Update DOCS.md
 
