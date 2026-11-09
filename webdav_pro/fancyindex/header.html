@@ -5,465 +5,296 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>WebDAV Server Pro</title>
-<!-- Thư viện Ace Code Editor (Syntax Highlighting) & Marked (Markdown Preview) -->
+<!-- Ace Code Editor, Marked (Markdown), js-yaml (YAML Linter) & JSZip (Archive Viewer) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-searchbox.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
 <style>
 :root {
-  --bg: #000000;
-  --card: #1c1c1e;
-  --card-elevated: #2c2c2e;
-  --card-hover: #242426;
-  --sep: rgba(84, 84, 88, 0.55);
-  --text: #ffffff;
-  --muted: #8e8e93;
-  --blue: #0a84ff;
-  --blue-bg: rgba(10, 132, 255, 0.16);
-  --green: #30d158;
-  --orange: #ff9f0a;
-  --red: #ff453a;
+  --bg:#000; --card:#1c1c1e; --card-elevated:#2c2c2e; --card-hover:#242426;
+  --sep:rgba(84,84,88,.55); --text:#fff; --muted:#8e8e93;
+  --blue:#0a84ff; --blue-bg:rgba(10,132,255,.16); --green:#30d158; --orange:#ff9f0a; --red:#ff453a;
 }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html { background: var(--bg); min-height: 100%; }
-body {
-  margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  padding: 0 16px max(100px, env(safe-area-inset-bottom));
-  -webkit-text-size-adjust: 100%;
-  -webkit-font-smoothing: antialiased;
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg);min-height:100%}
+body{
+  margin:0;min-height:100vh;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,sans-serif;
+  padding:0 16px max(100px,env(safe-area-inset-bottom));-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
 }
-.container {
-  max-width: 860px; margin: 0 auto;
-  -webkit-backface-visibility: hidden; backface-visibility: hidden;
-}
+.container{max-width:860px;margin:0 auto;-webkit-backface-visibility:hidden;backface-visibility:hidden}
 
-/* ẨN TRIỆT ĐỂ 100% DẤU "/" VÀ TEXT THỪA CỦA NGINX FANCYINDEX */
-#fxi-raw {
-  font-size: 0 !important; line-height: 0 !important;
-  color: transparent !important; margin-top: 4px;
-}
-#fxi-raw > h1, #fxi-raw > p, #fxi-raw > hr { display: none !important; }
+/* Ẩn triệt để dấu "/" và text thừa của Nginx FancyIndex */
+#fxi-raw{font-size:0!important;line-height:0!important;color:transparent!important;margin-top:4px}
+#fxi-raw>h1,#fxi-raw>p,#fxi-raw>hr{display:none!important}
 
-/* Top Sticky Navigation (Khi ở trong thư mục con) */
-.nav {
-  position: sticky; top: 0; z-index: 20;
-  display: none; align-items: center; justify-content: space-between;
-  height: 44px; margin: 0 -16px; padding: 0 16px;
-  background: rgba(0, 0, 0, 0.84);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
+/* Drag & Drop Overlay */
+.drop-zone{
+  position:fixed;inset:12px;border:2.5px dashed var(--blue);border-radius:20px;
+  background:rgba(10,132,255,.12);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  z-index:250;display:none;place-items:center;font-size:20px;font-weight:700;color:var(--blue);pointer-events:none;
 }
-.nav.show { display: flex; }
-.back {
-  display: inline-flex; align-items: center; gap: 5px;
-  color: var(--blue); text-decoration: none;
-  font-size: 17px; font-weight: 500; max-width: 80%; padding: 6px 0;
-}
-.back:active { opacity: 0.55; }
-.back span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.dragging .drop-zone{display:grid}
 
-/* HÀNG 1: HERO HEADER (Không bao giờ bị cắt chữ tên Add-on) */
-.hero {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin: 14px 2px 12px;
+/* Top Sticky Navigation */
+.nav{
+  position:sticky;top:0;z-index:20;display:none;align-items:center;justify-content:space-between;
+  height:44px;margin:0 -16px;padding:0 16px;background:rgba(0,0,0,.84);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
 }
-.hero-left { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
-.app-badge {
-  width: 42px; height: 42px; border-radius: 11px; flex: none;
-  background: linear-gradient(145deg, #0f172a, #1e293b);
-  border: 1px solid rgba(56, 189, 248, 0.45);
-  box-shadow: 0 4px 14px rgba(10, 132, 255, 0.25);
-  display: grid; place-items: center;
-}
-.app-badge svg { width: 25px; height: 25px; }
-.hero-titles { min-width: 0; flex: 1; }
-.title {
-  font-size: 24px; font-weight: 700; letter-spacing: -0.022em;
-  line-height: 1.2; margin: 0; color: var(--text);
-  word-break: break-word;
-}
-.subtitle {
-  font-size: 12.5px; color: var(--muted); margin-top: 2px;
-  display: flex; align-items: center; gap: 6px;
-}
-.select-toggle {
-  height: 32px; padding: 0 13px; border-radius: 16px; border: 0;
-  background: var(--card); color: var(--blue);
-  font-size: 14px; font-weight: 600; cursor: pointer; flex: none;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
-}
-.select-toggle.active { background: var(--blue); color: #fff; }
+.nav.show{display:flex}
+.back{display:inline-flex;align-items:center;gap:5px;color:var(--blue);text-decoration:none;font-size:17px;font-weight:500;max-width:80%;padding:6px 0}
+.back:active{opacity:.55}
+.back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* HÀNG 2: THANH TÌM KIẾM */
-.search-wrap { position: relative; margin: 0 0 10px; }
-.search {
-  -webkit-appearance: none; appearance: none;
-  width: 100%; height: 38px; border: 0; border-radius: 11px; outline: none;
-  font-size: 16px; color: var(--text);
-  padding: 0 36px 0 36px;
-  background: var(--card) no-repeat 11px 50%;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M20 20l-4.8-4.8'/%3E%3C/svg%3E");
+/* Hàng 1: Hero Header */
+.hero{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 2px 12px}
+.hero-left{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
+.app-badge{
+  width:42px;height:42px;border-radius:11px;flex:none;
+  background:linear-gradient(145deg,#0f172a,#1e293b);border:1px solid rgba(56,189,248,.45);
+  box-shadow:0 4px 14px rgba(10,132,255,.25);display:grid;place-items:center;
 }
-.search:focus { background-color: var(--card-elevated); }
-.search::placeholder { color: var(--muted); }
-.clear-btn {
-  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-  width: 22px; height: 22px; border: 0; padding: 0; background: none;
-  display: none; place-items: center; cursor: pointer;
+.app-badge svg{width:25px;height:25px}
+.hero-titles{min-width:0;flex:1}
+.title{font-size:24px;font-weight:700;letter-spacing:-.022em;line-height:1.2;margin:0;color:var(--text);word-break:break-word}
+.subtitle{font-size:12.5px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:6px}
+.select-toggle{
+  height:32px;padding:0 13px;border-radius:16px;border:0;background:var(--card);color:var(--blue);
+  font-size:14px;font-weight:600;cursor:pointer;flex:none;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.1);
 }
-.clear-btn.show { display: grid; }
+.select-toggle.active{background:var(--blue);color:#fff}
 
-/* HÀNG 3: THANH CÔNG CỤ TÁC VỤ (3 Nút rộng rãi có chữ rõ ràng trên cả iPhone) */
-.action-bar {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 8px; margin: 0 0 12px;
+/* Hàng 2: Search Bar */
+.search-wrap{position:relative;margin:0 0 10px}
+.search{
+  -webkit-appearance:none;appearance:none;width:100%;height:38px;border:0;border-radius:11px;outline:none;
+  font-size:16px;color:var(--text);padding:0 36px;background:var(--card) no-repeat 11px 50%;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M20 20l-4.8-4.8'/%3E%3C/svg%3E");
 }
-.act-btn {
-  height: 36px; padding: 0 10px; border: 0; border-radius: 10px;
-  background: var(--card); color: var(--blue);
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  font-size: 13.5px; font-weight: 600; cursor: pointer;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
-  transition: transform 0.1s ease, background-color 0.15s ease;
-  white-space: nowrap;
+.search:focus{background-color:var(--card-elevated)}
+.search::placeholder{color:var(--muted)}
+.clear-btn{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border:0;padding:0;background:none;display:none;place-items:center;cursor:pointer;
 }
-.act-btn:active { transform: scale(0.96); background: var(--card-elevated); }
-.act-btn svg { width: 16px; height: 16px; flex: none; }
-.act-btn.primary { background: var(--blue-bg); color: #409cff; }
+.clear-btn.show{display:grid}
 
-/* Thanh tiến trình Upload */
-.upload-prog {
-  display: none; margin: 0 0 12px; background: var(--card);
-  border-radius: 10px; padding: 10px 14px; font-size: 13px;
+/* Hàng 3: Action Bar */
+.action-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px}
+.act-btn{
+  height:36px;padding:0 10px;border:0;border-radius:10px;background:var(--card);color:var(--blue);
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;font-weight:600;
+  cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.08);white-space:nowrap;
 }
-.upload-prog.show { display: block; }
-.prog-track {
-  height: 6px; background: var(--card-elevated); border-radius: 3px;
-  overflow: hidden; margin-top: 6px;
-}
-.prog-bar { height: 100%; width: 0%; background: var(--blue); transition: width 0.15s ease; }
+.act-btn:active{transform:scale(.96);background:var(--card-elevated)}
+.act-btn svg{width:16px;height:16px;flex:none}
+.act-btn.primary{background:var(--blue-bg);color:#409cff}
 
-/* HÀNG 4: SUB-TOOLBAR (Đường dẫn Breadcrumbs + Sort Name A-Z + Đổi Grid/List) */
-.toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; margin: 0 2px 14px;
-}
-.crumbs {
-  display: flex; align-items: center; flex-wrap: nowrap;
-  gap: 5px; font-size: 13px; color: var(--muted);
-  overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
-  padding: 2px 0; min-width: 0; flex: 1;
-}
-.crumbs::-webkit-scrollbar { display: none; }
-.crumbs a, .crumbs b {
-  display: inline-flex; align-items: center; gap: 4px;
-  white-space: nowrap; padding: 5px 10px; border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  text-decoration: none; font-size: 13px;
-}
-.crumbs a { color: var(--blue); font-weight: 500; }
-.crumbs a:active { background: var(--blue-bg); }
-.crumbs b { color: var(--text); font-weight: 600; background: var(--card); cursor: pointer; }
-.crumbs .sep { color: #5a5a5e; font-size: 13px; flex: none; }
+.upload-prog{display:none;margin:0 0 12px;background:var(--card);border-radius:10px;padding:10px 14px;font-size:13px}
+.upload-prog.show{display:block}
+.prog-track{height:6px;background:var(--card-elevated);border-radius:3px;overflow:hidden;margin-top:6px}
+.prog-bar{height:100%;width:0%;background:var(--blue);transition:width .15s ease}
 
-.controls { display: flex; align-items: center; gap: 8px; flex: none; }
-.sort-pill { position: relative; display: inline-flex; align-items: center; }
-.sort {
-  -webkit-appearance: none; appearance: none;
-  height: 32px; border: 0; border-radius: 16px;
-  background: var(--card); color: var(--blue);
-  font-size: 13.5px; font-weight: 500;
-  padding: 0 27px 0 13px; outline: none; cursor: pointer;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.09);
+/* Hàng 4: Sub-Toolbar */
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 14px}
+.crumbs{
+  display:flex;align-items:center;flex-wrap:nowrap;gap:5px;font-size:13px;color:var(--muted);
+  overflow-x:auto;scrollbar-width:none;padding:2px 0;min-width:0;flex:1;
 }
-.sort-pill::after {
-  content: ""; position: absolute; right: 11px; top: 50%;
-  width: 6px; height: 6px;
-  border-right: 1.8px solid var(--blue); border-bottom: 1.8px solid var(--blue);
-  transform: translateY(-65%) rotate(45deg); pointer-events: none;
+.crumbs::-webkit-scrollbar{display:none}
+.crumbs a,.crumbs b{
+  display:inline-flex;align-items:center;gap:4px;white-space:nowrap;padding:5px 10px;border-radius:8px;
+  background:rgba(255,255,255,.06);text-decoration:none;font-size:13px;
 }
-.view-btn {
-  width: 32px; height: 32px; border: 0; border-radius: 16px;
-  background: var(--card); color: var(--blue);
-  display: grid; place-items: center; cursor: pointer;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.09);
-}
-.view-btn:active { background: var(--card-elevated); }
-.view-btn svg { width: 16px; height: 16px; }
+.crumbs a{color:var(--blue);font-weight:500}
+.crumbs b{color:var(--text);font-weight:600;background:var(--card);cursor:pointer}
+.crumbs .sep{color:#5a5a5e;font-size:13px;flex:none}
 
-/* DANH SÁCH FOLDER / FILE */
-table#list, #list tbody {
-  display: block; width: 100%; border: 0;
-  font-size: 16px; line-height: 1.35; color: var(--text);
+.controls{display:flex;align-items:center;gap:8px;flex:none}
+.sort-pill{position:relative;display:inline-flex;align-items:center}
+.sort{
+  -webkit-appearance:none;appearance:none;height:32px;border:0;border-radius:16px;background:var(--card);
+  color:var(--blue);font-size:13.5px;font-weight:500;padding:0 27px 0 13px;outline:none;cursor:pointer;
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.09);
 }
-#list thead, #list tr.parent { display: none !important; }
-#list tbody {
-  background: var(--card); border-radius: 14px; overflow: hidden;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
+.sort-pill::after{
+  content:"";position:absolute;right:11px;top:50%;width:6px;height:6px;
+  border-right:1.8px solid var(--blue);border-bottom:1.8px solid var(--blue);transform:translateY(-65%) rotate(45deg);pointer-events:none;
 }
-#list tr {
-  position: relative; display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas: "name name" "size date";
-  row-gap: 3px; padding: 12px 52px 12px 16px;
-  cursor: pointer; transition: background-color 0.12s ease;
+.view-btn{
+  width:32px;height:32px;border:0;border-radius:16px;background:var(--card);color:var(--blue);
+  display:grid;place-items:center;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.09);
 }
-#list tr:hover { background: var(--card-hover); }
-#list tr:active { background: var(--card-elevated); }
-#list tr.selected { background: rgba(10, 132, 255, 0.18) !important; }
-#list tr:not(:last-child)::before {
-  content: ""; position: absolute; left: 66px; right: 0; bottom: 0;
-  height: 0.5px; background: var(--sep);
-}
-#list td { display: block; padding: 0; border: 0; background: none; }
-#list td.link { grid-area: name; min-width: 0; }
-#list td.link a {
-  display: flex; align-items: center; gap: 14px;
-  color: var(--text); text-decoration: none;
-  font-size: 16.5px; font-weight: 500; min-height: 28px;
-}
-#list td.link a .nm { min-width: 0; word-break: break-word; line-height: 1.25; }
-#list td.size, #list td.date { font-size: 13px; color: var(--muted); white-space: nowrap; }
-#list td.size { grid-area: size; padding-left: 50px; }
-#list td.size::after { content: "·"; margin: 0 6px; }
-#list td.date { grid-area: date; }
-#list tr.dir td.size { display: none; }
-#list tr.dir td.date { grid-area: 2 / 1 / 3 / 3; padding-left: 50px; }
+.view-btn svg{width:16px;height:16px}
 
-/* Checkbox khi bật chế độ Select nhiều file */
-.sel-chk {
-  width: 22px; height: 22px; border-radius: 50%;
-  border: 1.8px solid var(--muted); display: none; place-items: center;
-  flex: none; transition: all 0.15s ease;
+/* Danh sách Folder / File */
+table#list,#list tbody{display:block;width:100%;border:0;font-size:16px;line-height:1.35;color:var(--text)}
+#list thead,#list tr.parent{display:none!important}
+#list tbody{background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.22)}
+#list tr{
+  position:relative;display:grid;grid-template-columns:auto 1fr;grid-template-areas:"name name" "size date";
+  row-gap:3px;padding:12px 52px 12px 16px;cursor:pointer;transition:background-color .12s ease;
 }
-body.select-mode .sel-chk { display: grid; }
-#list tr.selected .sel-chk {
-  background: var(--blue); border-color: var(--blue);
-}
-.sel-chk svg { width: 13px; height: 13px; opacity: 0; }
-#list tr.selected .sel-chk svg { opacity: 1; }
+#list tr:hover{background:var(--card-hover)}
+#list tr:active{background:var(--card-elevated)}
+#list tr.selected{background:rgba(10,132,255,.18)!important}
+#list tr:not(:last-child)::before{content:"";position:absolute;left:66px;right:0;bottom:0;height:.5px;background:var(--sep)}
+#list td{display:block;padding:0;border:0;background:none}
+#list td.link{grid-area:name;min-width:0}
+#list td.link a{display:flex;align-items:center;gap:14px;color:var(--text);text-decoration:none;font-size:16.5px;font-weight:500;min-height:28px}
+#list td.link a .nm{min-width:0;word-break:break-word;line-height:1.25}
+#list td.size,#list td.date{font-size:13px;color:var(--muted);white-space:nowrap}
+#list td.size{grid-area:size;padding-left:50px}
+#list td.size::after{content:"·";margin:0 6px}
+#list td.date{grid-area:date}
+#list tr.dir td.size{display:none}
+#list tr.dir td.date{grid-area:2/1/3/3;padding-left:50px}
 
-/* Nút Menu 3 chấm (•••) */
-.more-btn {
-  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-  width: 34px; height: 34px; border-radius: 50%; border: 0;
-  background: transparent; color: var(--muted);
-  display: grid; place-items: center; cursor: pointer; z-index: 3;
-}
-.more-btn:hover, .more-btn:active { background: rgba(255, 255, 255, 0.1); color: var(--blue); }
-.more-btn svg { width: 18px; height: 18px; pointer-events: none; }
+.sel-chk{width:22px;height:22px;border-radius:50%;border:1.8px solid var(--muted);display:none;place-items:center;flex:none}
+body.select-mode .sel-chk{display:grid}
+#list tr.selected .sel-chk{background:var(--blue);border-color:var(--blue)}
+.sel-chk svg{width:13px;height:13px;opacity:0}
+#list tr.selected .sel-chk svg{opacity:1}
 
-/* Chế độ xem Lưới (Grid Mode) */
-body.grid-mode #list tbody {
-  background: transparent; border-radius: 0; box-shadow: none;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-  gap: 12px;
+.more-btn{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);width:34px;height:34px;
+  border-radius:50%;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;z-index:3;
 }
-body.grid-mode #list tr {
-  background: var(--card); border-radius: 14px;
-  display: flex; flex-direction: column; align-items: center;
-  text-align: center; padding: 18px 10px 12px; row-gap: 4px;
-}
-body.grid-mode #list tr::before { display: none; }
-body.grid-mode .more-btn { top: 6px; right: 6px; transform: none; width: 28px; height: 28px; }
-body.grid-mode #list td.link a { flex-direction: column; gap: 8px; font-size: 14px; }
-body.grid-mode #list td.link a .nm {
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden; font-size: 13.5px;
-}
-body.grid-mode #list td.size, body.grid-mode #list tr.dir td.date { padding-left: 0; font-size: 11.5px; }
-body.grid-mode #list td.size::after { display: none; }
-body.grid-mode #list tr:not(.dir) td.date { display: none; }
-body.grid-mode .ic { width: 46px; height: 46px; border-radius: 11px; }
-body.grid-mode .ic svg { width: 25px; height: 25px; }
-body.grid-mode .ic.folder svg { width: 48px; height: 40px; }
+.more-btn:hover,.more-btn:active{background:rgba(255,255,255,.1);color:var(--blue)}
+.more-btn svg{width:18px;height:18px;pointer-events:none}
+
+/* Grid Mode */
+body.grid-mode #list tbody{background:transparent;border-radius:0;box-shadow:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:12px}
+body.grid-mode #list tr{background:var(--card);border-radius:14px;display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 10px 12px;row-gap:4px}
+body.grid-mode #list tr::before{display:none}
+body.grid-mode .more-btn{top:6px;right:6px;transform:none;width:28px;height:28px}
+body.grid-mode #list td.link a{flex-direction:column;gap:8px;font-size:14px}
+body.grid-mode #list td.link a .nm{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13.5px}
+body.grid-mode #list td.size,body.grid-mode #list tr.dir td.date{padding-left:0;font-size:11.5px}
+body.grid-mode #list td.size::after,body.grid-mode #list tr:not(.dir) td.date{display:none}
+body.grid-mode .ic{width:46px;height:46px;border-radius:11px}
+body.grid-mode .ic svg{width:25px;height:25px}
+body.grid-mode .ic.folder svg{width:48px;height:40px}
 
 /* Icons */
-.ic {
-  width: 36px; height: 36px; flex: none; border-radius: 9px;
-  display: grid; place-items: center;
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
-}
-.ic svg { width: 20px; height: 20px; }
-.ic.folder { background: none; box-shadow: none; border-radius: 0; }
-.ic.folder svg { width: 36px; height: 30px; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25)); }
-.t-img { background: linear-gradient(180deg, #ff7eb3, #ff2d92); }
-.t-vid { background: linear-gradient(180deg, #bf5af2, #8944e0); }
-.t-aud { background: linear-gradient(180deg, #ff5e6c, #ff2d55); }
-.t-pdf { background: linear-gradient(180deg, #ff6961, #ff3b30); }
-.t-doc { background: linear-gradient(180deg, #4da3ff, #0a6cff); }
-.t-xls { background: linear-gradient(180deg, #4cd964, #22b14c); }
-.t-ppt { background: linear-gradient(180deg, #ffb340, #ff8a00); }
-.t-txt { background: linear-gradient(180deg, #a1a1a6, #7c7c80); }
-.t-zip { background: linear-gradient(180deg, #c8a26b, #a07b45); }
-.t-cfg { background: linear-gradient(180deg, #64748b, #475569); }
-.t-code { background: linear-gradient(180deg, #38bdf8, #0284c7); }
-.t-md  { background: linear-gradient(180deg, #818cf8, #4f46e5); }
-.t-file { background: linear-gradient(180deg, #7d8aa1, #5b6678); }
+.ic{width:36px;height:36px;flex:none;border-radius:9px;display:grid;place-items:center;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18)}
+.ic svg{width:20px;height:20px}
+.ic.folder{background:none;box-shadow:none;border-radius:0}
+.ic.folder svg{width:36px;height:30px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.25))}
+.t-img{background:linear-gradient(180deg,#ff7eb3,#ff2d92)}
+.t-vid{background:linear-gradient(180deg,#bf5af2,#8944e0)}
+.t-aud{background:linear-gradient(180deg,#ff5e6c,#ff2d55)}
+.t-pdf{background:linear-gradient(180deg,#ff6961,#ff3b30)}
+.t-doc{background:linear-gradient(180deg,#4da3ff,#0a6cff)}
+.t-xls{background:linear-gradient(180deg,#4cd964,#22b14c)}
+.t-ppt{background:linear-gradient(180deg,#ffb340,#ff8a00)}
+.t-txt{background:linear-gradient(180deg,#a1a1a6,#7c7c80)}
+.t-zip{background:linear-gradient(180deg,#c8a26b,#a07b45)}
+.t-cfg{background:linear-gradient(180deg,#64748b,#475569)}
+.t-code{background:linear-gradient(180deg,#38bdf8,#0284c7)}
+.t-md{background:linear-gradient(180deg,#818cf8,#4f46e5)}
+.t-file{background:linear-gradient(180deg,#7d8aa1,#5b6678)}
 
-/* Floating Clipboard & Multi-Select Bar */
-.clip-bar, .batch-bar {
-  position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); left: 50%;
-  transform: translateX(-50%) translateY(130px);
-  width: calc(100% - 32px); max-width: 540px;
-  background: rgba(28, 28, 30, 0.95);
-  -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 16px;
-  padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65); z-index: 80;
-  transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1);
+/* Floating Bars & Action Sheet */
+.clip-bar,.batch-bar{
+  position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(130px);
+  width:calc(100% - 32px);max-width:540px;background:rgba(28,28,30,.95);
+  -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
+  border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:10px 14px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 12px 32px rgba(0,0,0,.65);z-index:80;
+  transition:transform .25s cubic-bezier(.2,.9,.3,1);
 }
-.clip-bar.show, .batch-bar.show { transform: translateX(-50%) translateY(0); }
-.clip-info { min-width: 0; flex: 1; font-size: 13.5px; }
-.clip-info b { color: var(--blue); display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
-.clip-info span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
-.clip-btns { display: flex; gap: 6px; flex: none; }
-.clip-btn {
-  height: 32px; padding: 0 12px; border-radius: 16px; border: 0;
-  font-size: 13px; font-weight: 600; cursor: pointer;
-}
-.clip-btn.paste { background: var(--blue); color: #fff; }
-.clip-btn.danger { background: rgba(255, 69, 58, 0.2); color: var(--red); }
-.clip-btn.cancel { background: var(--card-elevated); color: var(--muted); }
+.clip-bar.show,.batch-bar.show{transform:translateX(-50%) translateY(0)}
+.clip-info{min-width:0;flex:1;font-size:13.5px}
+.clip-info b{color:var(--blue);display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.clip-info span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.clip-btns{display:flex;gap:6px;flex:none}
+.clip-btn{height:32px;padding:0 12px;border-radius:16px;border:0;font-size:13px;font-weight:600;cursor:pointer}
+.clip-btn.paste{background:var(--blue);color:#fff}
+.clip-btn.danger{background:rgba(255,69,58,.2);color:var(--red)}
+.clip-btn.cancel{background:var(--card-elevated);color:var(--muted)}
 
-/* iOS Action Sheet */
-.backdrop {
-  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.55);
-  opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 90;
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:90}
+.backdrop.show{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed;left:50%;bottom:0;transform:translateX(-50%) translateY(105%);
+  width:100%;max-width:500px;padding:0 12px max(14px,env(safe-area-inset-bottom));z-index:95;
+  transition:transform .26s cubic-bezier(.2,.9,.3,1);
 }
-.backdrop.show { opacity: 1; pointer-events: auto; }
-.sheet {
-  position: fixed; left: 50%; bottom: 0;
-  transform: translateX(-50%) translateY(105%);
-  width: 100%; max-width: 500px; padding: 0 12px max(14px, env(safe-area-inset-bottom));
-  z-index: 95; transition: transform 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
+.sheet.show{transform:translateX(-50%) translateY(0)}
+.sheet-group{background:rgba(30,30,32,.96);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);border-radius:14px;overflow:hidden;margin-bottom:8px}
+.sheet-head{padding:13px 16px;text-align:center;border-bottom:.5px solid var(--sep);font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-btn{
+  width:100%;padding:14px 18px;border:0;background:none;border-bottom:.5px solid var(--sep);color:var(--blue);
+  font-size:17px;font-weight:500;text-align:left;display:flex;align-items:center;justify-content:space-between;cursor:pointer;
 }
-.sheet.show { transform: translateX(-50%) translateY(0); }
-.sheet-group {
-  background: rgba(30, 30, 32, 0.96);
-  -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
-  border-radius: 14px; overflow: hidden; margin-bottom: 8px;
-}
-.sheet-head {
-  padding: 13px 16px; text-align: center; border-bottom: 0.5px solid var(--sep);
-  font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.sheet-btn {
-  width: 100%; padding: 15px 18px; border: 0; background: none;
-  border-bottom: 0.5px solid var(--sep); color: var(--blue);
-  font-size: 17px; font-weight: 500; text-align: left;
-  display: flex; align-items: center; justify-content: space-between; cursor: pointer;
-}
-.sheet-btn:last-child { border-bottom: 0; }
-.sheet-btn:active { background: rgba(255, 255, 255, 0.08); }
-.sheet-btn.danger { color: var(--red); }
-.sheet-btn.cancel { justify-content: center; font-weight: 600; }
+.sheet-btn:last-child{border-bottom:0}
+.sheet-btn:active{background:rgba(255,255,255,.08)}
+.sheet-btn.danger{color:var(--red)}
+.sheet-btn.cancel{justify-content:center;font-weight:600}
 
-/* FULLSCREEN IDE CODE EDITOR + LIVE MARKDOWN RENDERER + MEDIA VIEWER */
-.editor-modal {
-  position: fixed; inset: 0; background: #0d1117; z-index: 120;
-  display: none; flex-direction: column;
-}
-.editor-modal.show { display: flex; }
-.ed-top {
-  height: 50px; padding: 0 12px; background: #161b22;
-  border-bottom: 1px solid #30363d;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-}
-.ed-title-wrap { min-width: 0; flex: 1; text-align: center; }
-.ed-title {
-  font-size: 15px; font-weight: 600; color: #e6edf3;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.ed-lang-badge {
-  font-size: 11px; color: #58a6ff; font-weight: 500;
-}
-.ed-btn {
-  height: 32px; padding: 0 13px; border-radius: 8px; border: 0;
-  font-size: 13.5px; font-weight: 600; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 5px; flex: none;
-}
-.ed-btn.close { background: #21262d; color: #c9d1d9; }
-.ed-btn.md-toggle { background: rgba(88, 166, 255, 0.16); color: #58a6ff; display: none; }
-.ed-btn.md-toggle.active { background: #58a6ff; color: #0d1117; }
-.ed-btn.save { background: var(--blue); color: #fff; }
-.ed-btn.save:disabled { opacity: 0.5; }
+/* IDE CODE EDITOR + YAML LINTER + ARCHIVE INSPECTOR */
+.editor-modal{position:fixed;inset:0;background:#0d1117;z-index:120;display:none;flex-direction:column}
+.editor-modal.show{display:flex}
+.editor-modal.zen .ed-subbar{display:none!important}
+.ed-top{height:50px;padding:0 12px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ed-title-wrap{min-width:0;flex:1;text-align:center}
+.ed-title{font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ed-lang-badge{font-size:11px;color:#58a6ff;font-weight:500}
+.ed-btn{height:32px;padding:0 12px;border-radius:8px;border:0;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;flex:none}
+.ed-btn.close{background:#21262d;color:#c9d1d9}
+.ed-btn.md-toggle{background:rgba(88,166,255,.16);color:#58a6ff;display:none}
+.ed-btn.md-toggle.active{background:#58a6ff;color:#0d1117}
+.ed-btn.save{background:var(--blue);color:#fff}
+.ed-btn.save:disabled{opacity:.5}
 
-/* Thanh phím tắt lập trình nhanh trên iPhone/iPad */
-.ed-subbar {
-  height: 38px; padding: 0 10px; background: #161b22; border-bottom: 1px solid #21262d;
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  overflow-x: auto; scrollbar-width: none;
-}
-.ed-subbar::-webkit-scrollbar { display: none; }
-.ed-tools { display: flex; align-items: center; gap: 5px; flex: none; }
-.ed-chip {
-  background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px;
-  height: 26px; padding: 0 9px; font-size: 12px; font-weight: 500;
-  cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;
-}
-.ed-chip:active { background: #30363d; }
-.ed-status { font-size: 11.5px; color: #8b949e; white-space: nowrap; flex: none; }
+.yaml-alert{display:none;padding:8px 14px;background:rgba(255,69,58,.16);border-bottom:1px solid var(--red);color:#ff6961;font-size:12.5px;font-family:"SF Mono",monospace}
+.yaml-alert.show{display:block}
+.yaml-ok{color:var(--green)!important}
 
-.ed-body { flex: 1; position: relative; display: flex; overflow: hidden; }
-#aceContainer { flex: 1; width: 100%; height: 100%; font-size: 14px; }
-.ed-textarea {
-  flex: 1; width: 100%; height: 100%; border: 0; outline: none; resize: none;
-  padding: 14px; background: #0d1117; color: #e6edf3;
-  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
-  font-size: 13.5px; line-height: 1.55; tab-size: 2; display: none;
-}
+.ed-subbar{height:38px;padding:0 10px;background:#161b22;border-bottom:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;gap:8px;overflow-x:auto;scrollbar-width:none}
+.ed-subbar::-webkit-scrollbar{display:none}
+.ed-tools{display:flex;align-items:center;gap:5px;flex:none}
+.ed-chip{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;height:26px;padding:0 8px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap}
+.ed-chip:active{background:#30363d}
+.ed-status{font-size:11.5px;color:#8b949e;white-space:nowrap;flex:none}
 
-/* Giao diện xem Markdown (GitHub Dark Markdown Style) */
-.md-view {
-  flex: 1; display: none; overflow-y: auto; padding: 20px 18px 60px;
-  background: #0d1117; color: #e6edf3; line-height: 1.6; font-size: 15px;
-}
-.md-view h1, .md-view h2, .md-view h3 {
-  border-bottom: 1px solid #21262d; padding-bottom: 0.3em; margin-top: 1.2em; color: #fff;
-}
-.md-view code {
-  background: rgba(110, 118, 129, 0.4); padding: 0.2em 0.4em; border-radius: 6px;
-  font-family: "SF Mono", Menlo, monospace; font-size: 85%;
-}
-.md-view pre {
-  background: #161b22; padding: 14px; border-radius: 10px; overflow-x: auto;
-  border: 1px solid #30363d;
-}
-.md-view pre code { background: none; padding: 0; }
-.md-view table { width: 100%; border-collapse: collapse; margin: 14px 0; }
-.md-view th, .md-view td { border: 1px solid #30363d; padding: 8px 12px; text-align: left; }
-.md-view th { background: #161b22; }
-.md-view a { color: #58a6ff; }
-.md-view blockquote {
-  margin: 0; padding: 0 1em; color: #8b949e; border-left: 0.25em solid #30363d;
-}
+.ed-body{flex:1;position:relative;display:flex;overflow:hidden}
+#aceContainer{flex:1;width:100%;height:100%;font-size:14px}
+.ed-textarea{flex:1;width:100%;height:100%;border:0;outline:none;resize:none;padding:14px;background:#0d1117;color:#e6edf3;font-family:"SF Mono",monospace;font-size:14px;line-height:1.55;display:none}
+.md-view{flex:1;display:none;overflow-y:auto;padding:20px 18px 60px;background:#0d1117;color:#e6edf3;line-height:1.6;font-size:15px}
+.md-view h1,.md-view h2,.md-view h3{border-bottom:1px solid #21262d;padding-bottom:.3em;margin-top:1.2em;color:#fff}
+.md-view code{background:rgba(110,118,129,.4);padding:.2em .4em;border-radius:6px;font-family:"SF Mono",monospace;font-size:85%}
+.md-view pre{background:#161b22;padding:14px;border-radius:10px;overflow-x:auto;border:1px solid #30363d}
+.md-view pre code{background:none;padding:0}
+.md-view table{width:100%;border-collapse:collapse;margin:14px 0}
+.md-view th,.md-view td{border:1px solid #30363d;padding:8px 12px;text-align:left}
+.md-view th{background:#161b22}
+.md-view a{color:#58a6ff}
+.ed-preview{flex:1;display:none;place-items:center;padding:20px;overflow:auto;background:#000}
+.ed-preview img,.ed-preview video{max-width:100%;max-height:82vh;border-radius:10px}
+.ed-preview audio{width:90%;max-width:420px}
+.ed-preview iframe{width:100%;height:100%;border:0;background:#fff;border-radius:8px}
+.arch-list{width:100%;max-width:680px;background:#161b22;border-radius:12px;border:1px solid #30363d;overflow:hidden;align-self:start}
+.arch-item{padding:10px 14px;border-bottom:1px solid #21262d;display:flex;justify-content:space-between;font-size:13.5px;color:#e6edf3;font-family:"SF Mono",monospace}
 
-/* Giao diện xem Ảnh / Video / Audio / PDF */
-.ed-preview {
-  flex: 1; display: none; place-items: center; padding: 20px; overflow: auto; background: #000;
+.empty{display:none;text-align:center;padding:42px 20px;color:var(--muted);font-size:15px}
+.empty.show{display:block}
+.stat{text-align:center;color:var(--muted);font-size:13px;margin:18px 0 6px}
+.toast{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:rgba(44,44,46,.96);color:#fff;padding:9px 18px;border-radius:20px;font-size:13.5px;font-weight:500;
+  opacity:0;pointer-events:none;transition:all .22s ease;z-index:260;box-shadow:0 6px 20px rgba(0,0,0,.5);
 }
-.ed-preview img, .ed-preview video { max-width: 100%; max-height: 82vh; border-radius: 10px; }
-.ed-preview audio { width: 90%; max-width: 420px; }
-.ed-preview iframe { width: 100%; height: 100%; border: 0; background: #fff; border-radius: 8px; }
-
-.empty { display: none; text-align: center; padding: 42px 20px; color: var(--muted); font-size: 15px; }
-.empty.show { display: block; }
-.stat { text-align: center; color: var(--muted); font-size: 13px; margin: 18px 0 6px; }
-.toast {
-  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px);
-  background: rgba(44, 44, 46, 0.96); color: #fff; padding: 9px 18px;
-  border-radius: 20px; font-size: 13.5px; font-weight: 500;
-  opacity: 0; pointer-events: none; transition: all 0.22s ease; z-index: 200;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-}
-.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
+<div class="drop-zone">📥 Drop files anywhere to upload</div>
 <div class="container">
-  <!-- Thanh Back khi ở trong thư mục con -->
   <div id="nav" class="nav">
     <a id="back" class="back" href="../">
       <svg width="11" height="19" viewBox="0 0 12 20"><path d="M10 2L2 10l8 8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -471,7 +302,6 @@ body.grid-mode .ic.folder svg { width: 48px; height: 40px; }
     </a>
   </div>
 
-  <!-- HÀNG 1: Tiêu đề đầy đủ không bị cắt chữ + Nút Select nhiều file -->
   <div class="hero">
     <div class="hero-left">
       <div class="app-badge">
@@ -488,7 +318,6 @@ body.grid-mode .ic.folder svg { width: 48px; height: 40px; }
     <button id="btnSelectMode" class="select-toggle" type="button">Select</button>
   </div>
 
-  <!-- HÀNG 2: Thanh tìm kiếm -->
   <div class="search-wrap">
     <input id="q" class="search" type="search" placeholder="Search files or folders..." autocomplete="off">
     <button id="clearBtn" class="clear-btn" type="button" aria-label="Clear search">
@@ -496,7 +325,6 @@ body.grid-mode .ic.folder svg { width: 48px; height: 40px; }
     </button>
   </div>
 
-  <!-- HÀNG 3: Cụm 3 nút hành động rõ chữ, cân đối 3 cột -->
   <div class="action-bar">
     <button id="btnNewFile" class="act-btn" type="button">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg>
@@ -513,13 +341,11 @@ body.grid-mode .ic.folder svg { width: 48px; height: 40px; }
     <input id="fileInput" type="file" multiple style="display:none">
   </div>
 
-  <!-- Thanh tiến độ khi Upload file lớn -->
   <div id="uploadProg" class="upload-prog">
     <div id="uploadText">Uploading... 0%</div>
     <div class="prog-track"><div id="progBar" class="prog-bar"></div></div>
   </div>
 
-  <!-- HÀNG 4: Đường dẫn Breadcrumbs (Trái) + Sort Name A-Z & View (Phải) -->
   <div class="toolbar">
     <nav id="crumbs" class="crumbs" title="Tap current folder to copy path"></nav>
     <div class="controls">
@@ -540,5 +366,4 @@ body.grid-mode .ic.folder svg { width: 48px; height: 40px; }
     </div>
   </div>
 
-  <!-- Khối bọc ẩn triệt để dấu "/" của FancyIndex -->
   <div id="fxi-raw">
