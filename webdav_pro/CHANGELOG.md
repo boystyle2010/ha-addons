@@ -1,3 +1,6 @@
+## [2.0.26] - 2026-11-09
+- **Maintenance & Improvements:** Update apparmor.txt
+
 ## [2.0.25] - 2026-11-09
 - **Maintenance & Improvements:** Update header.html
 
