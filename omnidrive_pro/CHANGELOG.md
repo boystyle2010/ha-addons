@@ -1,4 +1,7 @@
 ## [1.0.1] - 2026-11-09
+- **Maintenance & Improvements:** Create omnidrive_pro.yml
+
+## [1.0.1] - 2026-11-09
 - **Maintenance & Improvements:** Update CHANGELOG.md
 
 ## [1.0.0] - 2026-11-08
