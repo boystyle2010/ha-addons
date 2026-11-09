@@ -1,3 +1,6 @@
+## [2.1.1] - 2026-11-09
+- **Maintenance & Improvements:** Update Dockerfile
+
 ## [2.0.31] - 2026-11-09
 - **Maintenance & Improvements:** Update README.md
 
