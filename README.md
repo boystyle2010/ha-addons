@@ -14,7 +14,7 @@ Kho lưu trữ Add-on Home Assistant hiệu năng cao, được thiết kế chu
 | :--- | :--- | :--- | :--- |
 | **⚡ Cloudflared Pro** | `cloudflared` | Zero Trust Tunnel | Dual-Stack IPv4/IPv6, Remote Token & Local Ingress |
 | **🛡️ Tailscale Pro** | `tailscale` | Ingress (`5252`) | Mesh VPN, Subnet Router (`192.168.68.0/24`), Exit Node |
-| **📂 WebDAV Server Pro** | `webdav_pro` | `8080` & Ingress (`8099`) | Quản lý toàn bộ file hệ thống HA, FancyIndex Dark UI |
+| **📂 WebDAV Server Pro** | `webdav_pro` | `8090` & Ingress (`8099`) | Quản lý toàn bộ file hệ thống HA, FancyIndex Dark UI |
 
 ---
 
