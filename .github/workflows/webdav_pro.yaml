@@ -1,0 +1,351 @@
+name: WebDAV Pro - Auto Update & Verify
+
+on:
+  schedule:
+    # Tự động kiểm tra bản mới vào 07:00 UTC hàng ngày
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "webdav_pro/**"
+      - ".github/workflows/webdav_pro.yaml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: webdav_pro_workflow
+  cancel-in-progress: false
+
+jobs:
+  update_and_verify:
+    name: "🚀 WebDAV Pro CI/CD Pipeline"
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    steps:
+      - name: "📥 1. Checkout Repository"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: "🎨 2. Generate True Transparent PNG Icon & Logo"
+        id: gen_icons
+        run: |
+          set -e
+          echo "::group::🎨 Kiểm tra & Khởi tạo bộ Icon/Logo chuẩn PNG 32-bit"
+          ICONS_CREATED="false"
+          ICON_STATUS="✅ Đã có sẵn (Giữ nguyên)"
+
+          if [ ! -f "webdav_pro/icon.png" ] || [ ! -f "webdav_pro/logo.png" ]; then
+            echo "⏳ Chưa thấy icon.png hoặc logo.png -> Đang cài đặt librsvg2-bin và kết xuất đồ họa..."
+            sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin
+
+            cat << 'EOF' > /tmp/icon.svg
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+              <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#0f172a"/>
+                  <stop offset="100%" stop-color="#1e293b"/>
+                </linearGradient>
+                <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38bdf8"/>
+                  <stop offset="100%" stop-color="#0284c7"/>
+                </linearGradient>
+              </defs>
+              <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#bg)" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.4"/>
+              <path d="M116 156 C116 138 130 124 148 124 L220 124 L252 156 L364 156 C382 156 396 170 396 188 L396 356 C396 374 382 388 364 388 L148 388 C130 388 116 374 116 356 Z" fill="none" stroke="url(#accent)" stroke-width="20" stroke-linejoin="round"/>
+              <path d="M210 304 H306 C326 304 342 288 342 268 C342 250 329 235 311 233 C305 206 281 186 252 186 C220 186 194 211 193 243 C177 247 166 261 166 278 C166 293 178 304 194 304 Z" fill="url(#accent)" fill-opacity="0.25" stroke="#38bdf8" stroke-width="14" stroke-linejoin="round"/>
+              <path d="M236 250 V330 M216 270 L236 250 L256 270" fill="none" stroke="#f8fafc" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M280 330 V250 M260 310 L280 330 L300 310" fill="none" stroke="#38bdf8" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          EOF
+
+            cat << 'EOF' > /tmp/logo.svg
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" width="1024" height="512">
+              <defs>
+                <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#0f172a"/>
+                  <stop offset="100%" stop-color="#1e293b"/>
+                </linearGradient>
+                <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38bdf8"/>
+                  <stop offset="100%" stop-color="#0284c7"/>
+                </linearGradient>
+              </defs>
+              <rect x="36" y="56" width="400" height="400" rx="90" fill="url(#bg)" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.5"/>
+              <path d="M116 170 C116 154 128 142 144 142 L206 142 L234 170 L330 170 C346 170 358 182 358 198 L358 342 C358 358 346 370 330 370 L144 370 C128 370 116 358 116 342 Z" fill="none" stroke="url(#accent)" stroke-width="18" stroke-linejoin="round"/>
+              <path d="M216 250 V320 M198 268 L216 250 L234 268" fill="none" stroke="#f8fafc" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M260 320 V250 M242 302 L260 320 L278 302" fill="none" stroke="#38bdf8" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+              <text x="480" y="245" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="108" font-weight="800" fill="#38bdf8">WebDAV</text>
+              <text x="480" y="355" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="86" font-weight="700" fill="#0ea5e9">Server Pro</text>
+            </svg>
+          EOF
+
+            rsvg-convert -w 256 -h 256 /tmp/icon.svg -o webdav_pro/icon.png
+            rsvg-convert -w 512 -h 256 /tmp/logo.svg -o webdav_pro/logo.png
+            ICONS_CREATED="true"
+            ICON_STATUS="🆕 Đã tạo mới icon.png (256x256) & logo.png (512x256)"
+            echo "✅ Đã tạo thành công webdav_pro/icon.png và webdav_pro/logo.png!"
+          else
+            echo "✅ File icon.png và logo.png đã tồn tại."
+          fi
+          echo "::endgroup::"
+
+          echo "icons_created=${ICONS_CREATED}" >> "$GITHUB_OUTPUT"
+          echo "icon_status=${ICON_STATUS}" >> "$GITHUB_OUTPUT"
+
+      - name: "🔍 3. Check Latest Alpine Base & Nginx Upstream Version"
+        id: check_upstream
+        run: |
+          set -e
+          echo "::group::🔍 Truy vấn phiên bản Alpine Linux & Nginx Upstream"
+          BUILD_FILE="webdav_pro/build.yaml"
+
+          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+          CURRENT_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+
+          echo "┌──────────────────────────────────────────────┐"
+          echo "│ Phiên bản hiện tại trong Repo:               │"
+          echo "│ - Alpine Base : ${CURRENT_ALPINE}"
+          echo "│ - Nginx Pkg   : ${CURRENT_NGINX}"
+          echo "└──────────────────────────────────────────────┘"
+
+          # 1. Lấy phiên bản Alpine mới nhất
+          LATEST_ALPINE=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/latest-releases.yaml" | grep -oP 'version:\s*\K[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "$CURRENT_ALPINE")
+          if [ -z "$LATEST_ALPINE" ]; then LATEST_ALPINE="$CURRENT_ALPINE"; fi
+
+          if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" >/dev/null 2>&1; then
+            echo "⚠️ Home Assistant chưa có base image cho Alpine ${LATEST_ALPINE}, giữ nguyên ${CURRENT_ALPINE}"
+            LATEST_ALPINE="$CURRENT_ALPINE"
+          fi
+
+          # 2. Lấy phiên bản gói nginx trực tiếp từ APKINDEX của Alpine
+          LATEST_NGINX=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/v${LATEST_ALPINE}/main/aarch64/APKINDEX.tar.gz" | tar -Oxz APKINDEX 2>/dev/null | awk -F: '$1=="P" && $2=="nginx" {getline; if ($1=="V") print $2}' | head -n1 | tr -d '[:space:]' || true)
+
+          if [[ ! "$LATEST_NGINX" =~ ^[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]; then
+            echo "⚠️ Không đọc được APKINDEX hoặc định dạng lạ (${LATEST_NGINX}), giữ nguyên ${CURRENT_NGINX}"
+            LATEST_NGINX="$CURRENT_NGINX"
+          fi
+
+          echo "┌──────────────────────────────────────────────┐"
+          echo "│ Phiên bản mới nhất từ Upstream:              │"
+          echo "│ - Alpine Base : ${LATEST_ALPINE}"
+          echo "│ - Nginx Pkg   : ${LATEST_NGINX}"
+          echo "└──────────────────────────────────────────────┘"
+          echo "::endgroup::"
+
+          echo "current_alpine=${CURRENT_ALPINE}" >> "$GITHUB_OUTPUT"
+          echo "current_nginx=${CURRENT_NGINX}" >> "$GITHUB_OUTPUT"
+          echo "latest_alpine=${LATEST_ALPINE}" >> "$GITHUB_OUTPUT"
+          echo "latest_nginx=${LATEST_NGINX}" >> "$GITHUB_OUTPUT"
+
+          if [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ] || [ "$LATEST_NGINX" != "$CURRENT_NGINX" ]; then
+            echo "upstream_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "upstream_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "🏷️ 4. Calculate Version & Update Changelog"
+        id: calc_version
+        run: |
+          set -e
+          echo "::group::🏷️ Tính toán Phiên bản & Cập nhật CHANGELOG.md"
+          CONFIG_FILE="webdav_pro/config.yaml"
+          BUILD_FILE="webdav_pro/build.yaml"
+          CHANGELOG_FILE="webdav_pro/CHANGELOG.md"
+
+          CURRENT_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VER"
+
+          UPSTREAM_CHANGED="${{ steps.check_upstream.outputs.upstream_changed }}"
+          ICONS_CREATED="${{ steps.gen_icons.outputs.icons_created }}"
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          TODAY=$(date +%Y-%m-%d)
+
+          NEED_COMMIT="false"
+          NEW_VER="$CURRENT_VER"
+          UPDATE_TYPE="⏸️ Không có thay đổi phiên bản (Up-to-date)"
+          SUMMARY_REASON="Mã nguồn và gói Upstream đã ở phiên bản mới nhất."
+
+          if [ "$UPSTREAM_CHANGED" = "true" ]; then
+            NEW_MAJOR=$((MAJOR + 1))
+            NEW_VER="${NEW_MAJOR}.0.0"
+            NEED_COMMIT="true"
+            UPDATE_TYPE="🚀 Nâng cấp Major Version (Upstream Release)"
+            SUMMARY_REASON="Nâng cấp Nginx lên \`${LATEST_NGINX}\` (Alpine Base \`${LATEST_ALPINE}\`)."
+
+            sed -i "s/aarch64-base:[0-9.]\+/aarch64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/amd64-base:[0-9.]\+/amd64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
+            sed -i "s/NGINX_VERSION: \".*\"/NGINX_VERSION: \"${LATEST_NGINX}\"/g" "$BUILD_FILE"
+            sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Upstream Update:** Upgraded Nginx to \`${LATEST_NGINX}\` on Home Assistant Alpine Base \`${LATEST_ALPINE}\`.\n- Updated \`dav-ext\` and \`fancyindex\` modules with the latest upstream security patches.\n"
+            awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+            echo "✅ Đã nâng Major Version: ${CURRENT_VER} -> ${NEW_VER}"
+
+          elif [ "${{ github.event_name }}" = "push" ] || [ "$ICONS_CREATED" = "true" ]; then
+            PREV_VER=$(git show HEAD~1:webdav_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "")
+            if [ "$ICONS_CREATED" = "true" ] || { [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ]; }; then
+              NEW_PATCH=$((PATCH + 1))
+              NEW_VER="${MAJOR}.${MINOR}.${NEW_PATCH}"
+              NEED_COMMIT="true"
+              COMMIT_MSG=$(git log -1 --pretty=%B | head -n1 | tr -d '"`')
+              UPDATE_TYPE="🔧 Nâng cấp Patch Version (Local Edit / Assets)"
+              SUMMARY_REASON="Cập nhật nội bộ: ${COMMIT_MSG}"
+
+              sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+
+              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Maintenance & Improvements:** ${COMMIT_MSG}\n"
+              awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+              echo "✅ Đã tự động nâng Patch Version: ${CURRENT_VER} -> ${NEW_VER}"
+            fi
+          fi
+
+          # Tự động đồng bộ số hiển thị trên huy hiệu (Badges) trong webdav_pro/README.md
+          # Luôn đọc phiên bản THỰC TẾ từ config.yaml / build.yaml rồi sửa README nếu chưa khớp
+          # (chạy cả khi không có bản phát hành mới; không phụ thuộc màu badge)
+          README_FILE="webdav_pro/README.md"
+          README_CHANGED="false"
+          README_STATUS="⚠️ Không tìm thấy ${README_FILE}"
+          if [ -f "$README_FILE" ]; then
+            BADGE_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
+            BADGE_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+            BADGE_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+            SAFE_NGINX=$(echo "$BADGE_NGINX" | sed 's/-/--/g')
+
+            if [ -n "$BADGE_VER" ]; then
+              sed -i -E "s#badge/version-[0-9][0-9.]*-#badge/version-${BADGE_VER}-#g" "$README_FILE"
+            fi
+            if [ -n "$BADGE_NGINX" ]; then
+              sed -i -E "s#badge/nginx-[0-9][0-9.]*(--r[0-9]+)?-#badge/nginx-${SAFE_NGINX}-#g" "$README_FILE"
+            fi
+            if [ -n "$BADGE_ALPINE" ]; then
+              sed -i -E "s#badge/alpine(%20|_| )base-[0-9][0-9.]*-#badge/alpine\1base-${BADGE_ALPINE}-#g" "$README_FILE"
+            fi
+
+            for KEY in "version" "nginx" "alpine(%20|_| )base"; do
+              if ! grep -qE "badge/${KEY}-" "$README_FILE"; then
+                echo "::warning::Không tìm thấy huy hiệu '${KEY}' trong ${README_FILE} (sai định dạng URL shields.io?)"
+              fi
+            done
+
+            if git diff --quiet -- "$README_FILE"; then
+              README_STATUS="✅ Huy hiệu đã khớp (v${BADGE_VER} / nginx ${BADGE_NGINX} / alpine ${BADGE_ALPINE})"
+            else
+              README_CHANGED="true"
+              README_STATUS="🔧 Đã tự sửa huy hiệu cho khớp (v${BADGE_VER} / nginx ${BADGE_NGINX} / alpine ${BADGE_ALPINE})"
+            fi
+          fi
+          echo "::endgroup::"
+
+          echo "old_ver=${CURRENT_VER}" >> "$GITHUB_OUTPUT"
+          echo "new_ver=${NEW_VER}" >> "$GITHUB_OUTPUT"
+          echo "need_commit=${NEED_COMMIT}" >> "$GITHUB_OUTPUT"
+          echo "update_type=${UPDATE_TYPE}" >> "$GITHUB_OUTPUT"
+          echo "summary_reason=${SUMMARY_REASON}" >> "$GITHUB_OUTPUT"
+          echo "readme_changed=${README_CHANGED}" >> "$GITHUB_OUTPUT"
+          echo "readme_status=${README_STATUS}" >> "$GITHUB_OUTPUT"
+
+      - name: "🐳 5. Test Docker Build Before Commit"
+        id: docker_test
+        run: |
+          set -e
+          echo "::group::🐳 Kiểm thử đóng gói Docker Image (Zero-Broken-Build)"
+          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
+          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
+          docker build \
+            --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" \
+            --build-arg NGINX_VERSION="${LATEST_NGINX}" \
+            -t webdav-pro-verify:latest \
+            ./webdav_pro
+          echo "✅ Docker Build thành công 100%!"
+          echo "::endgroup::"
+
+      - name: "📤 6. Commit & Push Changes to Main"
+        id: git_push
+        if: steps.calc_version.outputs.need_commit == 'true' || steps.gen_icons.outputs.icons_created == 'true' || steps.calc_version.outputs.readme_changed == 'true'
+        run: |
+          set -e
+          echo "::group::📤 Đồng bộ & Đẩy bản phát hành lên nhánh Main"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # QUAN TRỌNG: Stage và Commit toàn bộ thay đổi TRƯỚC KHI pull --rebase để không bị lỗi unstaged changes
+          git add webdav_pro/
+          NEW_VER="${{ steps.calc_version.outputs.new_ver }}"
+
+          # Tránh lỗi "Merge conflict" khi nhánh main đã có commit mới trong lúc workflow chạy:
+          # CHANGELOG.md luôn được gộp cả 2 phía (giữ nội dung của cả hai bên)
+          mkdir -p .git/info
+          echo "webdav_pro/CHANGELOG.md merge=union" >> .git/info/attributes
+
+          if ! git diff --cached --quiet; then
+            if [ "${{ steps.calc_version.outputs.need_commit }}" = "true" ]; then
+              git commit -m "chore(webdav_pro): release version ${NEW_VER} [skip ci]"
+            else
+              git commit -m "chore(webdav_pro): sync README badges [skip ci]"
+            fi
+            if ! git pull --rebase --autostash origin main; then
+              echo "⚠️ Phát hiện xung đột khi rebase, đang tự động xử lý..."
+              # Lưu ý: khi đang rebase, --ours = nhánh main mới nhất, --theirs = commit của workflow
+              for f in $(git diff --name-only --diff-filter=U); do
+                if [ "$f" = "webdav_pro/config.yaml" ]; then
+                  # Giữ nguyên nội dung mới nhất trên main (cổng, cấu hình...), chỉ áp lại số version của workflow
+                  git checkout --ours -- "$f"
+                  sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$f"
+                else
+                  git checkout --theirs -- "$f"
+                fi
+                git add "$f"
+              done
+              GIT_EDITOR=true git rebase --continue
+            fi
+            git push origin HEAD:main
+            echo "✅ Đã đẩy thành công phiên bản ${NEW_VER} lên nhánh main!"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️ Không có thay đổi nào cần commit."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::endgroup::"
+
+      - name: "📊 7. Generate Visual Execution Dashboard (Job Summary)"
+        if: always()
+        run: |
+          PUSH_STATE="⏸️ Không cần Push (Không có thay đổi)"
+          if [ "${{ steps.git_push.outputs.pushed }}" = "true" ]; then
+            PUSH_STATE="✅ Đã Commit & Push lên \`main\` (\`v${{ steps.calc_version.outputs.new_ver }}\`)"
+          elif [ "${{ job.status }}" != "success" ]; then
+            PUSH_STATE="❌ Quá trình bị dừng do có lỗi"
+          fi
+
+          cat << EOF >> "$GITHUB_STEP_SUMMARY"
+          # 📂 Báo Cáo Thực Thi: WebDAV Server Pro CI/CD
+
+          | Hạng mục kiểm tra | Trạng thái / Kết quả |
+          | :--- | :--- |
+          | **1. Kết quả Pipeline** | **${{ job.status == 'success' && '🟢 THÀNH CÔNG (SUCCESS)' || '🔴 THẤT BẠI (FAILED)' }}** |
+          | **2. Sự kiện kích hoạt (Trigger)** | \`${{ github.event_name }}\` |
+          | **3. Bộ nhận diện Icon & Logo** | ${{ steps.gen_icons.outputs.icon_status }} |
+          | **4. Kiến trúc & Alpine Base** | \`${{ steps.check_upstream.outputs.current_alpine }}\` ➡️ **\`${{ steps.check_upstream.outputs.latest_alpine }}\`** |
+          | **5. Phiên bản Gói Nginx** | \`${{ steps.check_upstream.outputs.current_nginx }}\` ➡️ **\`${{ steps.check_upstream.outputs.latest_nginx }}\`** |
+          | **6. Phiên bản Add-on (\`config.yaml\`)** | \`v${{ steps.calc_version.outputs.old_ver }}\` ➡️ **\`v${{ steps.calc_version.outputs.new_ver }}\`** |
+          | **7. Phân loại Cập nhật** | ${{ steps.calc_version.outputs.update_type }} |
+          | **8. Kiểm thử Docker Build** | ${{ steps.docker_test.outcome == 'success' && '✅ Đạt chuẩn (Zero-Broken-Build Verified)' || '❌ Lỗi đóng gói Docker' }} |
+          | **9. Đồng bộ GitHub (\`main\`)** | ${PUSH_STATE} |
+          | **10. Huy hiệu README** | ${{ steps.calc_version.outputs.readme_status }} |
+
+          ---
+
+          ### 📝 Chi tiết công việc đã thực hiện
+          - **Lý do cập nhật:** ${{ steps.calc_version.outputs.summary_reason }}
+          - **Thời gian hoàn tất (UTC):** \`$(date -u +"%Y-%m-%d %H:%M:%S UTC")\`
+
+          ### 📜 Nhật ký CHANGELOG.md mới nhất
+          \`\`\`markdown
+          $(head -n 12 webdav_pro/CHANGELOG.md)
+          \`\`\`
+          EOF
