@@ -1,3 +1,6 @@
+## [2.0.23] - 2026-11-09
+- **Maintenance & Improvements:** Update apparmor.txt
+
 ## [2.0.22] - 2026-11-09
 - **Maintenance & Improvements:** Update README.md
 
