@@ -1,7 +1,7 @@
 name: "WebDAV Server Pro"
-version: "2.0.31"
+version: "2.1.0"
 slug: "webdav_pro"
-description: "High-performance, security-hardened WebDAV server with FancyIndex Dark UI, Ingress, and multi-user permissions for Home Assistant."
+description: "High-performance, security-hardened WebDAV server with FancyIndex Dark UI, Web Terminal, Disk Analytics, Git Status, Share Links & Audit Log for Home Assistant."
 url: "https://github.com/boystyle2010/ha-addons"
 arch:
   - aarch64
@@ -17,7 +17,7 @@ watchdog: "tcp://[HOST]:[PORT:8080]"
 ports:
   8090/tcp: 8090
 ports_description:
-  8090/tcp: "WebDAV Server Port (iOS/macOS/Windows/Cloudflare Tunnel)"
+  8090/tcp: "WebDAV Server Port & Temporary Share Links (iOS/macOS/Windows/Cloudflare Tunnel)"
 map:
   - homeassistant_config:rw
   - all_addon_configs:rw
