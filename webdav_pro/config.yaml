@@ -1,7 +1,7 @@
-name: "WebDAV Server Pro"
-version: "2.3.10"
-slug: "webdav_pro"
-description: "High-performance, security-hardened WebDAV server with iOS Dark UI, Native Web Terminal, Disk Analytics, Git Status, Folder/File Share Links & Audit Log."
+name: "OmniDrive Pro (Multi-Protocol Storage & IDE)"
+version: "1.0.0"
+slug: "omnidrive_pro"
+description: "All-in-one Home Assistant Storage Hub: WebDAV, SMB/Samba (iOS Files/macOS/Windows), SFTP, FTP, iOS Glass Login UI, Cloud IDE, Terminal & Share Links."
 url: "https://github.com/boystyle2010/ha-addons"
 arch:
   - aarch64
@@ -11,13 +11,25 @@ apparmor: true
 auth_api: true
 ingress: true
 ingress_port: 8099
-panel_icon: "mdi:folder-network"
-panel_title: "WebDAV Pro"
-watchdog: "tcp://[HOST]:[PORT:8080]"
+panel_icon: "mdi:server-network"
+panel_title: "OmniDrive Pro"
+watchdog: "tcp://[HOST]:[PORT:8090]"
 ports:
   8090/tcp: 8090
+  445/tcp: 445
+  2222/tcp: 2222
+  2121/tcp: 2121
+  21000/tcp: 21000
+  21001/tcp: 21001
+  21002/tcp: 21002
 ports_description:
-  8090/tcp: "WebDAV Server Port & Temporary Share Links (iOS/macOS/Windows/Cloudflare Tunnel)"
+  8090/tcp: "Web UI, WebDAV Server & Public Share Links (Cloudflare Tunnel)"
+  445/tcp: "SMB / Samba Server (Native iOS Files, macOS Finder, Windows Explorer)"
+  2222/tcp: "SFTP Server (SSH File Transfer Protocol - FileZilla, Cyberduck, FE File Explorer)"
+  2121/tcp: "FTP Control Port (Standard FTP Clients)"
+  21000/tcp: "FTP Passive Data Port 1"
+  21001/tcp: "FTP Passive Data Port 2"
+  21002/tcp: "FTP Passive Data Port 3"
 map:
   - homeassistant_config:rw
   - all_addon_configs:rw
@@ -29,6 +41,9 @@ map:
   - data:rw
 options:
   unified_root: true
+  smb_enabled: true
+  sftp_enabled: true
+  ftp_enabled: true
   ssl: false
   certfile: "fullchain.pem"
   keyfile: "privkey.pem"
@@ -70,6 +85,9 @@ options:
       allowed_users: []
 schema:
   unified_root: bool
+  smb_enabled: bool?
+  sftp_enabled: bool?
+  ftp_enabled: bool?
   ssl: bool
   certfile: str
   keyfile: str
