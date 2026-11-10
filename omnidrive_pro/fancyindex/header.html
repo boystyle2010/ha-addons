@@ -2,13 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0b162c">
 <title>OmniDrive Pro</title>
 <script>
-  // Tự động nhận diện ngay lập tức trước khi vẽ giao diện:
-  // Nếu mở trực tiếp trên Safari (không nằm trong iframe của HASS), bật chế độ đệm Safe Area cho đồng hồ & thanh địa chỉ Safari
   if (window.self === window.top && !/^\/api\/hassio_ingress\//.test(location.pathname)) {
     document.documentElement.classList.add('standalone-web');
   }
@@ -34,7 +32,6 @@
   --green:#30d158; --orange:#ff9f0a; --red:#ff453a; --purple:#bf5af2;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-/* Điểm đầu (0%) và điểm cuối (100%) của nền đều khóa cứng ở #0b162c trùng khít với theme-color để Safari không bao giờ có vệt cắt ở mép trên/dưới */
 html{
   margin:0;padding:0;width:100%;min-height:100%;
   background-color:#0b162c!important;
@@ -50,15 +47,15 @@ body{
     radial-gradient(circle at 22% 78%,rgba(37,99,235,.18),transparent 52%),
     linear-gradient(180deg,#0b162c 0%,#0e1d3a 50%,#0b162c 100%)!important;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,sans-serif;
-  /* Mặc định khi chạy trong HASS App (đã có thanh tiêu đề của HASS ở trên) */
+  /* Khoảng cách đỉnh 12px gọn gàng, vừa khít trên cả HASS lẫn Safari */
   padding:12px 16px 40px;
   -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
   overflow-x:hidden;overflow-y:auto;position:relative;
 }
-/* Khi mở trực tiếp trên Safari (drive.minhhuahome.com): tự động chừa chỗ cho Đồng hồ/Pin ở trên và viên thuốc địa chỉ Safari ở dưới */
+/* Trên Safari độc lập: giữ nguyên đỉnh 12px gọn gàng, chỉ chừa khoảng trống dưới đáy cho thanh địa chỉ Safari */
 html.standalone-web body{
-  padding-top:max(52px,calc(env(safe-area-inset-top) + 10px));
-  padding-bottom:max(105px,calc(env(safe-area-inset-bottom) + 75px));
+  padding-top:12px;
+  padding-bottom:92px;
 }
 .container{max-width:860px;margin:0 auto}
 #fxi-raw{font-size:0!important;line-height:0!important;color:transparent!important;margin-top:4px}
@@ -76,10 +73,6 @@ body.dragging .drop-zone{display:grid}
   height:42px;margin:-12px -16px 12px;padding:0 16px;background:rgba(11,22,44,.88);
   -webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px);
   border-bottom:.5px solid var(--sep);
-}
-html.standalone-web .nav{
-  top:env(safe-area-inset-top,0px);
-  margin-top:0;
 }
 .nav.show{display:flex}
 .back{display:inline-flex;align-items:center;gap:5px;color:var(--blue);text-decoration:none;font-size:17px;font-weight:500;max-width:80%;padding:6px 0}
