@@ -57,7 +57,6 @@
 
   .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.58);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:none!important;z-index:90}
   .backdrop.show{display:block!important}
-  /* Căn giữa bằng left:0; right:0; margin:0 auto để không bao giờ bị xung đột transform khi chạy animation */
   .sheet{
     position:fixed;left:0;right:0;bottom:0;margin:0 auto;
     width:100%;max-width:500px;padding:0 12px max(14px,env(safe-area-inset-bottom));z-index:95;
@@ -122,7 +121,7 @@
   .ed-preview{
     flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;overflow:auto;gap:14px;
     background:radial-gradient(circle at 20% 15%,rgba(10,132,255,.2),transparent 45%),
-               radial-gradient(circle at 80% 85%,rgba(94,92,230,.16),transparent 50%),#0b1933;
+               radial-gradient(circle at 80% 85%,rgba(94,92,230,.16),transparent 50%),#081121;
   }
   .ed-preview img,.ed-preview video{max-width:100%;max-height:72vh;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.7)}
 
@@ -538,17 +537,21 @@
     }
   });
 
-  // 1. Gắn App Icon + Tô màu nền HASS nhưng KHÔNG sửa chiều cao iframe (Tránh lỗi dính cuộn trên HASS App)
-  function injectTopBarAndFixHassBg() {
+  // 1. Gắn App Icon nhỏ lên thanh tiêu đề + TỰ ĐỘNG KHÔI PHỤC MÀU NỀN GỐC CHO HOME ASSISTANT (Tuyệt đối không làm lem màu sang Dashboard)
+  function injectTopBarIconClean() {
     try {
       if (!window.parent || window.parent === window) return;
       var doc = window.parent.document;
-      if (doc.documentElement) doc.documentElement.style.backgroundColor = '#111638';
-      if (doc.body) doc.body.style.backgroundColor = '#111638';
-
-      if (window.frameElement && window.frameElement.parentElement) {
-        window.frameElement.style.backgroundColor = '#111638';
-        window.frameElement.parentElement.style.backgroundColor = '#111638';
+      // Xóa sạch mọi thuộc tính background-color từng bị gán nhầm lên cửa sổ cha của HASS
+      if (doc.documentElement) doc.documentElement.style.removeProperty('background-color');
+      if (doc.body) doc.body.style.removeProperty('background-color');
+      if (window.frameElement) {
+        window.frameElement.style.removeProperty('background-color');
+        window.frameElement.style.removeProperty('height');
+        window.frameElement.style.removeProperty('margin-bottom');
+        if (window.frameElement.parentElement) {
+          window.frameElement.parentElement.style.removeProperty('background-color');
+        }
       }
 
       var walk = function (root) {
@@ -574,7 +577,7 @@
         var all = root.querySelectorAll ? root.querySelectorAll('*') : [];
         for (var j = 0; j < all.length; j++) {
           if (all[j].tagName === 'HASS-SUBPAGE' || all[j].tagName === 'HA-PANEL-CUSTOM' || all[j].tagName === 'HA-INGRESS') {
-            all[j].style.backgroundColor = '#111638';
+            all[j].style.removeProperty('background-color');
           }
           if (all[j].shadowRoot) walk(all[j].shadowRoot);
         }
@@ -582,8 +585,8 @@
       walk(doc);
     } catch (e) {}
   }
-  injectTopBarAndFixHassBg();
-  setTimeout(injectTopBarAndFixHassBg, 350);
+  injectTopBarIconClean();
+  setTimeout(injectTopBarIconClean, 350);
 
   // 2. Đường dẫn Ingress, WebDAV & Nút Sign Out
   var ingressMatch = location.pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
