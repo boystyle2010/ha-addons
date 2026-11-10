@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#081121">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>OmniDrive Pro</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-searchbox.min.js" defer></script>
@@ -15,7 +18,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js" defer></script>
 <style>
 :root {
-  --bg:#000;
+  --bg:#081121;
   --card:rgba(28,28,30,.72);
   --card-elevated:rgba(44,44,46,.82);
   --card-hover:rgba(58,58,60,.65);
@@ -26,15 +29,24 @@
   --green:#30d158; --orange:#ff9f0a; --red:#ff453a; --purple:#bf5af2;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html{background:var(--bg);min-height:100%}
+html{
+  background-color:#081121;
+  min-height:100%;
+}
 body{
   margin:0;min-height:100vh;color:var(--text);
-  background:radial-gradient(circle at 18% 12%,rgba(10,132,255,.22),transparent 45%),
-             radial-gradient(circle at 82% 88%,rgba(94,92,230,.18),transparent 50%),#000;
-  background-attachment:fixed;
+  background-color:transparent;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,sans-serif;
-  padding:0 16px max(120px,env(safe-area-inset-bottom));-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
-  overflow-x:hidden;
+  padding:max(14px,env(safe-area-inset-top)) 16px max(120px,env(safe-area-inset-bottom));
+  -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
+  overflow-x:hidden;position:relative;
+}
+/* Lớp nền Ambient Glow phủ kín từ mép trên cùng (kể cả dưới thanh Status Bar iOS) */
+body::before{
+  content:"";position:fixed;inset:-40px;z-index:-1;pointer-events:none;
+  background:radial-gradient(circle at 18% 10%,rgba(10,132,255,.25),transparent 48%),
+             radial-gradient(circle at 82% 88%,rgba(94,92,230,.2),transparent 52%),
+             linear-gradient(180deg,#081121 0%,#03060c 45%,#05050a 100%);
 }
 .container{max-width:860px;margin:0 auto}
 #fxi-raw{font-size:0!important;line-height:0!important;color:transparent!important;margin-top:4px}
@@ -49,7 +61,7 @@ body.dragging .drop-zone{display:grid}
 
 .nav{
   position:sticky;top:0;z-index:20;display:none;align-items:center;justify-content:space-between;
-  height:44px;margin:0 -16px;padding:0 16px;background:rgba(10,10,14,.68);
+  height:44px;margin:-14px -16px 12px;padding:0 16px;background:rgba(8,17,33,.72);
   -webkit-backdrop-filter:saturate(190%) blur(24px);backdrop-filter:saturate(190%) blur(24px);
   border-bottom:.5px solid var(--sep);
 }
@@ -57,7 +69,7 @@ body.dragging .drop-zone{display:grid}
 .back{display:inline-flex;align-items:center;gap:5px;color:var(--blue);text-decoration:none;font-size:17px;font-weight:500;max-width:80%;padding:6px 0}
 .back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-.hero{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:16px 2px 14px}
+.hero{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 14px}
 .hero-left{display:flex;align-items:center;gap:13px;min-width:0;flex:1}
 .app-badge{
   width:46px;height:46px;border-radius:13px;flex:none;
