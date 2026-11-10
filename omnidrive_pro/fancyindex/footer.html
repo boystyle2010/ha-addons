@@ -1,10 +1,10 @@
 </div>
   <style>
-  @keyframes popIn{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
-  body.grid-mode #list tbody{background:transparent;border:0;border-radius:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(114px,1fr));gap:12px}
+  @keyframes popIn{from{opacity:0;transform:scale(.95) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  @keyframes sheetUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
+  body.grid-mode #list tbody{background:transparent;border:0;border-radius:0;box-shadow:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(114px,1fr));gap:12px}
   body.grid-mode #list tr{
     background:var(--card);border:1px solid var(--glass-border);border-radius:18px;
-    -webkit-backdrop-filter:saturate(190%) blur(24px);backdrop-filter:saturate(190%) blur(24px);
     box-shadow:0 10px 28px rgba(0,0,0,.38);
     display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 10px 12px;row-gap:4px;
   }
@@ -19,13 +19,13 @@
   body.grid-mode .ic.folder svg{width:48px;height:40px}
 
   .clip-bar,.batch-bar{
-    position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
-    width:calc(100% - 32px);max-width:540px;background:rgba(24,28,38,.86);
-    -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
+    position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:0;right:0;margin:0 auto;
+    width:calc(100% - 32px);max-width:540px;background:rgba(24,28,38,.92);
+    -webkit-backdrop-filter:saturate(190%) blur(24px);backdrop-filter:saturate(190%) blur(24px);
     border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:11px 15px;
     display:none!important;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 18px 42px rgba(0,0,0,.75);z-index:80;
   }
-  .clip-bar.show,.batch-bar.show{display:flex!important}
+  .clip-bar.show,.batch-bar.show{display:flex!important;animation:sheetUp .2s cubic-bezier(.2,.9,.3,1)}
   .clip-info{min-width:0;flex:1;font-size:13.5px}
   .clip-info b{color:#5ac8fa;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .clip-info span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
@@ -36,14 +36,14 @@
   .clip-btn.cancel{background:rgba(255,255,255,.08);color:var(--muted)}
 
   .bg-audio-bar{
-    position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
-    width:calc(100% - 28px);max-width:500px;height:60px;background:rgba(24,28,38,.86);
-    -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
+    position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:0;right:0;margin:0 auto;
+    width:calc(100% - 28px);max-width:500px;height:60px;background:rgba(24,28,38,.92);
+    -webkit-backdrop-filter:saturate(190%) blur(24px);backdrop-filter:saturate(190%) blur(24px);
     border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:0 13px;
     display:none!important;align-items:center;justify-content:space-between;gap:10px;
     box-shadow:0 18px 42px rgba(0,0,0,.78);z-index:85;
   }
-  .bg-audio-bar.show{display:flex!important}
+  .bg-audio-bar.show{display:flex!important;animation:sheetUp .2s cubic-bezier(.2,.9,.3,1)}
   .bga-art{width:38px;height:38px;border-radius:10px;background:linear-gradient(145deg,#ff5e6c,#ff2d55);display:grid;place-items:center;flex:none;color:#fff;box-shadow:0 4px 12px rgba(255,45,85,.35)}
   .bga-art svg{width:18px;height:18px}
   .bga-meta{min-width:0;flex:1}
@@ -57,14 +57,15 @@
 
   .backdrop{position:fixed;inset:0;background:rgba(0,0,0,.58);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:none!important;z-index:90}
   .backdrop.show{display:block!important}
+  /* Căn giữa bằng left:0; right:0; margin:0 auto để không bao giờ bị xung đột transform khi chạy animation */
   .sheet{
-    position:fixed;left:50%;bottom:0;transform:translateX(-50%);
+    position:fixed;left:0;right:0;bottom:0;margin:0 auto;
     width:100%;max-width:500px;padding:0 12px max(14px,env(safe-area-inset-bottom));z-index:95;
     display:none!important;
   }
-  .sheet.show{display:block!important;animation:popIn .22s cubic-bezier(.2,.9,.3,1)}
+  .sheet.show{display:block!important;animation:sheetUp .22s cubic-bezier(.2,.9,.3,1)}
   .sheet-group{
-    background:rgba(24,28,38,.88);-webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
+    background:rgba(24,28,38,.92);-webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
     border:1px solid rgba(255,255,255,.14);border-radius:18px;overflow:hidden;margin-bottom:8px;max-height:76vh;overflow-y:auto;
     box-shadow:0 20px 50px rgba(0,0,0,.75);
   }
@@ -84,7 +85,7 @@
   .editor-modal{position:fixed;inset:0;background:#0d1117;z-index:120;display:none!important;flex-direction:column}
   .editor-modal.show{display:flex!important}
   .editor-modal.zen .ed-subbar{display:none!important}
-  .ed-top{height:52px;padding:0 12px;background:rgba(15,23,42,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none}
+  .ed-top{height:52px;padding:0 12px;background:rgba(15,23,42,.95);border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none}
   .ed-title-wrap{min-width:0;flex:1;text-align:center}
   .ed-title{font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:6px;max-width:100%}
   .dirty-dot{width:8px;height:8px;border-radius:50%;background:var(--orange);box-shadow:0 0 8px var(--orange);display:none;flex:none}
@@ -127,7 +128,6 @@
 
   .ios-player-card{
     width:100%;max-width:420px;background:var(--card);
-    -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
     border:1px solid rgba(255,255,255,.14);border-radius:24px;padding:24px 18px;
     display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:0 24px 60px rgba(0,0,0,.75);
   }
@@ -137,8 +137,7 @@
   .ios-player-card audio{width:100%;height:40px}
   .media-ctrl-bar{
     width:100%;max-width:420px;display:flex;flex-direction:column;gap:10px;
-    background:var(--card);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
-    border:1px solid rgba(255,255,255,.12);padding:13px;border-radius:18px;
+    background:var(--card);border:1px solid rgba(255,255,255,.12);padding:13px;border-radius:18px;
   }
   .media-row{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap}
 
@@ -153,30 +152,30 @@
   .arch-item{padding:11px 14px;border-bottom:.5px solid var(--sep);display:flex;justify-content:space-between;font-size:13.5px;color:#e6edf3;font-family:"SF Mono",monospace}
 
   /* Pro Suite Modal */
-  .suite-modal{position:fixed;inset:0;background:rgba(0,0,0,.62);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);z-index:130;display:none!important;align-items:center;justify-content:center;padding:14px}
+  .suite-modal{position:fixed;inset:0;background:rgba(0,0,0,.62);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);z-index:130;display:none!important;align-items:center;justify-content:center;padding:14px}
   .suite-modal.show{display:flex!important}
   .suite-box{
     width:100%;max-width:680px;max-height:86vh;
-    background:rgba(24,28,38,.86);-webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
+    background:rgba(24,28,38,.92);-webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
     border:1px solid rgba(255,255,255,.15);border-radius:24px;
     display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.8);min-width:0;
-    animation:popIn .24s cubic-bezier(.2,.9,.3,1);
+    animation:popIn .22s cubic-bezier(.2,.9,.3,1);
   }
   .suite-head{padding:14px 18px;background:rgba(255,255,255,.04);border-bottom:.5px solid var(--sep);display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
   .suite-head h3{margin:0;font-size:16.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:9px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .suite-head h3 svg{width:19px;height:19px;color:#38bdf8;flex:none}
-  .suite-body{padding:18px;overflow-y:auto;overflow-x:hidden;flex:1;color:var(--text);font-size:14px;min-width:0}
+  .suite-body{padding:18px;overflow-y:auto;overflow-x:hidden;flex:1;color:var(--text);font-size:14px;min-width:0;-webkit-overflow-scrolling:touch}
 
   /* Custom iOS Glass Confirmation / Prompt Dialog */
   .ios-dialog-mask{
     position:fixed;inset:0;background:rgba(0,0,0,.62);
-    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
     z-index:220;display:none!important;place-items:center;padding:20px;
   }
   .ios-dialog-mask.show{display:grid!important}
   .ios-dialog{
-    width:100%;max-width:340px;background:rgba(28,33,46,.9);
-    -webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
+    width:100%;max-width:340px;background:rgba(28,33,46,.94);
+    -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
     border:1px solid rgba(255,255,255,.16);border-radius:22px;padding:22px 20px 18px;
     box-shadow:0 24px 60px rgba(0,0,0,.85);text-align:center;
     animation:popIn .2s cubic-bezier(.2,.9,.3,1);
@@ -257,12 +256,13 @@
   .empty.show{display:block}
   .stat{text-align:center;color:var(--muted);font-size:13px;margin:18px 0 6px}
   .toast{
-    position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);
-    background:rgba(24,28,38,.92);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
+    position:fixed;bottom:28px;left:0;right:0;margin:0 auto;width:max-content;max-width:90vw;
+    transform:translateY(20px);
+    background:rgba(24,28,38,.94);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
     border:1px solid rgba(255,255,255,.16);color:#fff;padding:10px 18px;border-radius:20px;font-size:13.5px;font-weight:600;
     opacity:0;pointer-events:none;transition:all .22s ease;z-index:260;box-shadow:0 10px 28px rgba(0,0,0,.6);white-space:nowrap;
   }
-  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.show{opacity:1;transform:translateY(0)}
   </style>
 
   <div id="empty" class="empty">No matching items found</div>
@@ -538,39 +538,26 @@
     }
   });
 
-  // 1. Gắn App Icon + XÓA TRIỆT ĐỂ DẢI ĐEN ĐÁY IFRAME TRONG HOME ASSISTANT APP
+  // 1. Gắn App Icon + Tô màu nền HASS nhưng KHÔNG sửa chiều cao iframe (Tránh lỗi dính cuộn trên HASS App)
   function injectTopBarAndFixHassBg() {
     try {
       if (!window.parent || window.parent === window) return;
       var doc = window.parent.document;
-      if (doc.documentElement) doc.documentElement.style.backgroundColor = '#0b1933';
-      if (doc.body) doc.body.style.backgroundColor = '#0b1933';
+      if (doc.documentElement) doc.documentElement.style.backgroundColor = '#111638';
+      if (doc.body) doc.body.style.backgroundColor = '#111638';
 
-      // Tìm chính thẻ iframe Ingress trong parent DOM để kéo tràn xuống đáy (xóa khoảng đệm đen safe-area của HASS)
-      if (window.frameElement) {
-        window.frameElement.style.backgroundColor = '#0b1933';
-        window.frameElement.style.height = 'calc(100% + env(safe-area-inset-bottom, 0px))';
-        window.frameElement.style.marginBottom = 'calc(-1 * env(safe-area-inset-bottom, 0px))';
-        if (window.frameElement.parentElement) {
-          window.frameElement.parentElement.style.backgroundColor = '#0b1933';
-        }
+      if (window.frameElement && window.frameElement.parentElement) {
+        window.frameElement.style.backgroundColor = '#111638';
+        window.frameElement.parentElement.style.backgroundColor = '#111638';
       }
 
       var walk = function (root) {
         if (!root) return;
-        var iframes = root.querySelectorAll ? root.querySelectorAll('iframe') : [];
-        for (var k = 0; k < iframes.length; k++) {
-          var ifr = iframes[k];
-          ifr.style.backgroundColor = '#0b1933';
-          ifr.style.height = '100%';
-          if (ifr.parentElement) ifr.parentElement.style.backgroundColor = '#0b1933';
-        }
         var nodes = root.querySelectorAll ? root.querySelectorAll('.main-title, [slot="title"], .title') : [];
         for (var i = 0; i < nodes.length; i++) {
           var el = nodes[i];
           var txt = el.textContent ? el.textContent.trim() : '';
           if ((txt.indexOf('WebDAV') !== -1 || txt.indexOf('OmniDrive') !== -1)) {
-            // Tự động rút gọn tiêu đề HASS nếu vẫn bị lưu cache tên dài cũ
             if (txt.indexOf('(') !== -1) {
               el.textContent = 'OmniDrive Pro';
             }
@@ -587,7 +574,7 @@
         var all = root.querySelectorAll ? root.querySelectorAll('*') : [];
         for (var j = 0; j < all.length; j++) {
           if (all[j].tagName === 'HASS-SUBPAGE' || all[j].tagName === 'HA-PANEL-CUSTOM' || all[j].tagName === 'HA-INGRESS') {
-            all[j].style.backgroundColor = '#0b1933';
+            all[j].style.backgroundColor = '#111638';
           }
           if (all[j].shadowRoot) walk(all[j].shadowRoot);
         }
@@ -597,7 +584,6 @@
   }
   injectTopBarAndFixHassBg();
   setTimeout(injectTopBarAndFixHassBg, 350);
-  setTimeout(injectTopBarAndFixHassBg, 1000);
 
   // 2. Đường dẫn Ingress, WebDAV & Nút Sign Out
   var ingressMatch = location.pathname.match(/^(\/api\/hassio_ingress\/[^\/]+)/);
@@ -763,7 +749,7 @@
     bgAudioEl.pause(); bgAudioEl.src = ''; bgAudioBar.classList.remove('show');
   });
 
-  // 6. Trình sửa Code (Fix trắng Editor + Tắt Ace Worker báo lỗi giả !include + Hộp thoại Unsaved)
+  // 6. Trình sửa Code (Ace IDE + Unsaved Changes Guard + YAML Linter)
   var editorModal = document.getElementById('editorModal'), edTitle = document.getElementById('edTitle'), edLang = document.getElementById('edLang');
   var dirtyDot = document.getElementById('dirtyDot');
   var aceContainer = document.getElementById('aceContainer'), edArea = document.getElementById('edArea'), mdView = document.getElementById('mdView');
