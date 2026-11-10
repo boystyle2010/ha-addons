@@ -1,3 +1,6 @@
+## [1.0.9] - 2026-11-10
+- **Maintenance & Improvements:** Update login.html
+
 ## [1.0.8] - 2026-11-10
 - **Maintenance & Improvements:** Update header.html
 
