@@ -1327,7 +1327,7 @@
           .then(function (r) { return r.json(); })
           .then(function (res) {
             if (!res.ok) throw new Error(res.error || 'Failed');
-            var externalShareUrl = location.protocol + '//' + location.hostname + ':8090/s/' + res.token;
+            var externalShareUrl = (ingressPrefix ? (location.protocol + '//' + location.hostname + ':8090') : location.origin) + '/s/' + res.token;
             var currentOriginUrl = location.origin + ingressPrefix + '/s/' + res.token;
             openShareItemOptionsModal(res.name, res.token, externalShareUrl, currentOriginUrl);
           }).catch(function (err) { box.style.color = 'var(--red)'; box.textContent = 'Error: ' + err.message; });
