@@ -1090,7 +1090,7 @@
     openSuiteModal(IC_GLOBE + '<span>Multi-Protocol Connect Hub</span>', '<div style="text-align:center;padding:24px;color:var(--muted)">Loading active protocols...</div>');
     fetch(apiUrl('protocols')).then(function (r) { return r.json(); }).then(function (info) {
       var host = location.hostname || 'homeassistant.local';
-      var webdavUrl = location.protocol + '//' + host + ':8090/';
+      var webdavUrl = ingressPrefix ? (location.protocol + '//' + host + ':8090/') : (location.origin + '/');
       var smbUrl = 'smb://' + host + '/OmniDrive';
       var winUnc = '\\\\' + host + '\\OmniDrive';
       var sftpUrl = 'sftp://' + (info.default_user || 'admin') + '@' + host + ':2222/';
