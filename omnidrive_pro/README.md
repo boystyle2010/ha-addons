@@ -1,6 +1,6 @@
 # Home Assistant App: WebDAV Server Pro
 
-![Version](https://img.shields.io/badge/version-1.0.20-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.21-blue.svg)
 ![Nginx](https://img.shields.io/badge/nginx-1.30.6--r0-009639.svg)
 ![Alpine Base](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg)
 ![Project Stage](https://img.shields.io/badge/project%20stage-stable-brightgreen.svg)
