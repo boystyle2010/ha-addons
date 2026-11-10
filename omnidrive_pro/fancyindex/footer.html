@@ -1140,7 +1140,7 @@
       var sharesRows = shares.length ? shares.map(function (s) {
         var minsLeft = Math.max(0, Math.round((s.exp - Date.now() / 1000) / 60));
         var timeStr = minsLeft >= 60 ? (Math.round(minsLeft / 6) / 10) + 'h left' : minsLeft + 'm left';
-        var extUrl = location.protocol + '//' + location.hostname + ':8090/s/' + s.token;
+        var extUrl = location.origin + '/s/' + s.token;
         var ingUrl = location.origin + ingressPrefix + '/s/' + s.token;
         return '<div class="ios-row">' +
           '<div class="ios-row-main">' +
