@@ -1,6 +1,6 @@
 </div>
   <style>
-  @keyframes popIn{from{opacity:0;transform:scale(.95) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+  @keyframes popIn{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
   body.grid-mode #list tbody{background:transparent;border:0;border-radius:0;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(114px,1fr));gap:12px}
   body.grid-mode #list tr{
     background:var(--card);border:1px solid var(--glass-border);border-radius:18px;
@@ -20,7 +20,7 @@
 
   .clip-bar,.batch-bar{
     position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
-    width:calc(100% - 32px);max-width:540px;background:rgba(28,28,30,.82);
+    width:calc(100% - 32px);max-width:540px;background:rgba(24,28,38,.86);
     -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
     border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:11px 15px;
     display:none!important;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 18px 42px rgba(0,0,0,.75);z-index:80;
@@ -37,7 +37,7 @@
 
   .bg-audio-bar{
     position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
-    width:calc(100% - 28px);max-width:500px;height:60px;background:rgba(28,28,30,.82);
+    width:calc(100% - 28px);max-width:500px;height:60px;background:rgba(24,28,38,.86);
     -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
     border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:0 13px;
     display:none!important;align-items:center;justify-content:space-between;gap:10px;
@@ -64,7 +64,7 @@
   }
   .sheet.show{display:block!important;animation:popIn .22s cubic-bezier(.2,.9,.3,1)}
   .sheet-group{
-    background:rgba(28,28,30,.84);-webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
+    background:rgba(24,28,38,.88);-webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
     border:1px solid rgba(255,255,255,.14);border-radius:18px;overflow:hidden;margin-bottom:8px;max-height:76vh;overflow-y:auto;
     box-shadow:0 20px 50px rgba(0,0,0,.75);
   }
@@ -80,34 +80,38 @@
   .sheet-btn.danger svg{color:var(--red)}
   .sheet-btn.cancel{justify-content:center;font-weight:600;color:#fff}
 
+  /* IDE CODE EDITOR */
   .editor-modal{position:fixed;inset:0;background:#0d1117;z-index:120;display:none!important;flex-direction:column}
   .editor-modal.show{display:flex!important}
   .editor-modal.zen .ed-subbar{display:none!important}
-  .ed-top{height:52px;padding:0 12px;background:rgba(22,27,34,.88);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .ed-top{height:52px;padding:0 12px;background:rgba(15,23,42,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:space-between;gap:8px;flex:none}
   .ed-title-wrap{min-width:0;flex:1;text-align:center}
-  .ed-title{font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ed-lang-badge{font-size:11px;color:#5ac8fa;font-weight:600}
+  .ed-title{font-size:15px;font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:6px;max-width:100%}
+  .dirty-dot{width:8px;height:8px;border-radius:50%;background:var(--orange);box-shadow:0 0 8px var(--orange);display:none;flex:none}
+  .dirty-dot.show{display:inline-block}
+  .ed-lang-badge{font-size:11px;color:#5ac8fa;font-weight:600;display:block}
   .ed-btn{height:34px;padding:0 13px;border-radius:10px;border:1px solid rgba(255,255,255,.1);font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;flex:none;white-space:nowrap}
   .ed-btn.close{background:rgba(255,255,255,.07);color:#e5e5ea}
   .ed-btn.md-toggle{background:rgba(88,166,255,.16);color:#58a6ff;display:none}
   .ed-btn.md-toggle.active{background:#58a6ff;color:#0d1117}
   .ed-btn.save{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 4px 14px rgba(10,132,255,.35)}
-  .ed-btn.save:disabled{opacity:.5}
+  .ed-btn.save.unsaved{background:var(--orange);border-color:var(--orange);box-shadow:0 4px 14px rgba(255,159,10,.4)}
+  .ed-btn.save:disabled{opacity:.45;pointer-events:none}
 
-  .yaml-alert{display:none;padding:8px 14px;background:rgba(255,69,58,.16);border-bottom:1px solid var(--red);color:#ff6961;font-size:12.5px;font-family:"SF Mono",monospace}
+  .yaml-alert{display:none;padding:8px 14px;background:rgba(255,69,58,.16);border-bottom:1px solid var(--red);color:#ff6961;font-size:12.5px;font-family:"SF Mono",monospace;flex:none}
   .yaml-alert.show{display:block}
-  .yaml-ok{color:var(--green)!important}
+  .yaml-ok{color:var(--green)!important;background:rgba(48,209,88,.1)!important;border-bottom-color:rgba(48,209,88,.3)!important}
 
-  .ed-subbar{height:38px;padding:0 10px;background:#161b22;border-bottom:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;gap:8px;overflow-x:auto;scrollbar-width:none}
+  .ed-subbar{height:38px;padding:0 10px;background:#161b22;border-bottom:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;gap:8px;overflow-x:auto;scrollbar-width:none;flex:none}
   .ed-subbar::-webkit-scrollbar{display:none}
   .ed-tools{display:flex;align-items:center;gap:5px;flex:none}
   .ed-chip{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:7px;height:26px;padding:0 9px;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
   .ed-chip:active,.ed-chip.active{background:#30363d;border-color:#58a6ff;color:#58a6ff}
   .ed-status{font-size:11.5px;color:#8b949e;white-space:nowrap;flex:none}
 
-  .ed-body{flex:1;position:relative;display:flex;overflow:hidden}
-  #aceContainer{flex:1;width:100%;height:100%;font-size:14px}
-  .minimap-wrap{width:64px;height:100%;background:#11161d;border-left:1px solid #21262d;position:relative;display:none;cursor:pointer;flex:none;user-select:none}
+  .ed-body{flex:1;position:relative;display:flex;overflow:hidden;min-height:0}
+  #aceContainer{position:relative;flex:1;width:100%;height:100%;min-height:240px;font-size:14px}
+  .minimap-wrap{width:58px;height:100%;background:#11161d;border-left:1px solid #21262d;position:relative;display:none;cursor:pointer;flex:none;user-select:none}
   .minimap-wrap.show{display:block}
   #minimapCanvas{width:100%;height:100%;display:block}
   .minimap-vp{position:absolute;left:0;right:0;top:0;height:40px;background:rgba(88,166,255,.22);border-top:1px solid rgba(88,166,255,.55);border-bottom:1px solid rgba(88,166,255,.55);pointer-events:none}
@@ -117,7 +121,7 @@
   .ed-preview{
     flex:1;display:none;flex-direction:column;align-items:center;justify-content:center;padding:16px;overflow:auto;gap:14px;
     background:radial-gradient(circle at 20% 15%,rgba(10,132,255,.2),transparent 45%),
-               radial-gradient(circle at 80% 85%,rgba(94,92,230,.16),transparent 50%),#000;
+               radial-gradient(circle at 80% 85%,rgba(94,92,230,.16),transparent 50%),#071326;
   }
   .ed-preview img,.ed-preview video{max-width:100%;max-height:72vh;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.7)}
 
@@ -148,11 +152,12 @@
   .arch-list{width:100%;max-width:680px;background:var(--card);border-radius:16px;border:1px solid var(--glass-border);overflow:hidden;align-self:start;margin:0 auto}
   .arch-item{padding:11px 14px;border-bottom:.5px solid var(--sep);display:flex;justify-content:space-between;font-size:13.5px;color:#e6edf3;font-family:"SF Mono",monospace}
 
+  /* Pro Suite Modal */
   .suite-modal{position:fixed;inset:0;background:rgba(0,0,0,.62);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);z-index:130;display:none!important;align-items:center;justify-content:center;padding:14px}
   .suite-modal.show{display:flex!important}
   .suite-box{
     width:100%;max-width:680px;max-height:86vh;
-    background:rgba(28,28,30,.82);-webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
+    background:rgba(24,28,38,.86);-webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
     border:1px solid rgba(255,255,255,.15);border-radius:24px;
     display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.8);min-width:0;
     animation:popIn .24s cubic-bezier(.2,.9,.3,1);
@@ -162,10 +167,52 @@
   .suite-head h3 svg{width:19px;height:19px;color:#38bdf8;flex:none}
   .suite-body{padding:18px;overflow-y:auto;overflow-x:hidden;flex:1;color:var(--text);font-size:14px;min-width:0}
 
+  /* Custom iOS Glass Confirmation / Prompt Dialog */
+  .ios-dialog-mask{
+    position:fixed;inset:0;background:rgba(0,0,0,.62);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    z-index:220;display:none!important;place-items:center;padding:20px;
+  }
+  .ios-dialog-mask.show{display:grid!important}
+  .ios-dialog{
+    width:100%;max-width:340px;background:rgba(28,33,46,.9);
+    -webkit-backdrop-filter:saturate(190%) blur(30px);backdrop-filter:saturate(190%) blur(30px);
+    border:1px solid rgba(255,255,255,.16);border-radius:22px;padding:22px 20px 18px;
+    box-shadow:0 24px 60px rgba(0,0,0,.85);text-align:center;
+    animation:popIn .2s cubic-bezier(.2,.9,.3,1);
+  }
+  .ios-dlg-ic{
+    width:48px;height:48px;margin:0 auto 12px;border-radius:14px;
+    background:rgba(10,132,255,.16);border:1px solid rgba(56,189,248,.4);
+    color:#38bdf8;display:grid;place-items:center;
+  }
+  .ios-dlg-ic.danger{background:rgba(255,69,58,.16);border-color:rgba(255,69,58,.4);color:var(--red)}
+  .ios-dlg-ic.warn{background:rgba(255,159,10,.16);border-color:rgba(255,159,10,.4);color:var(--orange)}
+  .ios-dlg-ic svg{width:24px;height:24px}
+  .ios-dlg-title{margin:0 0 6px;font-size:17.5px;font-weight:700;color:#fff;line-height:1.25}
+  .ios-dlg-msg{margin:0 0 16px;font-size:13.5px;color:var(--muted);line-height:1.45;word-break:break-word}
+  .ios-dlg-input{
+    width:100%;height:42px;margin:0 0 16px;padding:0 13px;border-radius:11px;
+    border:1px solid rgba(255,255,255,.14);background:rgba(15,23,42,.85);color:#fff;
+    font-size:15px;outline:none;display:none;
+  }
+  .ios-dlg-input.show{display:block}
+  .ios-dlg-input:focus{border-color:var(--blue)}
+  .ios-dlg-btns{display:flex;flex-direction:column;gap:8px}
+  .ios-dlg-btn{
+    width:100%;height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.1);
+    background:rgba(255,255,255,.07);color:#fff;font-size:15px;font-weight:600;
+    cursor:pointer;transition:transform .1s,background .15s;
+  }
+  .ios-dlg-btn:active{transform:scale(.98)}
+  .ios-dlg-btn.primary{background:var(--blue);border-color:var(--blue);box-shadow:0 4px 14px rgba(10,132,255,.35)}
+  .ios-dlg-btn.danger{background:rgba(255,69,58,.18);border-color:rgba(255,69,58,.38);color:#ff6961}
+  .ios-dlg-btn.cancel{background:transparent;border-color:transparent;color:var(--muted);font-weight:500;height:38px}
+
   .snap-stack{display:flex;flex-direction:column;gap:10px;margin:14px 0}
   .snap-card{
     width:100%;padding:14px 16px;border-radius:16px;border:1px solid rgba(255,255,255,.1);
-    background:rgba(44,44,46,.65);color:var(--text);text-align:left;cursor:pointer;display:flex;align-items:center;gap:14px;
+    background:rgba(38,44,58,.65);color:var(--text);text-align:left;cursor:pointer;display:flex;align-items:center;gap:14px;
     transition:transform .12s,border-color .15s,background .15s;
   }
   .snap-card:hover{border-color:rgba(56,189,248,.35)}
@@ -184,14 +231,14 @@
   .donut-center b{font-size:20px;color:#fff;display:block}
   .donut-center span{font-size:11.5px;color:var(--muted)}
   .legend-list{width:100%;display:flex;flex-direction:column;gap:8px;min-width:0}
-  .legend-item{display:flex;align-items:center;justify-content:space-between;background:rgba(44,44,46,.55);padding:10px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.08);font-size:13.5px;gap:10px;min-width:0}
+  .legend-item{display:flex;align-items:center;justify-content:space-between;background:rgba(38,44,58,.55);padding:10px 13px;border-radius:12px;border:1px solid rgba(255,255,255,.08);font-size:13.5px;gap:10px;min-width:0}
   .legend-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
   .legend-left b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .legend-dot{width:11px;height:11px;border-radius:3px;flex:none}
 
   .ios-sec-head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 8px;gap:8px}
   .ios-sec-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
-  .ios-group-card{background:rgba(44,44,46,.52);border:1px solid rgba(255,255,255,.09);border-radius:15px;overflow:hidden;margin-bottom:16px}
+  .ios-group-card{background:rgba(38,44,58,.52);border:1px solid rgba(255,255,255,.09);border-radius:15px;overflow:hidden;margin-bottom:16px}
   .ios-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:.5px solid var(--sep);min-width:0}
   .ios-row:last-child{border-bottom:0}
   .ios-row-main{min-width:0;flex:1}
@@ -211,7 +258,7 @@
   .stat{text-align:center;color:var(--muted);font-size:13px;margin:18px 0 6px}
   .toast{
     position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);
-    background:rgba(28,28,30,.88);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
+    background:rgba(24,28,38,.92);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
     border:1px solid rgba(255,255,255,.16);color:#fff;padding:10px 18px;border-radius:20px;font-size:13.5px;font-weight:600;
     opacity:0;pointer-events:none;transition:all .22s ease;z-index:260;box-shadow:0 10px 28px rgba(0,0,0,.6);white-space:nowrap;
   }
@@ -308,11 +355,15 @@
     </div>
   </div>
 
+  <!-- IDE & SMART VIEWER MODAL -->
   <div id="editorModal" class="editor-modal" style="display:none">
     <div class="ed-top">
       <button id="edClose" class="ed-btn close" type="button">Done</button>
       <div class="ed-title-wrap">
-        <div id="edTitle" class="ed-title">configuration.yaml</div>
+        <div class="ed-title">
+          <span id="dirtyDot" class="dirty-dot" title="Unsaved changes"></span>
+          <span id="edTitle">configuration.yaml</span>
+        </div>
         <div id="edLang" class="ed-lang-badge">YAML</div>
       </div>
       <button id="edMdToggle" class="ed-btn md-toggle" type="button">Preview</button>
@@ -347,6 +398,7 @@
     </div>
   </div>
 
+  <!-- PRO SUITE MODAL -->
   <div id="suiteModal" class="suite-modal" style="display:none">
     <div class="suite-box">
       <div class="suite-head">
@@ -354,6 +406,17 @@
         <button id="suiteClose" class="ed-btn close" type="button">Done</button>
       </div>
       <div id="suiteBody" class="suite-body"></div>
+    </div>
+  </div>
+
+  <!-- CUSTOM iOS GLASS CONFIRMATION / PROMPT DIALOG -->
+  <div id="iosDialogMask" class="ios-dialog-mask" style="display:none">
+    <div class="ios-dialog">
+      <div id="iosDlgIcon" class="ios-dlg-ic"></div>
+      <h4 id="iosDlgTitle" class="ios-dlg-title">Confirm Action</h4>
+      <p id="iosDlgMsg" class="ios-dlg-msg">Are you sure?</p>
+      <input id="iosDlgInput" class="ios-dlg-input" type="text" autocomplete="off">
+      <div id="iosDlgBtns" class="ios-dlg-btns"></div>
     </div>
   </div>
 
@@ -418,6 +481,63 @@
     setTimeout(function () { t.classList.remove('show'); }, 2400);
   }
 
+  // Hệ thống Hộp thoại iOS Glassmorphism (Thay thế alert / confirm / prompt)
+  var iosDialogMask = document.getElementById('iosDialogMask');
+  var iosDlgIcon = document.getElementById('iosDlgIcon');
+  var iosDlgTitle = document.getElementById('iosDlgTitle');
+  var iosDlgMsg = document.getElementById('iosDlgMsg');
+  var iosDlgInput = document.getElementById('iosDlgInput');
+  var iosDlgBtns = document.getElementById('iosDlgBtns');
+
+  var DLG_ICONS = {
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    danger: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
+  };
+
+  function showIosDialog(opts) {
+    var type = opts.type || 'info';
+    iosDlgIcon.className = 'ios-dlg-ic' + (type === 'danger' ? ' danger' : (type === 'warn' ? ' warn' : ''));
+    iosDlgIcon.innerHTML = DLG_ICONS[type] || DLG_ICONS.info;
+    iosDlgTitle.textContent = opts.title || 'Confirm';
+    iosDlgMsg.innerHTML = opts.message || '';
+
+    if (opts.input) {
+      iosDlgInput.classList.add('show');
+      iosDlgInput.value = opts.defaultValue || '';
+      iosDlgInput.placeholder = opts.placeholder || '';
+    } else {
+      iosDlgInput.classList.remove('show');
+    }
+
+    iosDlgBtns.innerHTML = '';
+    (opts.buttons || []).forEach(function (b) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ios-dlg-btn ' + (b.role || '');
+      btn.textContent = b.label;
+      btn.addEventListener('click', function () {
+        var val = iosDlgInput.value;
+        iosDialogMask.classList.remove('show');
+        if (b.onClick) b.onClick(val);
+      });
+      iosDlgBtns.appendChild(btn);
+    });
+
+    iosDialogMask.classList.add('show');
+    if (opts.input) {
+      setTimeout(function () { iosDlgInput.focus(); iosDlgInput.select(); }, 60);
+    }
+  }
+
+  iosDlgInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      var primaryBtn = iosDlgBtns.querySelector('.primary');
+      if (primaryBtn) primaryBtn.click();
+    }
+  });
+
   // 1. Gắn App Icon mới của OmniDrive Pro lên thanh tiêu đề Home Assistant
   function injectTopBarIcon() {
     try {
@@ -458,15 +578,28 @@
   if (!ingressPrefix && btnLogout) {
     btnLogout.classList.add('show');
     btnLogout.addEventListener('click', function () {
-      fetch('/__wpro_api/logout', { method: 'POST' }).then(function () {
-        location.replace('/.fancyindex/login.html');
+      showIosDialog({
+        type: 'warn',
+        title: 'Sign Out',
+        message: 'Are you sure you want to sign out of OmniDrive Pro on this device?',
+        buttons: [
+          { label: 'Sign Out', role: 'danger', onClick: function () {
+            fetch('/__wpro_api/logout', { method: 'POST' }).then(function () {
+              location.replace('/.fancyindex/login.html');
+            });
+          }},
+          { label: 'Cancel', role: 'cancel' }
+        ]
       });
     });
   }
 
   function buildWebdavUrl(relPath) {
+    if (!relPath) return location.pathname;
+    if (/^https?:\/\//i.test(relPath)) return relPath;
     if (relPath.indexOf('/') === 0) return ingressPrefix + relPath;
-    return location.pathname.replace(/\/?$/, '/') + relPath;
+    var cleanRel = relPath.replace(/^\.\//, '');
+    return location.pathname.replace(/\/?$/, '/') + cleanRel;
   }
   function apiUrl(endpoint) { return ingressPrefix + '/__wpro_api/' + endpoint; }
   function buildDestinationHeader(targetInternalPath) { return location.origin + targetInternalPath; }
@@ -598,23 +731,43 @@
     bgAudioEl.pause(); bgAudioEl.src = ''; bgAudioBar.classList.remove('show');
   });
 
-  // 6. Trình sửa Code (Ace IDE + Mini Map + Multi-Cursor + YAML Linter + Markdown + PDF.js + Hex Viewer)
+  // 6. Trình sửa Code (Khắc phục hoàn toàn lỗi trắng Editor + Theo dõi Unsaved Changes + Popup xác nhận Lưu/Thoát)
   var editorModal = document.getElementById('editorModal'), edTitle = document.getElementById('edTitle'), edLang = document.getElementById('edLang');
+  var dirtyDot = document.getElementById('dirtyDot');
   var aceContainer = document.getElementById('aceContainer'), edArea = document.getElementById('edArea'), mdView = document.getElementById('mdView');
   var edPreview = document.getElementById('edPreview'), edSave = document.getElementById('edSave'), edMdToggle = document.getElementById('edMdToggle');
   var edSubbar = document.getElementById('edSubbar'), edStatus = document.getElementById('edStatus'), yamlAlert = document.getElementById('yamlAlert');
   var minimapWrap = document.getElementById('minimapWrap'), minimapCanvas = document.getElementById('minimapCanvas'), minimapVp = document.getElementById('minimapVp');
-  var aceEditor = null, currentEditHref = '', currentExt = '', isMarkdownFile = false, mdPreviewActive = false, minimapEnabled = true;
+  var aceEditor = null, currentEditUrl = '', currentExt = '', isMarkdownFile = false, mdPreviewActive = false, minimapEnabled = true;
+  var originalContent = '', isDirty = false, isLoadingContent = false;
   var editorFontSize = parseInt(localStorage.getItem('wpro_fsize') || '14', 10);
+
+  function updateDirtyState() {
+    if (isLoadingContent || !currentEditUrl) return;
+    var cur = getEditorContent();
+    isDirty = (cur !== originalContent);
+    dirtyDot.classList.toggle('show', isDirty);
+    edSave.classList.toggle('unsaved', isDirty);
+    var baseExt = (currentExt || 'TEXT').toUpperCase() + (isMarkdownFile ? ' • MARKDOWN' : '');
+    edLang.textContent = baseExt + (isDirty ? ' • UNSAVED' : '');
+  }
+
+  // Cảnh báo nếu người dùng đóng tab trình duyệt khi đang có file chưa lưu
+  window.addEventListener('beforeunload', function (e) {
+    if (editorModal.classList.contains('show') && isDirty) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 
   function renderMinimap() {
     if (!aceEditor || !minimapEnabled || !minimapWrap.classList.contains('show')) return;
     var rect = minimapWrap.getBoundingClientRect();
     if (rect.height <= 0) return;
-    minimapCanvas.width = 64;
+    minimapCanvas.width = 58;
     minimapCanvas.height = rect.height;
     var ctx = minimapCanvas.getContext('2d');
-    ctx.clearRect(0, 0, 64, rect.height);
+    ctx.clearRect(0, 0, 58, rect.height);
     var lines = aceEditor.session.getDocument().getAllLines();
     var total = Math.max(lines.length, 1);
     var step = Math.max(2, Math.min(4, rect.height / total));
@@ -624,10 +777,10 @@
       var ln = lines[i];
       if (!ln || !ln.trim()) continue;
       var indent = ln.search(/\S|$/);
-      var len = Math.min(54, Math.ceil((ln.length - indent) * 0.65));
+      var len = Math.min(48, Math.ceil((ln.length - indent) * 0.65));
       var trimmed = ln.trim();
       ctx.fillStyle = trimmed.indexOf('#') === 0 ? '#484f58' : (trimmed.indexOf(':') !== -1 ? '#58a6ff' : '#8b949e');
-      ctx.fillRect(Math.min(20, 4 + indent * 1.5), y, Math.max(4, len), Math.max(1.2, step - 0.8));
+      ctx.fillRect(Math.min(18, 4 + indent * 1.5), y, Math.max(4, len), Math.max(1.2, step - 0.8));
     }
     var firstVis = aceEditor.getFirstVisibleRow();
     var lastVis = aceEditor.getLastVisibleRow();
@@ -683,28 +836,63 @@
       scrollPastEnd: 0.3,
       enableMultiselect: true
     });
-    aceEditor.session.on('change', function () { validateYamlContent(); renderMinimap(); });
+    aceEditor.session.on('change', function () {
+      validateYamlContent();
+      updateDirtyState();
+      renderMinimap();
+    });
     aceEditor.session.on('changeScrollTop', function () { renderMinimap(); });
     aceEditor.selection.on('changeCursor', function () {
       var ranges = aceEditor.selection.getAllRanges ? aceEditor.selection.getAllRanges() : [];
       var curPos = aceEditor.getCursorPosition();
       edStatus.textContent = (ranges.length > 1 ? ranges.length + ' cursors • ' : '') + 'Ln ' + (curPos.row + 1) + ', Col ' + (curPos.column + 1);
     });
-    aceEditor.commands.addCommand({ name: 'saveFile', bindKey: { win: 'Ctrl-S', mac: 'Command-S' }, exec: function () { saveCurrentFile(); } });
+    aceEditor.commands.addCommand({ name: 'saveFile', bindKey: { win: 'Ctrl-S', mac: 'Command-S' }, exec: function () { promptSaveCurrentFile(); } });
   }
+
+  edArea.addEventListener('input', function () {
+    validateYamlContent();
+    updateDirtyState();
+  });
+
+  function forceAceLayout() {
+    if (!aceEditor) return;
+    requestAnimationFrame(function () {
+      aceEditor.resize(true);
+      aceEditor.renderer.updateFull(true);
+      renderMinimap();
+    });
+    setTimeout(function () {
+      if (aceEditor) {
+        aceEditor.resize(true);
+        aceEditor.renderer.updateFull(true);
+        renderMinimap();
+      }
+    }, 120);
+  }
+  window.addEventListener('resize', forceAceLayout);
 
   function getEditorContent() { return aceEditor ? aceEditor.getValue() : edArea.value; }
   function setEditorContent(val, ext) {
+    isLoadingContent = true;
     initAce();
     if (aceEditor) {
       aceContainer.style.display = 'block'; edArea.style.display = 'none';
       minimapWrap.classList.toggle('show', minimapEnabled);
       aceEditor.session.setMode('ace/mode/' + (ACE_MODES[ext] || 'yaml'));
-      aceEditor.setValue(val, -1); aceEditor.resize();
-      setTimeout(renderMinimap, 60);
+      aceEditor.session.setValue(val);
+      aceEditor.clearSelection();
+      aceEditor.moveCursorTo(0, 0);
+      aceEditor.session.getUndoManager().reset();
+      forceAceLayout();
     } else {
       aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'block'; edArea.value = val;
     }
+    originalContent = val;
+    isDirty = false;
+    isLoadingContent = false;
+    dirtyDot.classList.remove('show');
+    edSave.classList.remove('unsaved');
     validateYamlContent();
   }
 
@@ -718,7 +906,7 @@
       mdView.style.display = 'block'; aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none';
     } else {
       mdView.style.display = 'none';
-      if (aceEditor) { aceContainer.style.display = 'block'; minimapWrap.classList.toggle('show', minimapEnabled); aceEditor.resize(); setTimeout(renderMinimap, 50); }
+      if (aceEditor) { aceContainer.style.display = 'block'; minimapWrap.classList.toggle('show', minimapEnabled); forceAceLayout(); }
       else edArea.style.display = 'block';
     }
   }
@@ -738,11 +926,13 @@
   }
 
   function openPdfJsModal(label, href) {
+    currentEditUrl = ''; isDirty = false; dirtyDot.classList.remove('show');
     edTitle.textContent = label; edLang.textContent = 'PDF.JS VIEWER';
     editorModal.classList.add('show');
     aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
     edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
     edPreview.style.display = 'flex';
+    var fullUrl = buildWebdavUrl(href);
     edPreview.innerHTML =
       '<div class="pdf-toolbar">' +
         '<button id="pdfPrev" class="ed-chip" type="button">◀ Prev</button>' +
@@ -754,7 +944,7 @@
       '<div style="overflow:auto;max-width:100%;max-height:78vh;display:grid;place-items:center"><canvas id="pdfCanvas"></canvas></div>';
 
     if (!window.pdfjsLib) {
-      edPreview.innerHTML = '<iframe src="' + href + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
+      edPreview.innerHTML = '<iframe src="' + fullUrl + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
       return;
     }
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -769,10 +959,10 @@
         info.textContent = 'Page ' + num + ' / ' + pdfDoc.numPages + ' (' + Math.round(scale * 100) + '%)';
       });
     }
-    pdfjsLib.getDocument(href).promise.then(function (doc) {
+    pdfjsLib.getDocument(fullUrl).promise.then(function (doc) {
       pdfDoc = doc; renderPage(pageNum);
     }).catch(function () {
-      edPreview.innerHTML = '<iframe src="' + href + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
+      edPreview.innerHTML = '<iframe src="' + fullUrl + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
     });
 
     document.getElementById('pdfPrev').addEventListener('click', function () { if (pdfDoc && pageNum > 1) { pageNum--; renderPage(pageNum); } });
@@ -782,6 +972,7 @@
   }
 
   function openHexViewer(label, href) {
+    currentEditUrl = ''; isDirty = false; dirtyDot.classList.remove('show');
     edTitle.textContent = label; edLang.textContent = 'HEX / BINARY INSPECTOR';
     editorModal.classList.add('show');
     aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
@@ -789,7 +980,8 @@
     edPreview.style.display = 'flex';
     edPreview.innerHTML = '<div style="color:#8b949e">Reading binary stream...</div>';
 
-    fetch(href, { headers: { 'Range': 'bytes=0-16383' } }).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+    var fullUrl = buildWebdavUrl(href);
+    fetch(fullUrl, { headers: { 'Range': 'bytes=0-16383' }, credentials: 'same-origin' }).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
       var bytes = new Uint8Array(buf), maxLen = Math.min(bytes.length, 8192), rowsHtml = [];
       for (var offset = 0; offset < maxLen; offset += 16) {
         var offHex = ('00000000' + offset.toString(16)).slice(-8).toUpperCase();
@@ -817,13 +1009,14 @@
   }
 
   function openArchiveInspector(label, href, ext) {
+    currentEditUrl = ''; isDirty = false; dirtyDot.classList.remove('show');
     edTitle.textContent = label; edLang.textContent = ext.toUpperCase() + ' ARCHIVE INSPECTOR';
     editorModal.classList.add('show');
     aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
     edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
     edPreview.style.display = 'flex'; edPreview.innerHTML = '<div style="color:#8b949e">Reading archive contents...</div>';
 
-    fetch(href).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+    fetch(buildWebdavUrl(href), { credentials: 'same-origin' }).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
       if (ext === 'zip' && window.JSZip) {
         return JSZip.loadAsync(buf).then(function (zip) {
           var items = [];
@@ -848,21 +1041,23 @@
   }
 
   function openMediaModal(label, href, type, ext) {
+    currentEditUrl = ''; isDirty = false; dirtyDot.classList.remove('show');
     edTitle.textContent = label; edLang.textContent = ext.toUpperCase() + ' MEDIA PLAYER';
     editorModal.classList.add('show');
     aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none'; mdView.style.display = 'none';
     edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
     edPreview.style.display = 'flex';
+    var fullUrl = buildWebdavUrl(href);
     if (type === 'img') {
-      edPreview.innerHTML = '<img src="' + href + '" alt="' + esc(label) + '">';
+      edPreview.innerHTML = '<img src="' + fullUrl + '" alt="' + esc(label) + '">';
       return;
     }
     var mediaBox = type === 'vid'
-      ? '<video id="proMediaEl" src="' + href + '" controls autoplay playsinline></video>'
+      ? '<video id="proMediaEl" src="' + fullUrl + '" controls autoplay playsinline></video>'
       : '<div class="ios-player-card">' +
           '<div class="ios-art-big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>' +
           '<div class="ios-track-title">' + esc(label) + '</div>' +
-          '<audio id="proMediaEl" src="' + href + '" controls autoplay></audio>' +
+          '<audio id="proMediaEl" src="' + fullUrl + '" controls autoplay></audio>' +
         '</div>';
 
     var speedBtns = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map(function (s) {
@@ -895,12 +1090,14 @@
       mediaEl.pause();
       editorModal.classList.remove('show', 'zen');
       edPreview.innerHTML = '';
-      startBackgroundAudio(label, href, curT, curR);
+      startBackgroundAudio(label, fullUrl, curT, curR);
     });
   }
 
-  function openCodeEditor(label, href, ext) {
-    currentEditHref = href; currentExt = ext; edTitle.textContent = label;
+  function openCodeEditor(label, href, ext, isBrandNewFile) {
+    currentEditUrl = buildWebdavUrl(href);
+    currentExt = ext;
+    edTitle.textContent = label;
     isMarkdownFile = /^(md|markdown)$/i.test(ext);
     edLang.textContent = (ext || 'TEXT').toUpperCase() + (isMarkdownFile ? ' • MARKDOWN' : '');
     editorModal.classList.add('show');
@@ -909,31 +1106,134 @@
     edMdToggle.style.display = isMarkdownFile ? 'inline-flex' : 'none';
     mdPreviewActive = false; edMdToggle.classList.remove('active'); edMdToggle.textContent = 'Preview';
     edStatus.textContent = 'Loading...';
+    edSave.disabled = true;
 
-    fetch(href, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function (txt) {
+    if (isBrandNewFile) {
+      edSave.disabled = false;
+      setEditorContent('', ext);
+      edStatus.textContent = 'UTF-8 • New File';
+      return;
+    }
+
+    var sep = currentEditUrl.indexOf('?') === -1 ? '?' : '&';
+    fetch(currentEditUrl + sep + '_ts=' + Date.now(), {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      headers: { 'Accept': 'text/plain, */*' }
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (txt) {
+      edSave.disabled = false;
       setEditorContent(txt, ext);
-      edStatus.textContent = 'UTF-8 • ' + txt.split('\n').length + ' lines';
-      if (isMarkdownFile) toggleMarkdownPreview(true);
-    }).catch(function () { setEditorContent('', ext); edStatus.textContent = 'New File'; });
+      var lineCount = txt ? txt.split('\n').length : 1;
+      edStatus.textContent = 'UTF-8 • ' + lineCount + (lineCount === 1 ? ' line' : ' lines') + (txt === '' ? ' (Empty file)' : '');
+      if (isMarkdownFile && txt.trim().length > 0) toggleMarkdownPreview(true);
+    }).catch(function (err) {
+      // Bảo vệ tuyệt đối: Không bao giờ mở editor trắng nếu lỗi mạng để tránh lưu đè mất dữ liệu!
+      edSave.disabled = true;
+      edStatus.textContent = 'Load Error';
+      showIosDialog({
+        type: 'danger',
+        title: 'Could Not Load File',
+        message: 'Failed to load <b>' + esc(label) + '</b> (' + esc(err.message) + '). Saving is disabled to protect your existing file.',
+        buttons: [
+          { label: 'Retry Loading', role: 'primary', onClick: function () { openCodeEditor(label, href, ext, false); } },
+          { label: 'Close Editor', role: 'cancel', onClick: function () { forceCloseEditor(); } }
+        ]
+      });
+    });
   }
 
-  function saveCurrentFile() {
-    if (!currentEditHref) return;
-    if (!validateYamlContent() && !confirm('YAML syntax error detected! Save anyway?')) return;
-    edSave.disabled = true; edStatus.textContent = 'Saving...';
-    fetch(currentEditHref, { method: 'PUT', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: getEditorContent() }).then(function (r) {
+  function executeSaveFile(onSuccessCallback) {
+    if (!currentEditUrl) return;
+    edSave.disabled = true;
+    edStatus.textContent = 'Saving...';
+    var contentToSave = getEditorContent();
+
+    fetch(currentEditUrl, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      body: contentToSave
+    }).then(function (r) {
       edSave.disabled = false;
       if (r.ok || r.status === 201 || r.status === 204) {
+        originalContent = contentToSave;
+        isDirty = false;
+        dirtyDot.classList.remove('show');
+        edSave.classList.remove('unsaved');
+        edLang.textContent = (currentExt || 'TEXT').toUpperCase() + (isMarkdownFile ? ' • MARKDOWN' : '');
         edStatus.textContent = 'Saved ' + new Date().toLocaleTimeString();
-        showToast('Saved ' + edTitle.textContent);
+        showToast('✓ Saved ' + edTitle.textContent);
         if (isMarkdownFile && mdPreviewActive) toggleMarkdownPreview(true);
-      } else throw new Error('HTTP ' + r.status);
-    }).catch(function (err) { edSave.disabled = false; alert('Save error: ' + err.message); });
+        if (onSuccessCallback) onSuccessCallback();
+      } else {
+        throw new Error('HTTP ' + r.status);
+      }
+    }).catch(function (err) {
+      edSave.disabled = false;
+      showIosDialog({
+        type: 'danger',
+        title: 'Save Failed',
+        message: 'Could not save <b>' + esc(edTitle.textContent) + '</b>: ' + esc(err.message),
+        buttons: [{ label: 'OK', role: 'primary' }]
+      });
+    });
   }
 
-  edSave.addEventListener('click', saveCurrentFile);
+  function promptSaveCurrentFile(onSuccessCallback) {
+    if (!currentEditUrl) return;
+    var yamlOk = validateYamlContent();
+    if (!yamlOk) {
+      showIosDialog({
+        type: 'warn',
+        title: 'YAML Syntax Error',
+        message: 'This file contains a YAML syntax error. Saving now may prevent Home Assistant from reloading configuration. Save anyway?',
+        buttons: [
+          { label: 'Save Anyway', role: 'danger', onClick: function () { executeSaveFile(onSuccessCallback); } },
+          { label: 'Cancel & Fix', role: 'cancel' }
+        ]
+      });
+      return;
+    }
+    showIosDialog({
+      type: 'info',
+      title: 'Save Changes?',
+      message: 'Do you want to save your changes to <b>' + esc(edTitle.textContent) + '</b>?',
+      buttons: [
+        { label: 'Save File', role: 'primary', onClick: function () { executeSaveFile(onSuccessCallback); } },
+        { label: 'Cancel', role: 'cancel' }
+      ]
+    });
+  }
+
+  function forceCloseEditor() {
+    isDirty = false;
+    currentEditUrl = '';
+    dirtyDot.classList.remove('show');
+    edSave.classList.remove('unsaved');
+    editorModal.classList.remove('show', 'zen');
+    edPreview.innerHTML = '';
+    yamlAlert.classList.remove('show');
+  }
+
+  edSave.addEventListener('click', function () { promptSaveCurrentFile(); });
   document.getElementById('edClose').addEventListener('click', function () {
-    editorModal.classList.remove('show', 'zen'); edPreview.innerHTML = ''; yamlAlert.classList.remove('show');
+    if (currentEditUrl && isDirty) {
+      showIosDialog({
+        type: 'warn',
+        title: 'Unsaved Changes',
+        message: 'You have unsaved edits in <b>' + esc(edTitle.textContent) + '</b>. What would you like to do?',
+        buttons: [
+          { label: 'Save & Close', role: 'primary', onClick: function () { executeSaveFile(forceCloseEditor); } },
+          { label: 'Discard Changes', role: 'danger', onClick: function () { forceCloseEditor(); } },
+          { label: 'Keep Editing', role: 'cancel' }
+        ]
+      });
+    } else {
+      forceCloseEditor();
+    }
   });
 
   document.getElementById('edUndo').addEventListener('click', function () { if (aceEditor) aceEditor.undo(); });
@@ -965,11 +1265,11 @@
     minimapEnabled = !minimapEnabled;
     this.classList.toggle('active', minimapEnabled);
     minimapWrap.classList.toggle('show', minimapEnabled && !mdPreviewActive);
-    if (aceEditor) setTimeout(function () { aceEditor.resize(); renderMinimap(); }, 40);
+    forceAceLayout();
   });
   document.getElementById('edZen').addEventListener('click', function () {
     editorModal.classList.toggle('zen');
-    if (aceEditor) setTimeout(function () { aceEditor.resize(); renderMinimap(); }, 50);
+    forceAceLayout();
   });
 
   // 7. System Operations, Multi-Protocol Connect Hub & Security Suite Modal
@@ -1068,7 +1368,7 @@
 
       var usedPct = Math.round((d.used / denom) * 100);
       suiteBody.innerHTML =
-        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:rgba(44,44,46,.52);padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.09);margin-bottom:16px;gap:8px;text-align:center">' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:rgba(38,44,58,.52);padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.09);margin-bottom:16px;gap:8px;text-align:center">' +
           '<div><span style="color:var(--muted);font-size:11px;display:block">TOTAL</span><b style="font-size:15px">' + fmtBytes(d.total) + '</b></div>' +
           '<div><span style="color:var(--muted);font-size:11px;display:block">USED (' + usedPct + '%)</span><b style="font-size:15px;color:var(--orange)">' + fmtBytes(d.used) + '</b></div>' +
           '<div><span style="color:var(--muted);font-size:11px;display:block">AVAILABLE</span><b style="font-size:15px;color:var(--green)">' + fmtBytes(d.free) + '</b></div>' +
@@ -1230,9 +1530,18 @@
 
       var clrBtn = document.getElementById('btnClearAudit');
       if (clrBtn) clrBtn.addEventListener('click', function () {
-        if (!confirm('Clear all audit log entries?')) return;
-        fetch(apiUrl('audit_clear'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-          .then(function () { openAuditAndSharesModal(); });
+        showIosDialog({
+          type: 'danger',
+          title: 'Clear Audit Log?',
+          message: 'Are you sure you want to permanently clear all security audit log records?',
+          buttons: [
+            { label: 'Clear All Logs', role: 'danger', onClick: function () {
+              fetch(apiUrl('audit_clear'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+                .then(function () { openAuditAndSharesModal(); showToast('Audit log cleared'); });
+            }},
+            { label: 'Cancel', role: 'cancel' }
+          ]
+        });
       });
     });
   }
@@ -1258,32 +1567,64 @@
       showToast('Copied Ingress Share URL!');
     });
     document.getElementById('optRevoke').addEventListener('click', function () {
-      fetch(apiUrl('share'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'revoke', token: tok }) })
-        .then(function () { showToast('Share link revoked'); openAuditAndSharesModal(); });
+      showIosDialog({
+        type: 'danger',
+        title: 'Revoke Share Link?',
+        message: 'Anyone with the link for <b>' + esc(name) + '</b> will no longer be able to download it.',
+        buttons: [
+          { label: 'Revoke Link', role: 'danger', onClick: function () {
+            fetch(apiUrl('share'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'revoke', token: tok }) })
+              .then(function () { showToast('Share link revoked'); openAuditAndSharesModal(); });
+          }},
+          { label: 'Cancel', role: 'cancel' }
+        ]
+      });
     });
     document.getElementById('optBackAudit').addEventListener('click', openAuditAndSharesModal);
   }
 
   document.getElementById('btnSysAudit').addEventListener('click', openAuditAndSharesModal);
 
-  // 8. Tạo File, Tạo Folder, Upload, Kéo-Thả & Dán Clipboard
+  // 8. Tạo File, Tạo Folder, Upload, Kéo-Thả & Dán Clipboard (Sử dụng iOS Glass Dialog)
   document.getElementById('btnNewFile').addEventListener('click', function () {
-    var name = prompt('Enter new file name (e.g. script.yaml, README.md):');
-    if (!name || !name.trim()) return;
-    var clean = name.trim().replace(/^\/+/, ''), extMatch = /\.([a-z0-9]+)$/i.exec(clean), ext = extMatch ? extMatch[1].toLowerCase() : 'yaml';
-    fetch(buildWebdavUrl(encodeURIComponent(clean)), { method: 'PUT', body: '' }).then(function (r) {
-      if (r.ok || r.status === 201 || r.status === 204) openCodeEditor(clean, encodeURIComponent(clean), ext);
-      else alert('Could not create file (HTTP ' + r.status + ')');
+    showIosDialog({
+      type: 'info',
+      title: 'Create New File',
+      message: 'Enter a name for the new file (e.g. <code>script.yaml</code>, <code>notes.md</code>):',
+      input: true,
+      placeholder: 'filename.yaml',
+      buttons: [
+        { label: 'Create & Edit', role: 'primary', onClick: function (name) {
+          if (!name || !name.trim()) return;
+          var clean = name.trim().replace(/^\/+/, ''), extMatch = /\.([a-z0-9]+)$/i.exec(clean), ext = extMatch ? extMatch[1].toLowerCase() : 'yaml';
+          fetch(buildWebdavUrl(encodeURIComponent(clean)), { method: 'PUT', credentials: 'same-origin', body: '' }).then(function (r) {
+            if (r.ok || r.status === 201 || r.status === 204) openCodeEditor(clean, encodeURIComponent(clean), ext, true);
+            else showToast('Error: HTTP ' + r.status);
+          });
+        }},
+        { label: 'Cancel', role: 'cancel' }
+      ]
     });
   });
 
   document.getElementById('btnNewDir').addEventListener('click', function () {
-    var name = prompt('Enter new folder name:');
-    if (!name || !name.trim()) return;
-    var clean = name.trim().replace(/^\/+|\/+$/g, '');
-    fetch(buildWebdavUrl(encodeURIComponent(clean) + '/'), { method: 'MKCOL' }).then(function (r) {
-      if (r.ok || r.status === 201) { showToast('Folder created'); setTimeout(function () { location.reload(); }, 400); }
-      else alert('Could not create folder (HTTP ' + r.status + ')');
+    showIosDialog({
+      type: 'info',
+      title: 'Create New Folder',
+      message: 'Enter a name for the new folder:',
+      input: true,
+      placeholder: 'New_Folder',
+      buttons: [
+        { label: 'Create Folder', role: 'primary', onClick: function (name) {
+          if (!name || !name.trim()) return;
+          var clean = name.trim().replace(/^\/+|\/+$/g, '');
+          fetch(buildWebdavUrl(encodeURIComponent(clean) + '/'), { method: 'MKCOL', credentials: 'same-origin' }).then(function (r) {
+            if (r.ok || r.status === 201) { showToast('Folder created'); setTimeout(function () { location.reload(); }, 400); }
+            else showToast('Error: HTTP ' + r.status);
+          });
+        }},
+        { label: 'Cancel', role: 'cancel' }
+      ]
     });
   });
 
@@ -1298,7 +1639,7 @@
       xhr.upload.onprogress = function (e) {
         if (e.lengthComputable) { var pct = Math.round((e.loaded / e.total) * 100); uploadText.textContent = 'Uploading ' + f.name + ' (' + pct + '%)'; progBar.style.width = pct + '%'; }
       };
-      xhr.onload = next; xhr.onerror = function () { alert('Failed uploading ' + f.name); next(); };
+      xhr.onload = next; xhr.onerror = function () { showToast('Failed uploading ' + f.name); next(); };
       xhr.send(f);
     }
     next();
@@ -1313,12 +1654,12 @@
     if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) uploadFileList([].slice.call(e.dataTransfer.files));
   });
   window.addEventListener('paste', function (e) {
-    if (editorModal.classList.contains('show') || suiteModal.classList.contains('show') || document.activeElement === document.getElementById('q')) return;
+    if (editorModal.classList.contains('show') || suiteModal.classList.contains('show') || iosDialogMask.classList.contains('show') || document.activeElement === document.getElementById('q')) return;
     var items = e.clipboardData && e.clipboardData.files;
     if (items && items.length) uploadFileList([].slice.call(items));
   });
 
-  // 9. iOS Action Sheet
+  // 9. iOS Action Sheet & Các hộp thoại xác nhận Xoá / Đổi tên / Nhân bản
   var backdrop = document.getElementById('backdrop'), sheet = document.getElementById('sheet'), selectedItem = null;
   function openActionSheet(item) {
     selectedItem = item;
@@ -1334,13 +1675,13 @@
   document.getElementById('actCancelSheet').addEventListener('click', closeActionSheet);
 
   document.getElementById('actEdit').addEventListener('click', function () {
-    if (!selectedItem) return; closeActionSheet();
-    var extMatch = /\.([a-z0-9]+)$/i.exec(selectedItem.name);
-    openCodeEditor(selectedItem.name, selectedItem.href, extMatch ? extMatch[1].toLowerCase() : 'yaml');
+    if (!selectedItem) return; var item = selectedItem; closeActionSheet();
+    var extMatch = /\.([a-z0-9]+)$/i.exec(item.name);
+    openCodeEditor(item.name, item.href, extMatch ? extMatch[1].toLowerCase() : 'yaml', false);
   });
   document.getElementById('actHex').addEventListener('click', function () {
-    if (!selectedItem) return; closeActionSheet();
-    openHexViewer(selectedItem.name, selectedItem.href);
+    if (!selectedItem) return; var item = selectedItem; closeActionSheet();
+    openHexViewer(item.name, item.href);
   });
   document.getElementById('actShareLink').addEventListener('click', function () {
     if (!selectedItem) return; var item = selectedItem; closeActionSheet();
@@ -1382,32 +1723,63 @@
   });
   document.getElementById('actDownload').addEventListener('click', function () {
     if (!selectedItem) return; closeActionSheet();
-    var link = document.createElement('a'); link.href = selectedItem.href; link.download = selectedItem.name;
+    var link = document.createElement('a'); link.href = buildWebdavUrl(selectedItem.href); link.download = selectedItem.name;
     document.body.appendChild(link); link.click(); link.remove();
   });
   document.getElementById('actDup').addEventListener('click', function () {
     if (!selectedItem) return; var item = selectedItem; closeActionSheet();
-    var dupName = prompt('Duplicate "' + item.name + '" as:', 'copy_' + item.name);
-    if (!dupName || !dupName.trim()) return;
-    var destInternal = p + encodeURIComponent(dupName.trim()) + (item.isDir ? '/' : '');
-    fetch(buildWebdavUrl(item.href), { method: 'COPY', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
-      if (r.ok || r.status === 201 || r.status === 204) { showToast('Duplicated'); setTimeout(function () { location.reload(); }, 400); }
+    showIosDialog({
+      type: 'info',
+      title: 'Duplicate Item',
+      message: 'Enter a name for the duplicate of <b>' + esc(item.name) + '</b>:',
+      input: true,
+      defaultValue: 'copy_' + item.name,
+      buttons: [
+        { label: 'Duplicate', role: 'primary', onClick: function (dupName) {
+          if (!dupName || !dupName.trim()) return;
+          var destInternal = p + encodeURIComponent(dupName.trim()) + (item.isDir ? '/' : '');
+          fetch(buildWebdavUrl(item.href), { method: 'COPY', credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
+            if (r.ok || r.status === 201 || r.status === 204) { showToast('Duplicated'); setTimeout(function () { location.reload(); }, 400); }
+          });
+        }},
+        { label: 'Cancel', role: 'cancel' }
+      ]
     });
   });
   document.getElementById('actRename').addEventListener('click', function () {
     if (!selectedItem) return; var item = selectedItem; closeActionSheet();
-    var newName = prompt('Rename "' + item.name + '" to:', item.name);
-    if (!newName || !newName.trim() || newName.trim() === item.name) return;
-    var destInternal = p + encodeURIComponent(newName.trim()) + (item.isDir ? '/' : '');
-    fetch(buildWebdavUrl(item.href), { method: 'MOVE', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
-      if (r.ok || r.status === 201 || r.status === 204) { showToast('Renamed'); setTimeout(function () { location.reload(); }, 400); }
+    showIosDialog({
+      type: 'info',
+      title: 'Rename Item',
+      message: 'Enter a new name for <b>' + esc(item.name) + '</b>:',
+      input: true,
+      defaultValue: item.name,
+      buttons: [
+        { label: 'Rename', role: 'primary', onClick: function (newName) {
+          if (!newName || !newName.trim() || newName.trim() === item.name) return;
+          var destInternal = p + encodeURIComponent(newName.trim()) + (item.isDir ? '/' : '');
+          fetch(buildWebdavUrl(item.href), { method: 'MOVE', credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
+            if (r.ok || r.status === 201 || r.status === 204) { showToast('Renamed'); setTimeout(function () { location.reload(); }, 400); }
+          });
+        }},
+        { label: 'Cancel', role: 'cancel' }
+      ]
     });
   });
   document.getElementById('actDelete').addEventListener('click', function () {
     if (!selectedItem) return; var item = selectedItem; closeActionSheet();
-    if (!confirm('Delete "' + item.name + '" permanently?')) return;
-    fetch(buildWebdavUrl(item.href), { method: 'DELETE' }).then(function (r) {
-      if (r.ok || r.status === 200 || r.status === 204) { showToast('Deleted'); setTimeout(function () { location.reload(); }, 400); }
+    showIosDialog({
+      type: 'danger',
+      title: 'Delete Permanently?',
+      message: 'Are you sure you want to delete <b>' + esc(item.name + (item.isDir ? '/' : '')) + '</b>? This action cannot be undone.',
+      buttons: [
+        { label: 'Delete Permanently', role: 'danger', onClick: function () {
+          fetch(buildWebdavUrl(item.href), { method: 'DELETE', credentials: 'same-origin' }).then(function (r) {
+            if (r.ok || r.status === 200 || r.status === 204) { showToast('Deleted ' + item.name); setTimeout(function () { location.reload(); }, 400); }
+          });
+        }},
+        { label: 'Cancel', role: 'cancel' }
+      ]
     });
   });
 
@@ -1430,8 +1802,19 @@
   document.getElementById('btnBatchCopy').addEventListener('click', function () { if (selectedSet.length) { setClip('COPY', selectedSet.slice()); btnSelectMode.click(); } });
   document.getElementById('btnBatchMove').addEventListener('click', function () { if (selectedSet.length) { setClip('MOVE', selectedSet.slice()); btnSelectMode.click(); } });
   document.getElementById('btnBatchDel').addEventListener('click', function () {
-    if (!selectedSet.length || !confirm('Delete ' + selectedSet.length + ' item(s)?')) return;
-    Promise.all(selectedSet.map(function (it) { return fetch(ingressPrefix + it.internalPath, { method: 'DELETE' }); })).then(function () { location.reload(); });
+    if (!selectedSet.length) return;
+    var count = selectedSet.length;
+    showIosDialog({
+      type: 'danger',
+      title: 'Delete ' + plural(count, 'Item') + '?',
+      message: 'Are you sure you want to permanently delete the <b>' + count + ' selected item(s)</b>? This action cannot be undone.',
+      buttons: [
+        { label: 'Delete All Selected', role: 'danger', onClick: function () {
+          Promise.all(selectedSet.map(function (it) { return fetch(ingressPrefix + it.internalPath, { method: 'DELETE', credentials: 'same-origin' }); })).then(function () { location.reload(); });
+        }},
+        { label: 'Cancel', role: 'cancel' }
+      ]
+    });
   });
   document.getElementById('btnCancelClip').addEventListener('click', function () { sessionStorage.removeItem('wpro_clip'); refreshClipBar(); });
   document.getElementById('btnPaste').addEventListener('click', function () {
@@ -1439,7 +1822,7 @@
     Promise.all(clip.items.map(function (it) {
       var destInternal = p + encodeURIComponent(it.name) + (it.isDir ? '/' : '');
       if (destInternal === it.internalPath) destInternal = p + encodeURIComponent('copy_' + it.name) + (it.isDir ? '/' : '');
-      return fetch(ingressPrefix + it.internalPath, { method: clip.mode, headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } });
+      return fetch(ingressPrefix + it.internalPath, { method: clip.mode, credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } });
     })).then(function () { if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip'); location.reload(); });
   });
 
