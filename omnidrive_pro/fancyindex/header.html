@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#081121">
+<meta name="theme-color" content="#071326">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>OmniDrive Pro</title>
@@ -18,35 +18,34 @@
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js" defer></script>
 <style>
 :root {
-  --bg:#081121;
-  --card:rgba(28,28,30,.72);
-  --card-elevated:rgba(44,44,46,.82);
-  --card-hover:rgba(58,58,60,.65);
+  --bg:#071326;
+  --card:rgba(24,28,38,.72);
+  --card-elevated:rgba(38,44,58,.84);
+  --card-hover:rgba(50,58,74,.68);
   --glass-border:rgba(255,255,255,.12);
   --sep:rgba(255,255,255,.08);
-  --text:#fff; --muted:#98989f;
+  --text:#fff; --muted:#94a3b8;
   --blue:#0a84ff; --blue-bg:rgba(10,132,255,.22);
   --green:#30d158; --orange:#ff9f0a; --red:#ff453a; --purple:#bf5af2;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html{
-  background-color:#081121;
+  background-color:#071326;
+  background-image:
+    radial-gradient(circle at 50% 0%,rgba(14,165,233,.26),transparent 65%),
+    radial-gradient(circle at 15% 25%,rgba(10,132,255,.22),transparent 60%),
+    radial-gradient(circle at 85% 92%,rgba(139,92,246,.24),transparent 65%),
+    linear-gradient(180deg,#071326 0%,#09152b 50%,#071326 100%);
+  background-attachment:fixed;
   min-height:100%;
 }
 body{
-  margin:0;min-height:100vh;color:var(--text);
-  background-color:transparent;
+  margin:0;min-height:100dvh;color:var(--text);
+  background:transparent;
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,sans-serif;
-  padding:max(14px,env(safe-area-inset-top)) 16px max(120px,env(safe-area-inset-bottom));
+  padding:10px 16px 36px;
   -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
   overflow-x:hidden;position:relative;
-}
-/* Lớp nền Ambient Glow phủ kín từ mép trên cùng (kể cả dưới thanh Status Bar iOS) */
-body::before{
-  content:"";position:fixed;inset:-40px;z-index:-1;pointer-events:none;
-  background:radial-gradient(circle at 18% 10%,rgba(10,132,255,.25),transparent 48%),
-             radial-gradient(circle at 82% 88%,rgba(94,92,230,.2),transparent 52%),
-             linear-gradient(180deg,#081121 0%,#03060c 45%,#05050a 100%);
 }
 .container{max-width:860px;margin:0 auto}
 #fxi-raw{font-size:0!important;line-height:0!important;color:transparent!important;margin-top:4px}
@@ -61,7 +60,7 @@ body.dragging .drop-zone{display:grid}
 
 .nav{
   position:sticky;top:0;z-index:20;display:none;align-items:center;justify-content:space-between;
-  height:44px;margin:-14px -16px 12px;padding:0 16px;background:rgba(8,17,33,.72);
+  height:42px;margin:-10px -16px 10px;padding:0 16px;background:rgba(7,19,38,.78);
   -webkit-backdrop-filter:saturate(190%) blur(24px);backdrop-filter:saturate(190%) blur(24px);
   border-bottom:.5px solid var(--sep);
 }
@@ -69,7 +68,7 @@ body.dragging .drop-zone{display:grid}
 .back{display:inline-flex;align-items:center;gap:5px;color:var(--blue);text-decoration:none;font-size:17px;font-weight:500;max-width:80%;padding:6px 0}
 .back span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-.hero{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 14px}
+.hero{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 12px}
 .hero-left{display:flex;align-items:center;gap:13px;min-width:0;flex:1}
 .app-badge{
   width:46px;height:46px;border-radius:13px;flex:none;
@@ -104,7 +103,7 @@ body.dragging .drop-zone{display:grid}
   background:var(--card) no-repeat 12px 50%;
   -webkit-backdrop-filter:saturate(190%) blur(24px);backdrop-filter:saturate(190%) blur(24px);
   box-shadow:0 6px 20px rgba(0,0,0,.28);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2398989f' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M20 20l-4.8-4.8'/%3E%3C/svg%3E");
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M20 20l-4.8-4.8'/%3E%3C/svg%3E");
   transition:border-color .15s,background-color .15s;
 }
 .search:focus{background-color:var(--card-elevated);border-color:var(--blue)}
@@ -142,12 +141,12 @@ body.dragging .drop-zone{display:grid}
 .crumbs::-webkit-scrollbar{display:none}
 .crumbs a,.crumbs b{
   display:inline-flex;align-items:center;gap:5px;white-space:nowrap;padding:5px 11px;border-radius:10px;
-  background:rgba(28,28,30,.65);border:1px solid var(--glass-border);
+  background:rgba(24,28,38,.68);border:1px solid var(--glass-border);
   -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);text-decoration:none;font-size:13px;
 }
 .crumbs a{color:#5ac8fa;font-weight:500}
 .crumbs b{color:var(--text);font-weight:600;background:rgba(10,132,255,.18);border-color:rgba(10,132,255,.38);cursor:pointer}
-.crumbs .sep{color:#636368;font-size:13px;flex:none}
+.crumbs .sep{color:#64748b;font-size:13px;flex:none}
 
 .controls{display:flex;align-items:center;gap:8px;flex:none}
 .sort-pill{position:relative;display:inline-flex;align-items:center}
@@ -170,7 +169,7 @@ table#list,#list tbody{display:block;width:100%;border:0;font-size:16px;line-hei
   background:var(--card);
   -webkit-backdrop-filter:saturate(190%) blur(28px);backdrop-filter:saturate(190%) blur(28px);
   border:1px solid var(--glass-border);border-radius:20px;overflow:hidden;
-  box-shadow:0 18px 48px rgba(0,0,0,.55);
+  box-shadow:0 18px 48px rgba(0,0,0,.45);
 }
 #list tr{position:relative;display:grid;grid-template-columns:auto 1fr;grid-template-areas:"name name" "size date";row-gap:3px;padding:13px 52px 13px 16px;cursor:pointer;transition:background-color .12s ease}
 #list tr:hover{background:var(--card-hover)}
