@@ -807,31 +807,16 @@
   });
 
   function validateYamlContent() {
-    if (!/^(yaml|yml)$/i.test(currentExt) || !window.jsyaml) {
-      yamlAlert.classList.remove('show');
-      if (aceEditor) aceEditor.session.clearAnnotations();
-      return true;
-    }
+    if (!/^(yaml|yml)$/i.test(currentExt) || !window.jsyaml) { yamlAlert.classList.remove('show'); return true; }
     try {
-      // Hỗ trợ đầy đủ các tag đặc thù của Home Assistant (!include, !secret, !input, !env_var...)
-      var src = getEditorContent().replace(/![a-zA-Z0-9_]+\s+/g, '');
+      var src = getEditorContent().replace(/![a-zA-Z_]+\s+/g, '');
       jsyaml.loadAll(src);
       yamlAlert.className = 'yaml-alert show yaml-ok';
       yamlAlert.textContent = '✓ Valid Home Assistant YAML syntax';
-      if (aceEditor) aceEditor.session.clearAnnotations();
       return true;
     } catch (err) {
-      var errLine = (err.mark && typeof err.mark.line === 'number') ? err.mark.line : 0;
       yamlAlert.className = 'yaml-alert show';
-      yamlAlert.textContent = 'YAML Error (Line ' + (errLine + 1) + '): ' + err.reason;
-      if (aceEditor) {
-        aceEditor.session.setAnnotations([{
-          row: errLine,
-          column: (err.mark && err.mark.column) || 0,
-          text: 'Home Assistant YAML: ' + err.reason,
-          type: 'error'
-        }]);
-      }
+      yamlAlert.textContent = 'YAML Error (Line ' + (err.mark ? err.mark.line + 1 : '?') + '): ' + err.reason;
       return false;
     }
   }
@@ -850,7 +835,6 @@
       wrap: false,
       scrollPastEnd: 0.3,
       enableMultiselect: true
-      useWorker: false
     });
     aceEditor.session.on('change', function () {
       validateYamlContent();
