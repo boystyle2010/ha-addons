@@ -1,7 +1,7 @@
 # Home Assistant App: Tailscale Pro
 
-![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)
-![Tailscale](https://img.shields.io/badge/tailscale-v1.104.5-0052CC.svg)
+![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)
+![Tailscale](https://img.shields.io/badge/tailscale-v1.104.6-0052CC.svg)
 ![Alpine Base](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg)
 ![Project Stage](https://img.shields.io/badge/project%20stage-stable-brightgreen.svg)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen.svg)

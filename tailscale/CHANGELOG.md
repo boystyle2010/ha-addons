@@ -1,12 +1,36 @@
 # Changelog
 
-## 1.0.1
+## 1.0.2
+_Released: 2026-11-11_
+
+### 📦 Component & Version Matrix
+- **Add-on Release:** Bumped from `v1.0.1` ➡️ **`v1.0.2`**
+- **Tailscale Engine:** Updated from `v1.104.5` ➡️ **`v1.104.6`** *(arm64 & amd64 verified)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Official Links:** [GitHub Release v1.104.6](https://github.com/tailscale/tailscale/releases/tag/v1.104.6) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
+
+### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+- **Package:** `tailscale_1.104.6_arm64.tgz`
+- **SHA256:** `d0e4f297da3c428d02162c6235b9948e4ddc245c64502b7b05647da9b96a0971`
+
+### 🚀 What's Changed in Tailscale v1.104.6
+- A rare connectivity issue that affected dormant connections has been resolved.
+- A connectivity issue that occurred when resuming from Modern Standby on devices without Always On or Unattended mode enabled is resolved.
+- Error handling has been improved when multiple network extensions are present.
+- An issue where MagicDNS could select a suffix-scoped DNS resolver during network transitions has been resolved.
+- A DNS configuration race condition that could occur during network transitions has been resolved.
+- ip:publicAddress device posture attribute is GA ( generally available ). The attribute is available for use in postures and viewable on the Machines page of the admin console.
+- The India DERP servers have moved from Bengaluru ( blr ) to Mumbai ( bom ). The region ID remains 6.
+- The IPv4 and IPv6 addresses for these servers have changed. If you use custom firewall settings that rely on these addresses specifically, refer to the information in our DERP map and make the necessary updates. Otherwise, no action is required.
+
+---
+
+## 1.104.5
 _Released: 2026-11-03_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** `v1.0.1`
 - **Tailscale Engine:** `v1.104.5` *(arm64 & amd64 verified)*
-- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release v1.104.5](https://github.com/tailscale/tailscale/releases/tag/v1.104.5) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
 
 ### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
@@ -70,32 +94,6 @@ _Released: 2026-10-21_
 - Users with the Owner role can switch their tailnet's identity provider from the admin console for supported providers ( generally available ).
 - Ingress ProxyGroups can share a single persistent Let's Encrypt account key per tailnet to ensure certificate renewals keep their exemption from Let's Encrypt rate limits .
 - PeerRelay resources support a custom UDP port and additional static endpoints for peers that cannot reach the relay at its load balancer address.
-
----
-
-## 1.104.1
-_Released: 2026-10-07_
-
-### 📦 Component & Version Matrix
-- **Tailscale Engine:** `v1.104.1` *(arm64 & amd64 verified)*
-- **Alpine Base Image:** `Alpine 3.24`
-- **Official Links:** [GitHub Release v1.104.1](https://github.com/tailscale/tailscale/releases/tag/v1.104.1) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
-
-### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
-- **Package:** `tailscale_1.104.1_arm64.tgz`
-- **SHA256:** `f60294374967f3dfd8cf57bbbd474d6cfce32d123e3a8ddeab82a87940daa806`
-
-### 🚀 What's Changed in Tailscale v1.104.1
-- Go is updated to version 1.27.
-- WireGuard packet buffering uses less memory while waiting for peer handshakes.
-- WireGuard packet queue depth scales with CPU core count, reducing peak memory usage under heavy traffic.
-- Client-side netmap caching improves start up speed and connectivity when the Tailscale control plane is unreachable.
-- WireGuard allocates a single packet buffer for batched I/O, improving throughput and reducing memory usage.
-- An issue that could prevent traffic over IPv6 link-local addresses from flowing through direct and Tailscale Peer Relay connections is resolved.
-- An issue preventing Linux desktop detection from working on Wayland environments is resolved.
-- Tailscale Services and Tailscale PAM Services are available in the app window.
-- Devices , Exit Nodes , and Services can be pinned to the top of their respective lists in the app window. Pins also appear in the Pinned page of the app window.
-- Tailscale's iOS widgets are available on macOS Tahoe 26 and later.
 
 ---
 
