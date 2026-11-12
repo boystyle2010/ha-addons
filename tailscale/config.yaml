@@ -1,6 +1,6 @@
 name: "Tailscale Pro"
 description: "Zero-config mesh VPN, subnet router and exit node with a built-in health monitor"
-version: "1.0.2"
+version: "1.0.3"
 slug: "tailscale_pro"
 url: "https://github.com/boystyle2010/ha-addons/tree/main/tailscale"
 stage: stable

@@ -1,12 +1,31 @@
 # Changelog
 
-## 1.0.2
+## 1.0.3
+_Released: 2026-11-12_
+
+### 📦 Component & Version Matrix
+- **Add-on Release:** Bumped from `v1.0.2` ➡️ **`v1.0.3`**
+- **Tailscale Engine:** Updated from `v1.104.6` ➡️ **`v1.104.7`** *(arm64 & amd64 verified)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Official Links:** [GitHub Release v1.104.7](https://github.com/tailscale/tailscale/releases/tag/v1.104.7) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
+
+### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+- **Package:** `tailscale_1.104.7_arm64.tgz`
+- **SHA256:** `d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484`
+
+### 🚀 What's Changed in Tailscale v1.104.7
+- VERSION.txt: this is v1.104.7
+- k8s-operator/api-proxy: only use the remote address for WhoIs (#22364)
+- go.toolchain.rev: bump to Go 1.27.4
+
+---
+
+## 1.104.6
 _Released: 2026-11-11_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** Bumped from `v1.0.1` ➡️ **`v1.0.2`**
-- **Tailscale Engine:** Updated from `v1.104.5` ➡️ **`v1.104.6`** *(arm64 & amd64 verified)*
-- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Tailscale Engine:** `v1.104.6` *(arm64 & amd64 verified)*
+- **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release v1.104.6](https://github.com/tailscale/tailscale/releases/tag/v1.104.6) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
 
 ### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
@@ -68,32 +87,6 @@ _Released: 2026-10-28_
 - tailscale_dns_configuration no longer displays a stale alpha warning.
 - tailscale_acl resource validates the policy file at plan time.
 - Create and manage OAuth Apps for Device Provisioning with the Tailscale API (GA) .
-
----
-
-## 1.104.2
-_Released: 2026-10-21_
-
-### 📦 Component & Version Matrix
-- **Tailscale Engine:** `v1.104.2` *(arm64 & amd64 verified)*
-- **Alpine Base Image:** `Alpine 3.24`
-- **Official Links:** [GitHub Release v1.104.2](https://github.com/tailscale/tailscale/releases/tag/v1.104.2) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
-
-### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
-- **Package:** `tailscale_1.104.2_arm64.tgz`
-- **SHA256:** `5776aaa901b5ef1916e66be5bb54b9f481cd399c9c28db123a8cab620efa237b`
-
-### 🚀 What's Changed in Tailscale v1.104.2
-- Go is updated to version 1.27.3, to explicitly distrust compromised TLS intermediate certificates as described in security bulletin TS-2026-013 .
-- An issue where the Windows client could repeatedly disconnect on large tailnets while processing peer updates is resolved.
-- A regression where Windows clients made 100.100.100.100 the system's primary DNS resolver when MagicDNS was disabled (or a device from another tailnet was shared in) and no global nameservers were configured, causing all DNS queries to be proxied through Tailscale instead of only the configured split DNS domains is resolved.
-- Menu construction timing could result in the macOS app not fully activating and, on macOS Ventura 13, rendering a malformed menu.
-- Searches entered on the services tab do not inadvertently filter pinned services on the pinned tab.
-- Use MagicRoute ( beta ) to choose between redundant subnet routers, app connectors, exit nodes, and Tailscale Service hosts.
-- Configure how the tailnet performs Route selection , replacing the toggle that enabled Regional Routing in the admin console.
-- Users with the Owner role can switch their tailnet's identity provider from the admin console for supported providers ( generally available ).
-- Ingress ProxyGroups can share a single persistent Let's Encrypt account key per tailnet to ensure certificate renewals keep their exemption from Let's Encrypt rate limits .
-- PeerRelay resources support a custom UDP port and additional static endpoints for peers that cannot reach the relay at its load balancer address.
 
 ---
 
