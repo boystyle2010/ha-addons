@@ -2,7 +2,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.24
 FROM ${BUILD_FROM}
 
 # Phiên bản Cloudflared thật (bot sẽ tự cập nhật dòng này)
-ARG CLOUDFLARED_VERSION=2026.10.7
+ARG CLOUDFLARED_VERSION=2026.11.0
 
 # Cài đặt các gói cần thiết
 RUN apk update && apk upgrade --no-cache && \

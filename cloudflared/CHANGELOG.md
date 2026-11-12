@@ -1,12 +1,33 @@
 # Changelog
 
-## 1.0.0
+## 1.0.1
+_Released: 2026-11-12_
+
+### 📦 Component & Version Matrix
+- **Add-on Release:** Bumped from `v1.0.0` ➡️ **`v1.0.1`**
+- **Cloudflared Engine:** Updated from `2026.10.7` ➡️ **`2026.11.0`** *(arm64 binary verified)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Official Links:** [GitHub Release 2026.11.0](https://github.com/cloudflare/cloudflared/releases/tag/2026.11.0) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
+
+### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+- **Binary:** `cloudflared-linux-arm64`
+- **SHA256:** `abe54a006acf9faf2d19ee9d953cb0d0804e92f59c5382a162e57b84d086f56f`
+
+### 🚀 What's Changed in Cloudflared 2026.11.0
+- Release 2026.11.0
+- chore: Bump golang to 1.27.4
+- TUN-11065: Run Windows CI on production runners
+- chore: Use correct logger
+- VULN-170057: Don't bypass access with matrix parameters
+
+---
+
+## 2026.10.7
 _Released: 2026-10-30_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** `v1.0.0`
 - **Cloudflared Engine:** `2026.10.7` *(arm64 binary verified)*
-- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release 2026.10.7](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.7) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
 ### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
@@ -61,27 +82,6 @@ _Released: 2026-10-27_
 - TUN-10996: Allow for validating config from stdin
 - TUN-11015: Ignore unchanged fields in QUIC MetricsUpdated events
 - VULN-183456: Bump github.com/go-chi/chi/v5 to v5.5.0
-
----
-
-## 2026.10.4
-_Released: 2026-10-26_
-
-### 📦 Component & Version Matrix
-- **Cloudflared Engine:** `2026.10.4` *(arm64 binary verified)*
-- **Alpine Base Image:** `Alpine 3.24`
-- **Official Links:** [GitHub Release 2026.10.4](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.4) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
-
-### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
-- **Binary:** `cloudflared-linux-arm64`
-- **SHA256:** `2b7203b4fb0ba28a0c1e12f8855ce2c25f76d266a8d5edafac5540b6812acff6`
-
-### 🚀 What's Changed in Cloudflared 2026.10.4
-- Release 2026.10.4
-- VULN-176088: Allowlist debug endpoints on the metrics server
-- TUN-11024: Build with the exact Go version from go.mod
-- AUTH-9347 do not require the --fedramp flag in access commands
-- chore: Bump github.com/klauspost/compress to v1.20.3
 
 ---
 
