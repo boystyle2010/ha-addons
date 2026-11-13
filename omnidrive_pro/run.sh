@@ -1144,9 +1144,11 @@ http {
 
     server {
         listen 8099;
-        allow 172.30.32.2;
-        deny all;
         ${REAL_IP_CONF}
+        # allow/deny dùng \$remote_addr (đã bị real_ip đổi thành IP client) nên gây 403.
+        # Dùng \$realip_remote_addr = địa chỉ kết nối gốc (Supervisor) để kiểm tra,
+        # đồng thời vẫn giữ được IP thật của client trong \$remote_addr / X-Real-IP.
+        if (\$realip_remote_addr != "172.30.32.2") { return 403; }
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
         location /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
         location ^~ /__wpro_api/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; access_log off; }
