@@ -1,6 +1,9 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.24
 FROM ${BUILD_FROM}
 
+# Nhận diện kiến trúc từ Home Assistant Supervisor (aarch64 hoặc amd64)
+ARG BUILD_ARCH=aarch64
+
 # Phiên bản Cloudflared thật (bot sẽ tự cập nhật dòng này)
 ARG CLOUDFLARED_VERSION=2026.11.0
 
@@ -8,8 +11,16 @@ ARG CLOUDFLARED_VERSION=2026.11.0
 RUN apk update && apk upgrade --no-cache && \
     apk add --no-cache curl ca-certificates tzdata jq
 
-# Tải binary cloudflared arm64
-RUN curl -fL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-arm64" \
+# Tự động chọn đúng binary theo cấu trúc phần cứng (aarch64 -> arm64 | amd64 -> amd64)
+RUN ARCH_CHECK="${BUILD_ARCH}" && \
+    if [ -z "${ARCH_CHECK}" ]; then ARCH_CHECK="$(uname -m)"; fi && \
+    case "${ARCH_CHECK}" in \
+        aarch64|arm64) CF_ARCH="arm64" ;; \
+        amd64|x86_64)  CF_ARCH="amd64" ;; \
+        *) echo "Unsupported architecture: ${ARCH_CHECK}" && exit 1 ;; \
+    esac && \
+    echo "Downloading Cloudflared v${CLOUDFLARED_VERSION} for architecture: ${CF_ARCH} (Host: ${ARCH_CHECK})" && \
+    curl -fL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${CF_ARCH}" \
     -o /usr/bin/cloudflared && \
     chmod +x /usr/bin/cloudflared
 
