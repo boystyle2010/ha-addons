@@ -54,6 +54,12 @@ options:
   root_access: false
   enable_terminal: true
   lock_root: true
+  lan_ip: ""
+  public_url: ""
+  ftp_pasv_address: ""
+  ftp_tls: "optional"
+  trusted_proxies: "172.16.0.0/12,127.0.0.0/8"
+  share_zip_max_mb: 2048
   users:
     - username: "admin"
       password: "changeme_strong_password"
@@ -101,6 +107,12 @@ schema:
   root_access: bool
   enable_terminal: bool
   lock_root: bool
+  lan_ip: str?
+  public_url: str?
+  ftp_pasv_address: str?
+  ftp_tls: list(optional|required|off)
+  trusted_proxies: str
+  share_zip_max_mb: int(1,)
   users:
     - username: str
       password: password
