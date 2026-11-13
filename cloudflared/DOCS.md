@@ -1,6 +1,7 @@
 ![Version](https://img.shields.io/badge/version-1.0.2-blue.svg) ![Cloudflared](https://img.shields.io/badge/cloudflared-2026.11.0-F38020.svg) ![Alpine](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg) ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg) ![AppArmor](https://img.shields.io/badge/apparmor-enforced-success.svg)
 
 
+
 # Home Assistant App : Cloudflared
 
 Cloudflared connects your Home Assistant Instance via a secure tunnel to a domain
