@@ -4,7 +4,7 @@ configuration:
     description: Mounts all shares under a single root path "/" so you can browse and move files across all Home Assistant directories (config, addon_configs, addons, backup, media, share, ssl) from a single connection.
   smb_enabled:
     name: Enable SMB / Samba Server (Port 445)
-    description: Enables native network drive mounting on iOS Files ("Connect to Server"), macOS Finder (smb://), Windows Explorer (\\ip\), and media players like Infuse or VLC.
+    description: Enables native network drive mounting on iOS Files ("Connect to Server"), macOS Finder (smb://), Windows Explorer (\\\\ip\\), and media players like Infuse or VLC.
   sftp_enabled:
     name: Enable SFTP Server (Port 2222)
     description: Enables encrypted SSH File Transfer Protocol for pro clients such as FileZilla, Cyberduck, Transmit, WinSCP, Termius, and FE File Explorer.
@@ -32,6 +32,15 @@ configuration:
   log_level:
     name: Log Level
     description: Controls the verbosity of server logs.
+  root_access:
+    name: Root Access
+    description: If enabled, file operations run as root. If disabled, runs as the default user.
+  enable_terminal:
+    name: Enable Web Terminal
+    description: Allows running shell commands as root inside the container via the Web UI.
+  lock_root:
+    name: Lock Root Directory
+    description: Prevents creating or deleting files directly in the root directory to avoid accidental modifications.
   users:
     name: User Accounts
     description: List of usernames and passwords authorized across all protocols (Web UI, WebDAV, SMB, SFTP, and FTP).
