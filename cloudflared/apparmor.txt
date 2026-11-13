@@ -3,10 +3,10 @@
 profile cloudflared_pro flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
-  capability,
   file,
   signal (send) set=(kill,term,int,hup,cont),
 
+  # S6-Overlay v3 & Bashio permissions
   /init ix,
   /bin/** ix,
   /usr/bin/** ix,
@@ -19,6 +19,7 @@ profile cloudflared_pro flags=(attach_disconnected,mediate_deleted) {
   /run/{,**} rwk,
   /dev/tty rw,
 
+  # Cloudflared binary execution
   /usr/bin/cloudflared cx -> cloudflared,
 
   profile cloudflared flags=(attach_disconnected,mediate_deleted) {
@@ -36,6 +37,7 @@ profile cloudflared_pro flags=(attach_disconnected,mediate_deleted) {
     /ssl/** r,
     /data/** rw,
     /tmp/** rw,
-    /proc/sys/net/** r,
+    /proc/** r,
+    /sys/** r,
   }
 }
