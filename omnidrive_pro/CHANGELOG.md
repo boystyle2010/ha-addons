@@ -1,3 +1,6 @@
+## [1.0.46] - 2026-11-13
+- **Maintenance & Improvements:** Update en.yaml
+
 ## [1.0.45] - 2026-11-13
 - **Maintenance & Improvements:** Update config.yaml
 
