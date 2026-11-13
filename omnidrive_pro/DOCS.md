@@ -35,8 +35,8 @@ Open **OmniDrive Pro** from your Home Assistant sidebar (or via your external We
 - **Direct `PDF.js` Viewer:** Tapping any `.pdf` file renders pages directly onto a hardware-accelerated canvas with `◀ Prev`, `Next ▶`, and zoom (`−` / `＋`) controls.
 - **Pro Media Player & Background Audio:**
   - Tapping video/audio files opens the iOS Media Player card with `0.5x` ➔ `2.0x` playback speed pills and `↺ -10s` / `↻ +10s` skip buttons.
-  - Tap **Play in Background** to minimize audio into the floating **Apple Music-style Mini Player** at the bottom of the screen, allowing you to continue browsing folders or editing YAML while listening.
-- **Hex / Binary Inspector:** Tapping `.db`, `.sqlite`, `.bin` files (or selecting **Hex / Binary Inspector** from the `⋯` menu on any file) displays a side-by-side `HEX + ASCII` stream viewer.
+  - Tap **Play in Background** to minimize audio into the floating **Apple Music-style Mini Player** at the bottom of the screen.
+- **Hex / Binary Inspector:** Tapping `.db`, `.sqlite`, `.bin` files (or selecting **Hex / Binary Inspector** from the `⋯` menu) displays a side-by-side `HEX + ASCII` stream viewer.
 - **Backup & Archive Inspector (`.tar` / `.zip`):** Tapping any `.tar` Home Assistant backup or `.zip` archive lists internal files and sizes without downloading or extracting.
 - **Live Markdown Preview (`Preview`):** Automatically renders `.md` files in GitHub Dark style with a 1-tap toggle to switch back to raw code editing.
 
@@ -44,25 +44,61 @@ Open **OmniDrive Pro** from your Home Assistant sidebar (or via your external We
 
 ## 🛠️ 2. System Operations, Sharing & Security Suite
 
-The second action bar in the Web UI provides four dedicated system administration tools:
+The second action bar in the Web UI provides five dedicated system administration tools:
 
 1. **Terminal (`Web Terminal`):**
-   - Opens an interactive `xterm.js` shell rooted in your current working directory.
+   - Opens an interactive `xterm.js` shell rooted in your current working directory. (Can be hidden by setting `enable_terminal: false` in add-on options).
    - Includes 1-tap quick chips for `df -h`, `ls -la`, `git status`, and `git pull`.
 2. **Storage (`Storage Analytics`):**
-   - Displays total NVMe capacity, used percentage, available free space, and an interactive **Donut Chart** breaking down storage consumption across `/config`, `/backup`, `/media`, `/share`, `/addons`, and `/ssl`.
+   - Displays total disk capacity, used percentage, available free space, and an interactive **Donut Chart** breaking down storage consumption across `/config`, `/backup`, `/media`, `/share`, etc.
 3. **Quick Zip (`Quick Snapshot to Zip`):**
    - **Backup Entire `/config` Folder:** Compresses all YAML configurations, `custom_components`, and `.storage` (excluding heavy database/log files) into `/backup/quick_config_YYYYMMDD_HHMMSS.zip`.
-   - **Backup Automations & Scripts Only:** Creates a fast, lightweight `.zip` snapshot of your automations, scripts, scenes, and packages before editing code.
+   - **Backup Automations & Scripts Only:** Creates a fast, lightweight `.zip` snapshot of your automations, scripts, scenes, and packages.
 4. **Connect (`Multi-Protocol Connect Hub`):**
    - Displays live connection URLs for **SMB/Samba (`445`)**, **SFTP (`2222`)**, **FTP (`2121`)**, and **WebDAV (`8090`)** with 1-tap copy to clipboard.
-5. **Security (`Audit Log & Expiry Share Links`):**
-   - **Expiry Share Links:** Tap `⋯` -> **Create Expiry Share Link** on any **file or folder** to generate a temporary public download link (`/s/<token>`) valid for `1 Hour`, `6 Hours`, `24 Hours`, or `7 Days` without exposing your password. Shared folders are automatically packaged as `.zip` archives on download.
-   - **Security Audit Log:** View real-time logs of web logins, file modifications (`PUT`), deletions (`DELETE`), snapshots, and share-link downloads.
+5. **Security (`Devices, Shares & Audit`):**
+   - **Signed-in Devices:** View every active session (Device type, IP, Last Active). Instantly sign out any suspicious device or click **Sign Out All & Rotate Key** if you suspect a leak.
+   - **Change Password:** Securely update your password. It is hashed immediately and applied across Web UI, WebDAV, SMB, SFTP, and FTP.
+   - **Expiry Share Links:** Tap `⋯` -> **Create Expiry Share Link** on any file/folder. You can set the maximum downloads, password protection, and expiry time.
+   - **Security Audit Log:** View real-time logs of web logins, file modifications, deletions, snapshots, and share-link downloads.
 
 ---
 
-## 🌐 3. Connecting External Devices (Multi-Protocol)
+## ⚙️ 3. Add-on Configuration Reference
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `unified_root` | `true` | Mounts all shares under a single root path `/` so you can browse and move files across all directories from a single connection. |
+| `smb_enabled` | `true` | Enables the SMB / Samba v3 server on port `445`. |
+| `sftp_enabled` | `true` | Enables the OpenSSH SFTP server on port `2222`. |
+| `ftp_enabled` | `true` | Enables the FTP server on port `2121` (with passive ports `21000–21002`). |
+| `ssl` | `false` | Enables native HTTPS on port `8090` using certificates in `/ssl`. |
+| `certfile` | `fullchain.pem` | SSL certificate filename in `/ssl`. |
+| `keyfile` | `privkey.pem` | SSL private key filename in `/ssl`. |
+| `max_upload_size` | `"0"` | Maximum allowed upload size (`"0"` = unlimited, ideal for multi-GB backups). |
+| `fancy_ui` | `true` | Enables the iOS Glassmorphism Dark Web UI, Cloud Code IDE, and System Suite. |
+| `show_dotfiles` | `true` | Displays hidden system files and folders starting with a dot (e.g., `.storage`, `.git`). |
+| `log_level` | `info` | Server log verbosity (`debug`, `info`, `notice`, `warn`, `error`). |
+| `root_access` | `false` | When `true`, file operations (Web UI, zip, terminal) run as **root**. When `false`, runs as unprivileged user. |
+| `enable_terminal` | `true` | Toggles the built-in Web Terminal inside the UI. |
+| `lock_root` | `true` | Prevents creating/renaming/deleting files directly at the root directory `/`. Forces users to work inside a specific share/folder. |
+| `users` | `[...]` | List of `{ username, password }` accounts authorized across Web UI, WebDAV, SMB, SFTP, and FTP. |
+| `shares` | `[...]` | List of mapped Home Assistant directories (`config`, `addon_configs`, `addons`, `backup`, `media`, `share`, `ssl`). |
+
+---
+
+## 🔑 4. Password Management in Home Assistant
+
+This add-on bridges the Home Assistant configuration UI and its own internal database. Here is how passwords work:
+
+1. **First Run:** You define a password in the **Configuration** tab of the Home Assistant Add-on. When you start the add-on, this password is read, hashed securely, and stored.
+2. **Changing Password on Web UI:** You can use the **Security -> Change Password** button inside the Web UI. This updates the hash immediately across all protocols.
+3. **The Home Assistant Quirk:** Home Assistant does not know you changed your password via the Web UI. If you go back to the **Add-on Configuration** tab and click "Save" (even if you didn't touch the password field), Home Assistant will overwrite your Web UI password with whatever plaintext is written in the configuration.
+   - *Rule of thumb:* If you change your password on the Web UI, remember to also update it in the Add-on Configuration tab to keep them in sync.
+
+---
+
+## 🌐 5. Connecting External Devices (Multi-Protocol)
 
 All enabled protocols share the exact same `users` credentials and directory structure configured in the add-on options.
 
@@ -70,7 +106,7 @@ All enabled protocols share the exact same `users` credentials and directory str
 - **iOS / iPadOS (Native Files App):** Tap `⋯` -> **Connect to Server** -> Enter `smb://<HOME_ASSISTANT_IP>/OmniDrive` -> Sign in with your `users` credentials.
 - **macOS (Finder):** Press `Cmd + K` -> Enter `smb://<HOME_ASSISTANT_IP>/OmniDrive` -> Click **Connect**.
 - **Windows (File Explorer):** Open Run (`Win + R`) or File Explorer address bar -> Enter `\\<HOME_ASSISTANT_IP>\OmniDrive`.
-- **Apple TV / Infuse / VLC:** Add a new SMB share pointing to `<HOME_ASSISTANT_IP>` (Port `445`) to stream recordings and media directly.
+- **Apple TV / Infuse / VLC:** Add a new SMB share pointing to `<HOME_ASSISTANT_IP>` (Port `445`).
 
 ### B. SFTP — SSH File Transfer (Port `2222`)
 - **Clients:** FileZilla, Cyberduck, Transmit, WinSCP, Termius, FE File Explorer.
@@ -83,24 +119,4 @@ All enabled protocols share the exact same `users` credentials and directory str
 1. Open your **Cloudflare Zero Trust Dashboard** -> **Networks** -> **Tunnels**.
 2. Create a Public Hostname (e.g., `drive.yourdomain.com`) pointing to `http://<HOME_ASSISTANT_IP>:8090`.
 3. **Web Browser Access:** Open `https://drive.yourdomain.com` in Safari or Chrome to sign in via the **iOS Glassmorphism Login UI**.
-4. **Native WebDAV Mount:** Enter `https://drive.yourdomain.com/` in macOS Finder (`Cmd + K`), Windows Explorer, or iOS Files — OmniDrive Pro automatically authenticates native WebDAV clients via HTTP Basic Auth.
-
----
-
-## ⚙️ 4. Configuration Reference
-
-| Option | Default | Description |
-| :--- | :--- | :--- |
-| `unified_root` | `true` | Mounts all shares under a single root path `/` so you can browse and move files across all directories from a single connection. Set to `false` for per-folder `read_only` or `allowed_users` rules. |
-| `smb_enabled` | `true` | Enables the SMB / Samba v3 server on port `445`. |
-| `sftp_enabled` | `true` | Enables the OpenSSH SFTP server on port `2222`. |
-| `ftp_enabled` | `true` | Enables the FTP server on port `2121` (with passive ports `21000–21002`). |
-| `ssl` | `false` | Enables native HTTPS on port `8090` using certificates in `/ssl`. Keep `false` if routing through Cloudflare Tunnel or a reverse proxy. |
-| `certfile` | `fullchain.pem` | SSL certificate filename in `/ssl`. |
-| `keyfile` | `privkey.pem` | SSL private key filename in `/ssl`. |
-| `max_upload_size` | `"0"` | Maximum allowed upload size (`"0"` = unlimited, ideal for multi-GB backups). |
-| `fancy_ui` | `true` | Enables the iOS Glassmorphism Dark Web UI, Cloud Code IDE, and System Suite. |
-| `show_dotfiles` | `true` | Displays hidden system files and folders starting with a dot (e.g., `.storage`, `.git`). |
-| `log_level` | `info` | Server log verbosity (`debug`, `info`, `notice`, `warn`, `error`). |
-| `users` | `[...]` | List of `{ username, password }` accounts authorized across Web UI, WebDAV, SMB, SFTP, and FTP. |
-| `shares` | `[...]` | List of mapped Home Assistant directories (`config`, `addon_configs`, `addons`, `backup`, `media`, `share`, `ssl`). |
+4. **Native WebDAV Mount:** Enter `https://drive.yourdomain.com/` in macOS Finder (`Cmd + K`), Windows Explorer, or iOS Files.
