@@ -1,3 +1,6 @@
+## [1.0.43] - 2026-11-13
+- **Maintenance & Improvements:** Update footer.html
+
 ## [1.0.42] - 2026-11-13
 - **Maintenance & Improvements:** Update run.sh
 
