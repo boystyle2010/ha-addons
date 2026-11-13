@@ -1,3 +1,6 @@
+## [1.0.30] - 2026-11-13
+- **Maintenance & Improvements:** Update run.sh
+
 ## [1.0.28] - 2026-11-10
 - **Maintenance & Improvements:** Update DOCS.md
 
