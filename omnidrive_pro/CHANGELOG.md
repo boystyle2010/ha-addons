@@ -1,3 +1,6 @@
+## [1.0.45] - 2026-11-13
+- **Maintenance & Improvements:** Update config.yaml
+
 ## [1.0.44] - 2026-11-13
 - **Maintenance & Improvements:** Update run.sh
 
