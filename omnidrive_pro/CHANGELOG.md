@@ -1,3 +1,6 @@
+## [1.0.39] - 2026-11-13
+- **Maintenance & Improvements:** Update Dockerfile
+
 ## [1.0.38] - 2026-11-13
 - **Maintenance & Improvements:** Update run.sh
 
