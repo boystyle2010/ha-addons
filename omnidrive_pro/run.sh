@@ -45,9 +45,18 @@ export ROOT_ACCESS ENABLE_TERMINAL
 LAN_IP=$(bashio::config 'lan_ip' 2>/dev/null || true)
 [ "$LAN_IP" = "null" ] && LAN_IP=""
 if [ -z "$LAN_IP" ]; then
+    # Hỏi Supervisor trực tiếp: lấy interface chính (primary) đang kết nối, nếu không có thì interface đầu tiên có IPv4
+    LAN_IP=$(curl -fsS --max-time 5 -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/network/info 2>/dev/null \
+        | jq -r '[.data.interfaces[]? | select((.connected // true) and ((.ipv4.address // []) | length > 0))] | ((map(select(.primary))[0]) // .[0]) | .ipv4.address[0] // empty' 2>/dev/null \
+        | cut -d/ -f1 || true)
+fi
+if [ -z "$LAN_IP" ] || [ "$LAN_IP" = "null" ]; then
     LAN_IP=$(bashio::api.supervisor GET /network/info false '.interfaces[] | select(.primary==true) | .ipv4.address[0]' 2>/dev/null | cut -d/ -f1 || true)
 fi
 [ "$LAN_IP" = "null" ] && LAN_IP=""
+if [ -z "$LAN_IP" ]; then
+    bashio::log.warning "Could not detect the LAN IP automatically. Set 'lan_ip' in the add-on configuration, otherwise the Connect Hub shows the address you browse with."
+fi
 PUBLIC_URL=$(bashio::config 'public_url' 2>/dev/null || true)
 [ "$PUBLIC_URL" = "null" ] && PUBLIC_URL=""
 
