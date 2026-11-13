@@ -1,3 +1,6 @@
+## [1.0.34] - 2026-11-13
+- **Maintenance & Improvements:** Update DOCS.md
+
 ## [1.0.33] - 2026-11-13
 - **Maintenance & Improvements:** Add files via upload
 
