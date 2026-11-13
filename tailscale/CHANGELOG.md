@@ -9,9 +9,11 @@ _Released: 2026-11-12_
 - **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
 - **Official Links:** [GitHub Release v1.104.7](https://github.com/tailscale/tailscale/releases/tag/v1.104.7) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
 
-### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+### 🔐 Binary Integrity (aarch64 & amd64)
 - **Package:** `tailscale_1.104.7_arm64.tgz`
-- **SHA256:** `d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484`
+- **SHA256 (arm64):** `d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484`
+- **Package:** `tailscale_1.104.7_amd64.tgz`
+- **SHA256 (amd64):** `e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c`
 
 ### 🚀 What's Changed in Tailscale v1.104.7
 - Go is updated to Go 1.27.4, to explicitly resolve an issue in TLS ClientHello where some middleboxes break connections to the Tailscale control plane.
@@ -27,9 +29,11 @@ _Released: 2026-11-11_
 - **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release v1.104.6](https://github.com/tailscale/tailscale/releases/tag/v1.104.6) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
 
-### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+### 🔐 Binary Integrity (aarch64 & amd64)
 - **Package:** `tailscale_1.104.6_arm64.tgz`
-- **SHA256:** `d0e4f297da3c428d02162c6235b9948e4ddc245c64502b7b05647da9b96a0971`
+- **SHA256 (arm64):** `d0e4f297da3c428d02162c6235b9948e4ddc245c64502b7b05647da9b96a0971`
+- **Package:** `tailscale_1.104.6_amd64.tgz`
+- **SHA256 (amd64):** `82a85429f733e52fd1a95dedb2c8dd8cd46d6603504e566a56b1779c9a7a4809`
 
 ### 🚀 What's Changed in Tailscale v1.104.6
 - A rare connectivity issue that affected dormant connections has been resolved.
@@ -51,9 +55,11 @@ _Released: 2026-11-03_
 - **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release v1.104.5](https://github.com/tailscale/tailscale/releases/tag/v1.104.5) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
 
-### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+### 🔐 Binary Integrity (aarch64 & amd64)
 - **Package:** `tailscale_1.104.5_arm64.tgz`
-- **SHA256:** `e900b0e6e25023a1e504b2c237ce2a32ea0535e006f8c1a1097a490886493b6c`
+- **SHA256 (arm64):** `e900b0e6e25023a1e504b2c237ce2a32ea0535e006f8c1a1097a490886493b6c`
+- **Package:** `tailscale_1.104.5_amd64.tgz`
+- **SHA256 (amd64):** `720cbbccbfc03d8b55df72afc19e5a72e31b0f65934700aa6fa38074d4ad7bf7`
 
 ### 🚀 What's Changed in Tailscale v1.104.5
 - Connectivity stalls affecting Tailscale SSH , Tailscale Serve , and tsnet on lossy networks are resolved.
@@ -71,9 +77,11 @@ _Released: 2026-10-28_
 - **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release v1.104.4](https://github.com/tailscale/tailscale/releases/tag/v1.104.4) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
 
-### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)
+### 🔐 Binary Integrity (aarch64 & amd64)
 - **Package:** `tailscale_1.104.4_arm64.tgz`
-- **SHA256:** `a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e`
+- **SHA256 (arm64):** `a1c249ce6bdebef62e1ae3b997595555bce2ae4709bf95a718e9ca7a129dad7e`
+- **Package:** `tailscale_1.104.4_amd64.tgz`
+- **SHA256 (amd64):** `624ea093d47d62cf56f17b8332d74b8decda4a1faa610ebc60a1de334b2b3dc9`
 
 ### 🚀 What's Changed in Tailscale v1.104.4
 - Tailscale SSH performs Unix socket forwarding on behalf of the authenticated user rather than as root , preventing authorized peers from using local and remote forwarding to reach root-only Unix sockets such as the Docker socket or the tailscaled local API. This fix addresses a security vulnerability described in TS-2026-014 .
