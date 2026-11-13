@@ -123,23 +123,26 @@ jobs:
               except Exception:
                   pass
 
-          # 3. Lấy mã SHA256 thực tế của gói arm64
-          sha_val = "Verified via pkgs.tailscale.com"
-          try:
-              sha_url = f"https://pkgs.tailscale.com/stable/tailscale_{ver}_arm64.tgz.sha256"
-              with urllib.request.urlopen(sha_url, timeout=10) as r:
-                  s = r.read().decode("utf-8").strip().split()[0]
-                  if len(s) == 64:
-                      sha_val = s
-          except Exception:
-              pass
+          # 3. Lấy mã SHA256 thực tế của gói arm64 và amd64
+          sha_vals = {}
+          for arch in ("arm64", "amd64"):
+              sha_vals[arch] = "Verified via pkgs.tailscale.com"
+              try:
+                  sha_url = f"https://pkgs.tailscale.com/stable/tailscale_{ver}_{arch}.tgz.sha256"
+                  with urllib.request.urlopen(sha_url, timeout=10) as r:
+                      s = r.read().decode("utf-8").strip().split()[0]
+                      if len(s) == 64:
+                          sha_vals[arch] = s
+              except Exception:
+                  pass
 
           if not bullets:
               bullets.append(f"- Core engine stability, networking, and security maintenance updates for Tailscale `v{ver}`.")
 
-          print("### 🔐 Binary Integrity (Raspberry Pi 5 - aarch64)")
-          print(f"- **Package:** `tailscale_{ver}_arm64.tgz`")
-          print(f"- **SHA256:** `{sha_val}`")
+          print("### 🔐 Binary Integrity (aarch64 & amd64)")
+          for arch in ("arm64", "amd64"):
+              print(f"- **Package:** `tailscale_{ver}_{arch}.tgz`")
+              print(f"- **SHA256 ({arch}):** `{sha_vals[arch]}`")
           print("")
           print(f"### 🚀 What's Changed in Tailscale v{ver}")
           print("\n".join(bullets[:10]))
@@ -153,6 +156,8 @@ jobs:
           elif [ "$FIRST_HEADER" != "v${VER} (Latest)" ] && [ "$FIRST_HEADER" != "${VER}" ]; then
             NEED_CHANGELOG=1
           elif ! grep -q "### 🔐 Binary Integrity" "$D/CHANGELOG.md" 2>/dev/null; then
+            NEED_CHANGELOG=1
+          elif ! grep -q "_amd64.tgz" "$D/CHANGELOG.md" 2>/dev/null; then
             NEED_CHANGELOG=1
           fi
 
@@ -225,6 +230,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
+
+          # Khai báo sớm để skip() -> print_summary_table không lỗi 'unbound variable'
+          TS_STATUS="✅ Up to date"
+          ALPINE_STATUS="✅ Up to date"
+          ADDON_STATUS="✅ Up to date"
 
           skip() {
             echo "⏭️ $1"
@@ -321,7 +331,7 @@ jobs:
           CAND="$CURRENT_BASE"
           for i in 1 2 3; do
             NEXT="${BASE_MAJOR}.$((BASE_MINOR + i))"
-            if base_ok aarch64 "$NEXT"; then CAND="$NEXT"; else break; fi
+            if base_ok aarch64 "$NEXT" && base_ok amd64 "$NEXT"; then CAND="$NEXT"; else break; fi
           done
 
           if [ "$CAND" != "$CURRENT_BASE" ]; then
@@ -418,6 +428,9 @@ jobs:
 
           sed -i "s|^ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|" tailscale/Dockerfile
           sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
+          if [ -f "tailscale/build.yaml" ]; then
+            sed -i -E "s|(aarch64-base:)[0-9.]+|\1${NEW_BASE}|; s|(amd64-base:)[0-9.]+|\1${NEW_BASE}|" tailscale/build.yaml
+          fi
           sed -i "s|^version:.*|version: \"${NEW_ADDON_VER}\"|" tailscale/config.yaml
 
           if [ -f "tailscale/README.md" ]; then
