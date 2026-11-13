@@ -1,11 +1,11 @@
 # Changelog
 
-## 1.0.3
+## 1.0.4
 _Released: 2026-11-12_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** Bumped from `v1.0.2` ➡️ **`v1.0.3`**
-- **Tailscale Engine:** Updated from `v1.104.6` ➡️ **`v1.104.7`** *(arm64 & amd64 verified)*
+- **Add-on Release:** `v1.0.4`
+- **Tailscale Engine:** `v1.104.7` *(arm64 & amd64 verified)*
 - **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
 - **Official Links:** [GitHub Release v1.104.7](https://github.com/tailscale/tailscale/releases/tag/v1.104.7) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
 
@@ -14,9 +14,8 @@ _Released: 2026-11-12_
 - **SHA256:** `d6bed2720310b328b861f943d7b4016c5358a9bad60575eb51e8143b79068484`
 
 ### 🚀 What's Changed in Tailscale v1.104.7
-- VERSION.txt: this is v1.104.7
-- k8s-operator/api-proxy: only use the remote address for WhoIs (#22364)
-- go.toolchain.rev: bump to Go 1.27.4
+- Go is updated to Go 1.27.4, to explicitly resolve an issue in TLS ClientHello where some middleboxes break connections to the Tailscale control plane.
+- The Kubernetes API server proxy identifies a caller only by the connection's source address, and no longer uses the X-Forwarded-For header.
 
 ---
 
