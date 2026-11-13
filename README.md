@@ -14,7 +14,7 @@ A high-performance Home Assistant add-on repository, designed and tuned specific
 | :--- | :--- | :--- | :--- |
 | **⚡ Cloudflared Pro** | `cloudflared` | Zero Trust Tunnel | Dual-Stack IPv4/IPv6, Remote Token & Local Ingress |
 | **🛡️ Tailscale Pro** | `tailscale` | Ingress (`5252`) | Mesh VPN, Subnet Router (`192.168.68.0/24`), Exit Node |
-| **🌐 OmniDrive Pro** | `omnidrive_pro` | `8090`, `445`, `2222`, `2121` & Ingress (`8099`) | Multi-Protocol Storage Hub (WebDAV, SMB, SFTP, FTP), iOS Glass UI, Cloud IDE, Web Terminal, Disk Analytics & Share Links |
+| **🌐 OmniDrive Pro** | `omnidrive_pro` | `8090`, `445`, `2222`, `2121` & Ingress (`8099`) | Multi-Protocol Storage Hub, iOS Glass UI, Cloud IDE, Web Terminal, Security Suite & Share Links |
 
 ---
 
@@ -64,11 +64,18 @@ An all-in-one **Multi-Protocol Storage Hub**, **Cloud Code IDE**, and **System O
   - **Hex / Binary & Archive Inspector:** Inspects binary/database files (`.db`, `.sqlite`, `.bin`) in side-by-side `HEX + ASCII` format, and previews `.zip` and Home Assistant `.tar` backups without extraction.
 
 - **System Operations, Sharing & Security Suite:**
-  - **Integrated Web Terminal (`xterm.js`):** Run shell commands (`df -h`, `ls -la`, `git status`, `git pull`) directly inside the browser.
+  - **Integrated Web Terminal (`xterm.js`):** Run shell commands (`df -h`, `ls -la`, `git status`, `git pull`) directly inside the browser. (Can be disabled via config).
   - **Storage Analytics (Donut Chart):** Visualizes total NVMe disk usage, free space, and per-folder size breakdown (`/config`, `/backup`, `/media`, `/share`, etc.).
   - **1-Tap Quick Zip Snapshot:** Compresses `/config` or `Automations & Scripts` into a timestamped `.zip` archive inside `/backup` before making risky edits.
-  - **Temporary Expiry Share Links (`/s/<token>`):** Generate public download links for any **file or folder** (folders are automatically zipped on the fly) with custom expiration (`1 Hour`, `6 Hours`, `24 Hours`, `7 Days`) without exposing WebDAV passwords.
+  - **Temporary Expiry Share Links (`/s/<token>`):** Generate public download links for any file/folder (folders are automatically zipped). **New:** Set custom expiry (1 hour to 365 days), limit maximum downloads, and protect the link with its own password.
+  - **Signed-in Devices & Security:** View all active sessions (Device, IP, Last Active), instantly revoke access for suspicious logins, and change passwords securely (hashed with PBKDF2).
   - **Security Audit Log:** Real-time activity log tracking logins, file edits (`PUT`), deletions (`DELETE`), snapshots, and share-link downloads.
+
+> ⚠️ **Important Security Notes for Home Assistant:**
+> 1. **Change the default password immediately** in the Add-on Configuration tab.
+> 2. **Root Access & Terminal:** By default, `root_access` is `false` and `enable_terminal` is `true`. You can change this in the Add-on Configuration.
+> 3. **Password Sync Quirk:** If you change your password via the Web UI (Security -> Change Password), it updates instantly. However, if you later go to the HA Add-on Configuration tab and click "Save" (even without changing the password), Home Assistant will overwrite your new Web UI password with the old plaintext one in the config. *Always update your password in the HA Add-on Configuration tab to make it permanent.*
+> 4. **Lock Root:** To prevent accidental creation/deletion of files at the absolute root `/`, `lock_root` is set to `true` by default. You must enter a specific folder (like `config` or `media`) to modify files.
 
 ---
 
@@ -87,4 +94,5 @@ The GitHub Actions pipeline in this repository runs fully automatically under th
 2. Click the **three-dot menu (`⋮`)** in the top right corner -> choose **Repositories**.
 3. Paste the following URL and click **Add**:
    ```text
-   [https://github.com/boystyle2010/ha-addons](https://github.com/boystyle2010/ha-addons)
+   https://github.com/boystyle2010/ha-addons
+4. Find the add-on you want to install (Cloudflared Pro, Tailscale Pro, or OmniDrive Pro), click on it, and select Install.
