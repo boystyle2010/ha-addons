@@ -1,3 +1,6 @@
+## [1.0.47] - 2026-11-13
+- **Maintenance & Improvements:** Update vi.yaml
+
 ## [1.0.46] - 2026-11-13
 - **Maintenance & Improvements:** Update en.yaml
 
