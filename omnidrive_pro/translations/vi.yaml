@@ -16,10 +16,10 @@ configuration:
     description: Bật mã hóa trực tiếp bằng chứng chỉ trong thư mục /ssl (Đặt là Tắt nếu bạn dùng qua Cloudflare Tunnel hoặc Reverse Proxy).
   certfile:
     name: File chứng chỉ (Certificate)
-    description: Tên file chứng chỉ nằm trong thư mục /ssl (mặc định: fullchain.pem).
+    description: Tên file chứng chỉ nằm trong thư mục /ssl (mặc định là fullchain.pem).
   keyfile:
     name: File khóa riêng (Private Key)
-    description: Tên file khóa riêng nằm trong thư mục /ssl (mặc định: privkey.pem).
+    description: Tên file khóa riêng nằm trong thư mục /ssl (mặc định là privkey.pem).
   max_upload_size:
     name: Giới hạn dung lượng tải lên tối đa
     description: Đặt là "0" để không giới hạn dung lượng (hỗ trợ tải file Backup nhiều GB), hoặc điền ví dụ "5G".
@@ -41,6 +41,24 @@ configuration:
   lock_root:
     name: Khoá thư mục gốc (Root Lock)
     description: Ngăn chặn việc vô tình tạo hoặc xoá file ngay tại thư mục gốc (Bắt buộc phải vào bên trong thư mục con mới được sửa).
+  lan_ip:
+    name: Địa chỉ IP LAN (tuỳ chọn)
+    description: IP LAN của Home Assistant hiển thị trong Connect Hub cho SMB, SFTP và FTP (ví dụ 192.168.1.10). Để trống để tự động phát hiện.
+  public_url:
+    name: Địa chỉ WebDAV công khai (tuỳ chọn)
+    description: Tên miền WebDAV hiển thị trong Connect Hub, ví dụ https://drive.example.com (Cloudflare Tunnel hoặc Reverse Proxy). Để trống để dùng địa chỉ đang truy cập.
+  ftp_pasv_address:
+    name: Địa chỉ FTP Passive (tuỳ chọn)
+    description: IP LAN báo cho FTP client ở chế độ Passive (ví dụ 192.168.1.10). Để trống để dùng IP LAN tự phát hiện. Nếu sai, FTP client có thể bị treo khi liệt kê thư mục.
+  ftp_tls:
+    name: Mã hoá FTP (FTPS)
+    description: "optional = mã hoá khi client yêu cầu, FTP thường vẫn dùng được. required = từ chối FTP không mã hoá. off = không mã hoá. Chứng chỉ được tạo tự động (hoặc lấy từ /ssl)."
+  trusted_proxies:
+    name: Proxy tin cậy (IP thật của client)
+    description: IP hoặc dải IP (cách nhau bằng dấu phẩy) của reverse proxy hoặc Cloudflare Tunnel đi vào cổng 8090, để nhật ký, giới hạn tốc độ và khoá đăng nhập dùng IP thật của client. Điền "none" để tắt.
+  share_zip_max_mb:
+    name: Dung lượng thư mục tối đa khi chia sẻ dạng zip (MB)
+    description: Thư mục lớn nhất được phép tải xuống dạng zip qua link chia sẻ.
   users:
     name: Danh sách tài khoản (Users)
     description: Khai báo tài khoản và mật khẩu dùng chung cho tất cả giao thức (Web UI, WebDAV, SMB, SFTP và FTP).
