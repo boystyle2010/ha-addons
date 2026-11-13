@@ -1,3 +1,6 @@
+## [1.0.48] - 2026-11-13
+- **Maintenance & Improvements:** Update footer.html
+
 ## [1.0.47] - 2026-11-13
 - **Maintenance & Improvements:** Update vi.yaml
 
