@@ -1,7 +1,7 @@
 #!/usr/bin/with-contenv bashio
 set -e
 
-ADDON_VERSION=$(bashio::addon.version)
+ADDON_VERSION=$(bashio::app.version)
 bashio::log.info "--------------------------------------------------------"
 bashio::log.info " Initializing OmniDrive Pro v${ADDON_VERSION} (Multi-Protocol)"
 bashio::log.info "--------------------------------------------------------"
