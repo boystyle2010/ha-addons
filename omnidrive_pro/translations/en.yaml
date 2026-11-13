@@ -41,6 +41,24 @@ configuration:
   lock_root:
     name: Lock Root Directory
     description: Prevents creating or deleting files directly in the root directory to avoid accidental modifications.
+  lan_ip:
+    name: LAN IP Address (optional)
+    description: Home Assistant LAN IP shown in the Connect Hub for SMB, SFTP and FTP (e.g. 192.168.1.10). Leave empty to auto-detect.
+  public_url:
+    name: Public WebDAV URL (optional)
+    description: WebDAV address shown in the Connect Hub, e.g. https://drive.example.com (Cloudflare Tunnel or Reverse Proxy). Leave empty to use the address you are currently browsing from.
+  ftp_pasv_address:
+    name: FTP Passive Address (optional)
+    description: LAN IP announced to FTP clients in passive mode (e.g. 192.168.1.10). Leave empty to use the detected LAN IP. Without a correct address FTP clients may hang when listing folders.
+  ftp_tls:
+    name: FTP Encryption (FTPS)
+    description: "optional = encrypted when the client asks for it, plain FTP still works. required = plain FTP is refused. off = no encryption. The certificate is generated automatically (or taken from /ssl)."
+  trusted_proxies:
+    name: Trusted Proxies (Real Client IP)
+    description: IPs or subnets (comma-separated) of your reverse proxy or Cloudflare Tunnel on port 8090, so the real client IP is used in the audit log, rate limiting and login lockout. Use "none" to disable.
+  share_zip_max_mb:
+    name: Max Folder Size for Share Zip (MB)
+    description: Largest folder that can be downloaded as a zip through a share link.
   users:
     name: User Accounts
     description: List of usernames and passwords authorized across all protocols (Web UI, WebDAV, SMB, SFTP, and FTP).
