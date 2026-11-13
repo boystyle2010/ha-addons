@@ -1,5 +1,5 @@
 name: "OmniDrive Pro (Multi-Protocol Storage)"
-version: "1.0.28"
+version: "1.0.29"
 slug: "omnidrive_pro"
 description: "All-in-one Multi-Protocol Storage Hub (WebDAV, SMB/Samba, SFTP, FTP), Cloud IDE, Web Terminal, Disk Analytics & Share Links for Home Assistant."
 url: "https://github.com/boystyle2010/ha-addons"
@@ -51,6 +51,9 @@ options:
   fancy_ui: true
   show_dotfiles: true
   log_level: "info"
+  root_access: false
+  enable_terminal: true
+  lock_root: true
   users:
     - username: "admin"
       password: "changeme_strong_password"
@@ -95,6 +98,9 @@ schema:
   fancy_ui: bool
   show_dotfiles: bool
   log_level: list(debug|info|notice|warn|error)
+  root_access: bool
+  enable_terminal: bool
+  lock_root: bool
   users:
     - username: str
       password: password
