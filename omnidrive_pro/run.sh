@@ -34,9 +34,37 @@ LOG_LEVEL=$(bashio::config 'log_level')
 ROOT_ACCESS=$(bashio::config 'root_access')
 ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
 LOCK_ROOT=$(bashio::config 'lock_root')
-TRUSTED_PROXIES="${TRUSTED_PROXIES:-127.0.0.0/8,172.16.0.0/12}"  # <--- THÊM DÒNG NÀY
+TRUSTED_PROXIES=$(bashio::config 'trusted_proxies' 2>/dev/null || true)
+if [ -z "$TRUSTED_PROXIES" ] || [ "$TRUSTED_PROXIES" = "null" ]; then TRUSTED_PROXIES="172.16.0.0/12,127.0.0.0/8"; fi
 
 export ROOT_ACCESS ENABLE_TERMINAL
+
+# Thông tin hiển thị trong "Connect Hub" (footer.html đọc qua /__wpro_api/protocols)
+# - LAN_IP: ưu tiên option 'lan_ip', nếu trống thì tự lấy IP của interface chính từ Supervisor
+# - PUBLIC_URL: tên miền Cloudflare cho WebDAV (tuỳ chọn)
+LAN_IP=$(bashio::config 'lan_ip' 2>/dev/null || true)
+[ "$LAN_IP" = "null" ] && LAN_IP=""
+if [ -z "$LAN_IP" ]; then
+    LAN_IP=$(bashio::api.supervisor GET /network/info false '.interfaces[] | select(.primary==true) | .ipv4.address[0]' 2>/dev/null | cut -d/ -f1 || true)
+fi
+[ "$LAN_IP" = "null" ] && LAN_IP=""
+PUBLIC_URL=$(bashio::config 'public_url' 2>/dev/null || true)
+[ "$PUBLIC_URL" = "null" ] && PUBLIC_URL=""
+
+# Port thực tế trên host (người dùng có thể đổi ở tab Network của add-on)
+host_port() {
+    local p
+    p=$(bashio::addon.port "$1" 2>/dev/null || true)
+    if [[ "$p" =~ ^[0-9]+$ ]]; then echo "$p"; else echo "${1%/*}"; fi
+}
+SMB_PORT=$(host_port 445/tcp)
+SFTP_PORT=$(host_port 2222/tcp)
+FTP_PORT=$(host_port 2121/tcp)
+EXT_PORT=$(host_port 8090/tcp)
+SHARE_ZIP_MAX_MB=$(bashio::config 'share_zip_max_mb' 2>/dev/null || true)
+if ! [[ "$SHARE_ZIP_MAX_MB" =~ ^[0-9]+$ ]]; then SHARE_ZIP_MAX_MB=2048; fi
+export LAN_IP PUBLIC_URL SMB_PORT SFTP_PORT FTP_PORT EXT_PORT SHARE_ZIP_MAX_MB
+bashio::log.info "Connect Hub: LAN_IP='${LAN_IP}' PUBLIC_URL='${PUBLIC_URL}'"
 
 # 2. Prepare the unified root directory (/var/webdav_root)
 mkdir -p "$ROOT_DIR"
@@ -118,7 +146,8 @@ plain = {}
 out = []
 for u in users:
     name = str(u.get("username", "")).strip()
-    if not name: continue
+    if not name or ":" in name or "\n" in name or len(name) > 32:
+        warn("Skipping invalid username %r" % name); continue
     pw = str(u.get("password", ""))
     entry = {"username": name}
     for k, v in u.items():
@@ -136,7 +165,12 @@ for u in users:
     else:
         entry["password_hash"] = u.get("password_hash", "")
         entry["crypt_hash"] = u.get("crypt_hash", "")
+        if not entry["password_hash"]:
+            warn("User %s has no password: skipped" % name); continue
     out.append(entry)
+
+if not out:
+    print("[ERROR] you must define at least one account under 'users' in the add-on configuration"); sys.exit(1)
 
 cfg["users"] = out
 tmp = CFG + ".tmp"
@@ -144,6 +178,9 @@ with open(tmp, "w", encoding="utf-8") as f:
     json.dump(cfg, f, indent=2)
 os.chmod(tmp, 0o600)
 os.replace(tmp, CFG)
+
+if any(check_hash(e["password_hash"], "changeme_strong_password") for e in out):
+    warn("A user still has the DEFAULT password 'changeme_strong_password'. Change it in the add-on configuration now!")
 
 for e in out:
     name = e["username"]
@@ -264,6 +301,60 @@ pasv_min_port=21000
 pasv_max_port=21002
 seccomp_sandbox=NO
 EOF
+    # Passive mode: vsftpd phải báo IP LAN của host (add-on nằm sau NAT của Docker), nếu không client treo khi liệt kê thư mục
+    PASV_ADDR=$(bashio::config 'ftp_pasv_address' 2>/dev/null || true)
+    [ "$PASV_ADDR" = "null" ] && PASV_ADDR=""
+    [ -z "$PASV_ADDR" ] && PASV_ADDR="$LAN_IP"
+    if [[ "$PASV_ADDR" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+        echo "pasv_address=${PASV_ADDR}" >> /etc/vsftpd/vsftpd.conf
+        bashio::log.info "FTP passive address: ${PASV_ADDR}"
+    else
+        bashio::log.warning "FTP passive address unknown: set 'ftp_pasv_address' (LAN IP of Home Assistant) or FTP clients may hang when listing folders."
+    fi
+
+    # FTPS (explicit TLS): optional (mặc định) | required | off
+    FTP_TLS_MODE=$(bashio::config 'ftp_tls' 2>/dev/null || true)
+    FTP_TLS_MODE="${FTP_TLS_MODE,,}"
+    case "$FTP_TLS_MODE" in optional|required|off) ;; *) FTP_TLS_MODE="optional" ;; esac
+    if [ "$FTP_TLS_MODE" != "off" ]; then
+        FTP_CRT=""; FTP_KEY=""
+        if [ -f "/ssl/${CERTFILE}" ] && [ -f "/ssl/${KEYFILE}" ]; then
+            FTP_CRT="/ssl/${CERTFILE}"; FTP_KEY="/ssl/${KEYFILE}"
+        else
+            FTP_CRT="/data/wpro/ftp-cert.pem"; FTP_KEY="/data/wpro/ftp-key.pem"
+            if [ ! -s "$FTP_CRT" ] || [ ! -s "$FTP_KEY" ]; then
+                openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=omnidrive-pro" \
+                    -keyout "$FTP_KEY" -out "$FTP_CRT" >/dev/null 2>&1 || true
+                chmod 600 "$FTP_KEY" 2>/dev/null || true
+            fi
+        fi
+        if [ -s "$FTP_CRT" ] && [ -s "$FTP_KEY" ]; then
+            FORCE="NO"
+            [ "$FTP_TLS_MODE" = "required" ] && FORCE="YES"
+            cat <<EOF >> /etc/vsftpd/vsftpd.conf
+ssl_enable=YES
+rsa_cert_file=${FTP_CRT}
+rsa_private_key_file=${FTP_KEY}
+allow_anon_ssl=NO
+force_local_logins_ssl=${FORCE}
+force_local_data_ssl=${FORCE}
+ssl_sslv2=NO
+ssl_sslv3=NO
+ssl_tlsv1=NO
+ssl_tlsv1_1=NO
+ssl_tlsv1_2=YES
+ssl_ciphers=HIGH
+require_ssl_reuse=NO
+EOF
+            bashio::log.info "FTPS (explicit TLS) enabled, mode: ${FTP_TLS_MODE}."
+        elif [ "$FTP_TLS_MODE" = "required" ]; then
+            bashio::exit.nok "ftp_tls=required but no TLS certificate could be created."
+        else
+            bashio::log.warning "Could not create an FTPS certificate: FTP stays unencrypted."
+        fi
+    else
+        bashio::log.warning "ftp_tls=off: FTP passwords and files are sent in clear text."
+    fi
     vsftpd /etc/vsftpd/vsftpd.conf >/dev/null 2>&1 &
 fi
 
@@ -341,6 +432,8 @@ DEVICES_FILE = os.path.join(DATA_DIR, "known_devices.json")
 if not os.path.exists(SECRET_FILE):
     with open(SECRET_FILE, "w") as f:
         f.write(secrets.token_hex(32))
+try: os.chmod(SECRET_FILE, 0o600)
+except Exception: pass
 with open(SECRET_FILE, "r") as f:
     SESSION_SECRET = f.read().strip().encode("utf-8")
 
@@ -482,7 +575,11 @@ def rotate_secret():
     global SESSION_SECRET
     with SESS_LOCK:
         new = secrets.token_hex(32)
-        with open(SECRET_FILE, "w") as f: f.write(new)
+        tmp_secret = SECRET_FILE + ".tmp"
+        with open(tmp_secret, "w") as f: f.write(new)
+        try: os.chmod(tmp_secret, 0o600)
+        except Exception: pass
+        os.replace(tmp_secret, SECRET_FILE)
         SESSION_SECRET = new.encode("utf-8")
         n = len(SESSIONS); SESSIONS.clear(); _sess_save()
         return n
@@ -597,6 +694,10 @@ def safe_resolve(rel_path):
 def dir_size_du(path):
     try: return int(subprocess.check_output(["du", "-sk", path], stderr=subprocess.DEVNULL, timeout=8).decode().split()[0]) * 1024
     except: return 0
+
+def dir_size_bytes(path):
+    try: return int(subprocess.check_output(["du", "-sk", path], stderr=subprocess.DEVNULL, timeout=8).decode().split()[0]) * 1024
+    except: return None
 
 CONFIG_LOCK = threading.Lock()
 
@@ -743,7 +844,7 @@ button:active { transform:scale(.98); }
             is_dir = os.path.isdir(target)
             if not (is_dir or os.path.isfile(target)) or not user_can_read(target): raise FileNotFoundError()
             if is_dir:
-                dsz = dir_size_du(target)
+                dsz = dir_size_bytes(target)
                 if dsz is None or dsz > SHARE_ZIP_MAX:
                     self.share_gone(413, b"Folder is too large to download as a zip."); return
             if not consume_share_use(token): self.share_gone(); return
@@ -825,7 +926,10 @@ button:active { transform:scale(.98); }
             self.send_json({
                 "webdav": True, "smb": bool(cfg.get("smb_enabled", True)), "sftp": bool(cfg.get("sftp_enabled", True)),
                 "ftp": bool(cfg.get("ftp_enabled", True)), "default_user": first_user, "shares": shares,
-                "terminal": TERMINAL_ENABLED, "run_as_root": RUN_AS_ROOT
+                "terminal": TERMINAL_ENABLED, "run_as_root": RUN_AS_ROOT,
+                "lan_ip": os.environ.get("LAN_IP", ""), "public_url": os.environ.get("PUBLIC_URL", ""),
+                "smb_port": int(os.environ.get("SMB_PORT", "445") or 445), "sftp_port": int(os.environ.get("SFTP_PORT", "2222") or 2222),
+                "ftp_port": int(os.environ.get("FTP_PORT", "2121") or 2121), "ext_port": int(os.environ.get("EXT_PORT", "8090") or 8090)
             })
             return
             
@@ -1097,13 +1201,27 @@ python3 /usr/local/bin/wpro_api.py "${API_PORT}" &
 bashio::log.info "Started OmniDrive Pro API & Hybrid Auth Engine on 127.0.0.1:${API_PORT}"
 
 # 10. Nginx Configuration
-REAL_IP_CONF=""
-if [[ "$TRUSTED_PROXIES" != "none" ]]; then
-    REAL_IP_CONF="
+# Ingress: chỉ tin Supervisor (172.30.32.2) để lấy IP thật của client từ X-Forwarded-For
+REAL_IP_CONF_INGRESS="
         set_real_ip_from 172.30.32.2;
-        set_real_ip_from 172.16.0.0/12;
         real_ip_header X-Forwarded-For;
         real_ip_recursive on;"
+# Cổng 8090 (WebDAV / Cloudflare Tunnel / reverse proxy): chỉ tin các proxy khai báo trong 'trusted_proxies'
+REAL_IP_CONF=""
+if [ "${TRUSTED_PROXIES,,}" != "none" ]; then
+    IFS=',' read -ra _TP <<< "$TRUSTED_PROXIES"
+    for _cidr in "${_TP[@]}"; do
+        _cidr="${_cidr// /}"
+        if [[ "$_cidr" =~ ^[0-9a-fA-F:./]+$ ]]; then
+            REAL_IP_CONF+="        set_real_ip_from ${_cidr};"$'\n'
+        elif [ -n "$_cidr" ]; then
+            bashio::log.warning "Ignoring invalid trusted_proxies entry: ${_cidr}"
+        fi
+    done
+    if [ -n "$REAL_IP_CONF" ]; then
+        REAL_IP_CONF+="        real_ip_header X-Forwarded-For;"$'\n'"        real_ip_recursive on;"
+        bashio::log.info "Real client IP enabled for port ${WEBDAV_PORT} (trusted proxies: ${TRUSTED_PROXIES})."
+    fi
 fi
 
 cat <<EOF > "$NGINX_CONF"
@@ -1144,17 +1262,19 @@ http {
 
     server {
         listen 8099;
-        ${REAL_IP_CONF}
+        ${REAL_IP_CONF_INGRESS}
         # allow/deny dùng \$remote_addr (đã bị real_ip đổi thành IP client) nên gây 403.
         # Dùng \$realip_remote_addr = địa chỉ kết nối gốc (Supervisor) để kiểm tra,
         # đồng thời vẫn giữ được IP thật của client trong \$remote_addr / X-Real-IP.
         if (\$realip_remote_addr != "172.30.32.2") { return 403; }
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+        location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
         location /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
         location ^~ /__wpro_api/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; access_log off; }
         location ^~ /s/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; }
         location / {
             root ${ROOT_DIR};
+            index __omnidrive_no_index__;
             ${INDEX_CONFIG}
 ${ROOT_LOCK_RULES}
             dav_methods PUT DELETE MKCOL COPY MOVE;
@@ -1172,6 +1292,7 @@ ${ROOT_LOCK_RULES}
         server_name _;
         ${REAL_IP_CONF}
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+        location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
         location ^~ /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
         location = /__wpro_api/login { limit_req zone=dav_auth_limit burst=15 nodelay; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; access_log off; }
         location = /__wpro_api/logout { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; access_log off; }
@@ -1197,6 +1318,7 @@ ${ROOT_LOCK_RULES}
             auth_request /__wpro_auth_check;
             error_page 401 = @login_or_basic;
             root ${ROOT_DIR};
+            index __omnidrive_no_index__;
             ${INDEX_CONFIG}
 ${ROOT_LOCK_RULES}
             dav_methods PUT DELETE MKCOL COPY MOVE;
