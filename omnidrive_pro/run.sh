@@ -34,6 +34,7 @@ LOG_LEVEL=$(bashio::config 'log_level')
 ROOT_ACCESS=$(bashio::config 'root_access')
 ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
 LOCK_ROOT=$(bashio::config 'lock_root')
+TRUSTED_PROXIES="${TRUSTED_PROXIES:-127.0.0.0/8,172.16.0.0/12}"  # <--- THÊM DÒNG NÀY
 
 export ROOT_ACCESS ENABLE_TERMINAL
 
