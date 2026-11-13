@@ -1,3 +1,6 @@
+## [1.0.33] - 2026-11-13
+- **Maintenance & Improvements:** Add files via upload
+
 ## [1.0.32] - 2026-11-13
 - **Maintenance & Improvements:** Update vi.yaml
 
