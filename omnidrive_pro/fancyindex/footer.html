@@ -1,5 +1,6 @@
 </div>
   <style>
+  @media (min-width:621px){.sys-bar.no-term{grid-template-columns:repeat(4,minmax(0,1fr))}}
   @keyframes popIn{from{opacity:0;transform:scale(.95) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
   @keyframes sheetUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
   body.grid-mode #list tbody{background:transparent;border:0;border-radius:0;box-shadow:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(114px,1fr));gap:12px}
@@ -235,7 +236,7 @@
   .legend-dot{width:11px;height:11px;border-radius:3px;flex:none}
 
   .ios-sec-head{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 8px;gap:8px}
-  .ios-sec-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .ios-sec-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}
   .ios-group-card{background:rgba(38,44,58,.52);border:1px solid rgba(255,255,255,.09);border-radius:15px;overflow:hidden;margin-bottom:16px}
   .ios-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:.5px solid var(--sep);min-width:0}
   .ios-row:last-child{border-bottom:0}
@@ -248,7 +249,7 @@
 
   .badge-m{padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;flex:none;white-space:nowrap;font-family:"SF Mono",monospace}
   .badge-PUT,.badge-SNAPSHOT,.badge-SHARE_CREATE,.badge-MKCOL,.badge-WEB_LOGIN{background:rgba(48,209,88,.18);color:#30d158}
-  .badge-DELETE,.badge-SHARE_REVOKE,.badge-LOGIN_FAIL{background:rgba(255,69,58,.18);color:#ff453a}
+  .badge-DELETE,.badge-SHARE_REVOKE,.badge-LOGIN_FAIL,.badge-SHARE_PW_FAIL{background:rgba(255,69,58,.18);color:#ff453a}
   .badge-GET,.badge-SHARE_DL,.badge-COPY,.badge-MOVE,.badge-TERM_CMD{background:rgba(10,132,255,.18);color:#58a6ff}
   .term-frame{width:100%;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:#000;overflow:hidden}
   .empty{display:none;text-align:center;padding:42px 20px;color:var(--muted);font-size:15px}
@@ -262,6 +263,28 @@
     opacity:0;pointer-events:none;transition:all .22s ease;z-index:260;box-shadow:0 10px 28px rgba(0,0,0,.6);white-space:nowrap;
   }
   .toast.show{opacity:1;transform:translateY(0)}
+
+  /* CSS mới cho nút Change Password và cân chỉnh tiêu đề */
+  .cp-btn-danger {
+    width: 100%;
+    padding: 14px;
+    background: rgba(255,69,58,.12);
+    border: 1px solid rgba(255,69,58,.5);
+    border-radius: 15px;
+    color: var(--red);
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(255,69,58,.2);
+    transition: all 0.2s;
+    margin-top: 16px;
+  }
+  .cp-btn-danger:active {
+    transform: scale(0.98);
+    background: rgba(255,69,58,.2);
+    box-shadow: 0 0 20px rgba(255,69,58,.4);
+  }
   </style>
 
   <div id="empty" class="empty">No matching items found</div>
@@ -423,6 +446,19 @@
 </div>
 <script>
 (function () {
+  // CSRF protection: every state-changing API call carries a custom header. Browsers cannot send a
+  // custom header cross-origin without a CORS preflight, which the server never approves.
+  (function () {
+    var _fetch = window.fetch;
+    window.fetch = function (url, opts) {
+      try {
+        if (opts && /^POST$/i.test(opts.method || '') && String(url).indexOf('/__wpro_api/') !== -1) {
+          opts.headers = Object.assign({}, opts.headers || {}, { 'X-WPro-CSRF': '1' });
+        }
+      } catch (e) {}
+      return _fetch.call(this, url, opts);
+    };
+  })();
   var GL = {
     img:'<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/>',
     vid:'<rect x="3" y="6.5" width="12.5" height="11" rx="2.5"/><path d="M15.5 10.5l5-3v9l-5-3z"/>',
@@ -466,7 +502,38 @@
     var t = (m && MAP[m[1].toLowerCase()]) || ['file', 'doc'];
     return '<span class="ic t-' + t[0] + '"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + GL[t[1]] + '</svg></span>';
   }
-  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  // Escape for BOTH text and attribute contexts (quotes included) to prevent XSS via file names.
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+  // Safe storage wrappers: never throw when storage is blocked (private mode / blocked cookies).
+  function lsGet(k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
+  function ssDel(k) { try { sessionStorage.removeItem(k); } catch (e) {} }
+  // Safe Markdown rendering: always sanitized, never raw HTML from user files.
+  function renderMarkdownSafe(raw) {
+    if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(raw));
+    return '<pre>' + esc(raw) + '</pre>';
+  }
+  var MAX_EDIT_BYTES = 5 * 1024 * 1024, MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
+  function headSize(url) {
+    return fetch(url, { method: 'HEAD', credentials: 'same-origin' }).then(function (r) {
+      var n = parseInt(r.headers.get('Content-Length') || '0', 10);
+      return isNaN(n) ? 0 : n;
+    }).catch(function () { return 0; });
+  }
+  function validName(n) {
+    n = (n || '').trim();
+    return !!n && n !== '.' && n !== '..' && n.indexOf('/') === -1 && n.indexOf('\\') === -1;
+  }
+  // Files created directly at Root are NOT persistent (Root is rebuilt on every container start).
+  function requireFolder() {
+    if (typeof segs !== 'undefined' && !segs.length) {
+      showToast('Open a folder first — files at Root are not saved');
+      return false;
+    }
+    return true;
+  }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function up(n) { return n > 0 ? new Array(n + 1).join('../') : './'; }
   function fmtBytes(b) {
@@ -623,7 +690,17 @@
     return location.pathname.replace(/\/?$/, '/') + cleanRel;
   }
   function apiUrl(endpoint) { return ingressPrefix + '/__wpro_api/' + endpoint; }
-  function buildDestinationHeader(targetInternalPath) { return location.origin + targetInternalPath; }
+  // Gửi Destination dạng đường dẫn tuyệt đối (bắt đầu bằng "/"): nginx dav chấp nhận và
+  // không so khớp host nên không lỗi 502 khi chạy sau Cloudflare Tunnel / reverse proxy.
+  function buildDestinationHeader(targetInternalPath) { return targetInternalPath; }
+  function reportDavError(label, r) {
+    var st = r && r.status ? r.status : 0, why = '';
+    if (st === 412) why = ' — a file with that name already exists';
+    else if (st === 409) why = ' — target folder does not exist or is read-only';
+    else if (st === 403 || st === 401) why = ' — permission denied';
+    else if (st === 502 || st === 504) why = ' — check your reverse proxy';
+    showToast(label + ' failed (' + (st || 'network') + ')' + why);
+  }
 
   // 3. Tiêu đề, Back & Breadcrumbs
   document.getElementById('title').textContent = segs.length ? segs[segs.length - 1] : 'OmniDrive Pro';
@@ -761,7 +838,7 @@
   var minimapWrap = document.getElementById('minimapWrap'), minimapCanvas = document.getElementById('minimapCanvas'), minimapVp = document.getElementById('minimapVp');
   var aceEditor = null, currentEditUrl = '', currentExt = '', isMarkdownFile = false, mdPreviewActive = false, minimapEnabled = true;
   var originalContent = '', isDirty = false, isLoadingContent = false;
-  var editorFontSize = parseInt(localStorage.getItem('wpro_fsize') || '14', 10);
+  var editorFontSize = parseInt(lsGet('wpro_fsize', '14'), 10) || 14;
 
   function updateDirtyState() {
     if (isLoadingContent || !currentEditUrl) return;
@@ -857,7 +934,7 @@
 
   function initAce() {
     if (aceEditor || !window.ace) return;
-    ace.config.set('basePath', 'https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/');
+    ace.config.set('basePath', ingressPrefix + '/.fancyindex/vendor/ace/');
     aceEditor = ace.edit('aceContainer');
     aceEditor.setTheme('ace/theme/one_dark');
     aceEditor.setOptions({
@@ -911,6 +988,8 @@
   function setEditorContent(val, ext) {
     isLoadingContent = true;
     initAce();
+    edArea.readOnly = false;
+    if (aceEditor) aceEditor.setReadOnly(false);
     if (aceEditor) {
       aceContainer.style.display = 'block'; edArea.style.display = 'none';
       minimapWrap.classList.toggle('show', minimapEnabled);
@@ -938,7 +1017,7 @@
     edMdToggle.textContent = mdPreviewActive ? 'Edit Code' : 'Preview';
     if (mdPreviewActive) {
       var rawMd = getEditorContent();
-      mdView.innerHTML = window.marked ? marked.parse(rawMd) : '<pre>' + esc(rawMd) + '</pre>';
+      mdView.innerHTML = renderMarkdownSafe(rawMd);
       mdView.style.display = 'block'; aceContainer.style.display = 'none'; minimapWrap.classList.remove('show'); edArea.style.display = 'none';
     } else {
       mdView.style.display = 'none';
@@ -980,10 +1059,10 @@
       '<div style="overflow:auto;max-width:100%;max-height:78vh;display:grid;place-items:center"><canvas id="pdfCanvas"></canvas></div>';
 
     if (!window.pdfjsLib) {
-      edPreview.innerHTML = '<iframe src="' + fullUrl + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
+      edPreview.innerHTML = '<iframe src="' + esc(fullUrl) + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
       return;
     }
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = ingressPrefix + '/.fancyindex/vendor/pdf.worker.min.js';
     var pdfDoc = null, pageNum = 1, scale = 1.35;
     var canvas = document.getElementById('pdfCanvas'), ctx = canvas.getContext('2d'), info = document.getElementById('pdfPageInfo');
 
@@ -998,7 +1077,7 @@
     pdfjsLib.getDocument(fullUrl).promise.then(function (doc) {
       pdfDoc = doc; renderPage(pageNum);
     }).catch(function () {
-      edPreview.innerHTML = '<iframe src="' + fullUrl + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
+      edPreview.innerHTML = '<iframe src="' + esc(fullUrl) + '" style="width:100%;height:82vh;border:0;border-radius:8px;background:#fff"></iframe>';
     });
 
     document.getElementById('pdfPrev').addEventListener('click', function () { if (pdfDoc && pageNum > 1) { pageNum--; renderPage(pageNum); } });
@@ -1052,7 +1131,11 @@
     edSubbar.style.display = 'none'; edSave.style.display = 'none'; edMdToggle.style.display = 'none'; yamlAlert.classList.remove('show');
     edPreview.style.display = 'flex'; edPreview.innerHTML = '<div style="color:#8b949e">Reading archive contents...</div>';
 
-    fetch(buildWebdavUrl(href), { credentials: 'same-origin' }).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+    var archUrl = buildWebdavUrl(href);
+    headSize(archUrl).then(function (size) {
+      if (size > MAX_ARCHIVE_BYTES) throw new Error('archive is ' + fmtBytes(size) + ' — too large to inspect in the browser, download it instead');
+      return fetch(archUrl, { credentials: 'same-origin' });
+    }).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
       if (ext === 'zip' && window.JSZip) {
         return JSZip.loadAsync(buf).then(function (zip) {
           var items = [];
@@ -1085,15 +1168,15 @@
     edPreview.style.display = 'flex';
     var fullUrl = buildWebdavUrl(href);
     if (type === 'img') {
-      edPreview.innerHTML = '<img src="' + fullUrl + '" alt="' + esc(label) + '">';
+      edPreview.innerHTML = '<img src="' + esc(fullUrl) + '" alt="' + esc(label) + '">';
       return;
     }
     var mediaBox = type === 'vid'
-      ? '<video id="proMediaEl" src="' + fullUrl + '" controls autoplay playsinline></video>'
+      ? '<video id="proMediaEl" src="' + esc(fullUrl) + '" controls autoplay playsinline></video>'
       : '<div class="ios-player-card">' +
           '<div class="ios-art-big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>' +
           '<div class="ios-track-title">' + esc(label) + '</div>' +
-          '<audio id="proMediaEl" src="' + fullUrl + '" controls autoplay></audio>' +
+          '<audio id="proMediaEl" src="' + esc(fullUrl) + '" controls autoplay></audio>' +
         '</div>';
 
     var speedBtns = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map(function (s) {
@@ -1151,6 +1234,7 @@
       return;
     }
 
+    function loadEditorText() {
     var sep = currentEditUrl.indexOf('?') === -1 ? '?' : '&';
     fetch(currentEditUrl + sep + '_ts=' + Date.now(), {
       cache: 'no-store',
@@ -1162,6 +1246,27 @@
     }).then(function (txt) {
       edSave.disabled = false;
       setEditorContent(txt, ext);
+      // Binary guard: decoding binary data as UTF-8 is lossy, so saving would corrupt the file.
+      if (txt.indexOf('\u0000') !== -1 || txt.indexOf('�') !== -1) {
+        edSave.disabled = true; edArea.readOnly = true;
+        if (aceEditor) aceEditor.setReadOnly(true);
+        edStatus.textContent = 'Binary file • read-only';
+        showIosDialog({
+          type: 'warn',
+          title: 'Binary File Detected',
+          message: '<b>' + esc(label) + '</b> does not look like a text file. Saving it from the text editor would corrupt it, so it was opened read-only.',
+          buttons: [
+            { label: 'Hex Inspector', role: 'primary', onClick: function () { openHexViewer(label, href); } },
+            { label: 'Edit Anyway (risky)', role: 'danger', onClick: function () {
+              edSave.disabled = false; edArea.readOnly = false;
+              if (aceEditor) aceEditor.setReadOnly(false);
+              edStatus.textContent = 'Editing binary — save at your own risk';
+            }},
+            { label: 'Close', role: 'cancel', onClick: function () { forceCloseEditor(); } }
+          ]
+        });
+        return;
+      }
       var lineCount = txt ? txt.split('\n').length : 1;
       edStatus.textContent = 'UTF-8 • ' + lineCount + (lineCount === 1 ? ' line' : ' lines') + (txt === '' ? ' (Empty file)' : '');
       if (isMarkdownFile && txt.trim().length > 0) toggleMarkdownPreview(true);
@@ -1177,6 +1282,25 @@
           { label: 'Close Editor', role: 'cancel', onClick: function () { forceCloseEditor(); } }
         ]
       });
+    });
+    }
+
+    // Size guard: huge files freeze the browser tab and risk data loss on save.
+    headSize(currentEditUrl).then(function (size) {
+      if (size > MAX_EDIT_BYTES) {
+        edSave.disabled = true; edStatus.textContent = 'Too large to edit';
+        showIosDialog({
+          type: 'warn',
+          title: 'File Too Large to Edit',
+          message: '<b>' + esc(label) + '</b> is ' + fmtBytes(size) + '. Editing files over ' + fmtBytes(MAX_EDIT_BYTES) + ' in the browser can freeze the page or corrupt the file.',
+          buttons: [
+            { label: 'Hex Inspector', role: 'primary', onClick: function () { openHexViewer(label, href); } },
+            { label: 'Close', role: 'cancel', onClick: function () { forceCloseEditor(); } }
+          ]
+        });
+        return;
+      }
+      loadEditorText();
     });
   }
 
@@ -1283,13 +1407,13 @@
   document.getElementById('edComment').addEventListener('click', function () { if (aceEditor) aceEditor.toggleCommentLines(); });
   document.getElementById('edFontUp').addEventListener('click', function () {
     editorFontSize = Math.min(24, editorFontSize + 1);
-    localStorage.setItem('wpro_fsize', editorFontSize);
+    lsSet('wpro_fsize', editorFontSize);
     if (aceEditor) aceEditor.setFontSize(editorFontSize + 'px');
     showToast('Font size: ' + editorFontSize + 'px');
   });
   document.getElementById('edFontDown').addEventListener('click', function () {
     editorFontSize = Math.max(10, editorFontSize - 1);
-    localStorage.setItem('wpro_fsize', editorFontSize);
+    lsSet('wpro_fsize', editorFontSize);
     if (aceEditor) aceEditor.setFontSize(editorFontSize + 'px');
     showToast('Font size: ' + editorFontSize + 'px');
   });
@@ -1425,69 +1549,140 @@
 
   // 7C. Quick Snapshot / Backup to Zip
   document.getElementById('btnSysSnap').addEventListener('click', function () {
-    openSuiteModal(IC_SNAP + '<span>Quick Snapshot to Zip</span>',
-      '<p style="margin:0 0 12px;color:var(--muted);font-size:13.5px;line-height:1.45">Create an instant <code>.zip</code> backup directly inside your <code>/backup</code> folder before editing configuration files.</p>' +
-      '<div class="snap-stack">' +
-        '<button id="btnSnapConfig" class="snap-card primary" type="button">' +
+    var isHA = !!ingressPrefix; // Tự động nhận biết môi trường
+    var htmlContent = '<p style="margin:0 0 12px;color:var(--muted);font-size:13.5px;line-height:1.45">Create an instant <code>.zip</code> backup directly inside your <code>/backup</code> folder.</p><div class="snap-stack">';
+
+    if (isHA) {
+      htmlContent += 
+        '<button class="snap-card primary" data-target="config" type="button">' +
           '<div class="snap-ic">' + IC_SNAP + '</div>' +
           '<div class="snap-txt"><b>Backup Entire /config Folder</b><span>Compresses all YAML, custom_components &amp; storage (excludes heavy DB/logs)</span></div>' +
         '</button>' +
-        '<button id="btnSnapAuto" class="snap-card" type="button">' +
+        '<button class="snap-card" data-target="automations" type="button">' +
           '<div class="snap-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg></div>' +
           '<div class="snap-txt"><b>Backup Automations &amp; Scripts Only</b><span>Fast lightweight snapshot of automations, scripts, scenes &amp; packages</span></div>' +
+        '</button>';
+    } else {
+      htmlContent += 
+        '<button class="snap-card primary" data-target="storage" type="button">' +
+          '<div class="snap-ic">' + IC_SNAP + '</div>' +
+          '<div class="snap-txt"><b>Backup Entire Storage Folder</b><span>Compresses all files in the /storage directory</span></div>' +
         '</button>' +
+        '<button class="snap-card" data-target="current" type="button">' +
+          '<div class="snap-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>' +
+          '<div class="snap-txt"><b>Backup Current Directory</b><span>Compresses only the folder you are currently viewing: ' + esc(p) + '</span></div>' +
+        '</button>';
+    }
+
+    // Thêm khung trạng thái và 2 nút Cancel / Start Backup
+    htmlContent += 
       '</div>' +
-      '<div id="snapStatus" style="padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.38);border:1px solid rgba(255,255,255,.08);font-family:monospace;font-size:12.5px;color:var(--muted);word-break:break-word">Ready to create snapshot.</div>'
-    );
+      '<div id="snapStatus" style="padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.38);border:1px solid rgba(255,255,255,.08);font-family:monospace;font-size:12.5px;color:var(--muted);word-break:break-word;margin-bottom:14px">Ready to create snapshot.</div>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button id="snapBtnCancel" class="act-btn" type="button" style="flex:1"><span>Cancel</span></button>' +
+        '<button id="snapBtnCreate" class="act-btn" type="button" style="flex:1;background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 6px 20px rgba(10,132,255,.38);font-weight:600"><span>Start Backup</span></button>' +
+      '</div>';
+
+    openSuiteModal(IC_SNAP + '<span>Quick Snapshot to Zip</span>', htmlContent);
+
+    var selectedTarget = isHA ? 'config' : 'storage';
+    var cards = [].slice.call(suiteBody.querySelectorAll('.snap-card'));
+
+    // Xử lý khi click chọn thẻ Card
+    cards.forEach(function(card) {
+      card.addEventListener('click', function() {
+        cards.forEach(function(c) { c.classList.remove('primary'); });
+        this.classList.add('primary');
+        selectedTarget = this.getAttribute('data-target');
+        var st = document.getElementById('snapStatus');
+        st.style.color = 'var(--muted)';
+        st.textContent = 'Selected: ' + selectedTarget.toUpperCase() + '. Ready to backup.';
+      });
+    });
+
+    // Nút Hủy
+    document.getElementById('snapBtnCancel').addEventListener('click', function() {
+      document.getElementById('suiteClose').click();
+    });
+
+    // Nút Bắt đầu Backup (Hiển thị bảng xác nhận)
+    document.getElementById('snapBtnCreate').addEventListener('click', function() {
+      var targetName = selectedTarget === 'config' ? '/config Folder' :
+                       selectedTarget === 'automations' ? 'Automations & Scripts' :
+                       selectedTarget === 'storage' ? '/storage Folder' :
+                       'Current Directory (' + p + ')';
+      
+      showIosDialog({
+        type: 'warn',
+        title: 'Confirm Snapshot',
+        message: 'Are you sure you want to compress <b>' + targetName + '</b>? This might take a while depending on the size.',
+        buttons: [
+          { label: 'Start Backup', role: 'primary', onClick: function () { triggerSnap(selectedTarget); } },
+          { label: 'Cancel', role: 'cancel' }
+        ]
+      });
+    });
+
     function triggerSnap(target) {
       var st = document.getElementById('snapStatus');
       st.style.color = '#58a6ff';
       st.textContent = 'Compressing files into /backup ... Please wait...';
-      fetch(apiUrl('snapshot'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: target }) })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-          if (!res.ok) throw new Error(res.error || 'Snapshot failed');
-          st.style.color = '#30d158';
-          st.innerHTML = '✓ Snapshot saved: <b>' + esc(res.path) + '</b> (' + res.size_kb + ' KB)';
-          showToast('Saved to ' + res.path);
-        }).catch(function (e) {
-          st.style.color = 'var(--red)';
-          st.textContent = 'Error: ' + e.message;
-        });
+      
+      fetch(apiUrl('snapshot'), { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ target: target, cwd: p }) 
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.error || 'Snapshot failed');
+        st.style.color = '#30d158';
+        st.innerHTML = '✓ Snapshot saved: <b>' + esc(res.path) + '</b> (' + res.size_kb + ' KB)';
+        showToast('Saved to ' + res.path);
+      }).catch(function (e) {
+        st.style.color = 'var(--red)';
+        st.textContent = 'Error: ' + e.message;
+      });
     }
-    document.getElementById('btnSnapConfig').addEventListener('click', function () { triggerSnap('config'); });
-    document.getElementById('btnSnapAuto').addEventListener('click', function () { triggerSnap('automations'); });
   });
 
   // 7D. Multi-Protocol Connect Hub
   document.getElementById('btnSysConnect').addEventListener('click', function () {
     openSuiteModal(IC_GLOBE + '<span>Multi-Protocol Connect Hub</span>', '<div style="text-align:center;padding:24px;color:var(--muted)">Loading active protocols...</div>');
     fetch(apiUrl('protocols')).then(function (r) { return r.json(); }).then(function (info) {
-      var host = location.hostname || 'homeassistant.local';
-      var webdavUrl = ingressPrefix ? (location.protocol + '//' + host + ':8090/') : (location.origin + '/');
-      var smbUrl = 'smb://' + host + '/OmniDrive';
-      var winUnc = '\\\\' + host + '\\OmniDrive';
-      var sftpUrl = 'sftp://' + (info.default_user || 'admin') + '@' + host + ':2222/';
-      var ftpUrl = 'ftp://' + (info.default_user || 'admin') + '@' + host + ':2121/';
+      var webHost = location.hostname || 'localhost';
+      var lanHost = info.lan_ip || webHost;
+      var smbPort = info.smb_port || 445;
+      var sftpPort = info.sftp_port || 2222;
+      var ftpPort = info.ftp_port || 2121;
+      var extPort = info.ext_port || 8090;
+      var user = info.default_user || 'admin';
+
+      var webdavUrl = ingressPrefix ? (location.protocol + '//' + lanHost + ':' + extPort + '/') : (location.origin + '/');
+      var smbPortStr = (smbPort && smbPort !== 445) ? (':' + smbPort) : '';
+      var smbUrl = 'smb://' + lanHost + smbPortStr + '/OmniDrive';
+      var winUnc = '\\\\' + lanHost + (smbPort !== 445 ? ('@' + smbPort) : '') + '\\OmniDrive';
+      var sftpUrl = 'sftp://' + user + '@' + lanHost + ':' + sftpPort + '/';
+      var ftpUrl = 'ftp://' + user + '@' + lanHost + ':' + ftpPort + '/';
 
       suiteBody.innerHTML =
-        '<p style="margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.45">Tap any protocol card below to copy its connection address. All protocols share your same <b>users</b> credentials.</p>' +
+        '<p style="margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.45">Tap any protocol card below to copy its connection address. Direct TCP protocols (SMB/SFTP/FTP) use your LAN/Tailscale IP (<b>' + esc(lanHost) + '</b>), while WebDAV works over both LAN and Cloudflare Tunnel.</p>' +
         '<div class="snap-stack">' +
           '<button class="snap-card primary proto-copy" data-copy="' + esc(smbUrl) + '" type="button">' +
             '<div class="snap-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>' +
-            '<div class="snap-txt"><b>SMB / Samba • Port 445 (' + (info.smb ? 'Active' : 'Disabled') + ')</b><span>iOS Files ("Connect to Server"), macOS Finder &amp; Infuse: <code>' + esc(smbUrl) + '</code><br>Windows Explorer: <code>' + esc(winUnc) + '</code></span></div>' +
+            '<div class="snap-txt"><b>SMB / Samba • Port ' + esc(smbPort) + ' (' + (info.smb ? 'Active' : 'Disabled') + ')</b><span>macOS Finder, FE File Explorer &amp; Infuse: <code>' + esc(smbUrl) + '</code><br>Windows Explorer: <code>' + esc(winUnc) + '</code></span></div>' +
           '</button>' +
           '<button class="snap-card proto-copy" data-copy="' + esc(sftpUrl) + '" type="button">' +
             '<div class="snap-ic">' + IC_TERM + '</div>' +
-            '<div class="snap-txt"><b>SFTP (SSH File Transfer) • Port 2222 (' + (info.sftp ? 'Active' : 'Disabled') + ')</b><span>Termius, Cyberduck, FileZilla, FE File Explorer: <code>' + esc(sftpUrl) + '</code></span></div>' +
+            '<div class="snap-txt"><b>SFTP (SSH File Transfer) • Port ' + esc(sftpPort) + ' (' + (info.sftp ? 'Active' : 'Disabled') + ')</b><span>Termius, Cyberduck, FileZilla, FE File Explorer: <code>' + esc(sftpUrl) + '</code></span></div>' +
           '</button>' +
           '<button class="snap-card proto-copy" data-copy="' + esc(ftpUrl) + '" type="button">' +
             '<div class="snap-ic">' + IC_SHARE + '</div>' +
-            '<div class="snap-txt"><b>FTP Server • Port 2121 (' + (info.ftp ? 'Active' : 'Disabled') + ')</b><span>Standard FTP Clients &amp; Network Scanners: <code>' + esc(ftpUrl) + '</code></span></div>' +
+            '<div class="snap-txt"><b>FTP Server • Port ' + esc(ftpPort) + ' (' + (info.ftp ? 'Active' : 'Disabled') + ')</b><span>Standard FTP Clients &amp; Network Scanners: <code>' + esc(ftpUrl) + '</code></span></div>' +
           '</button>' +
           '<button class="snap-card proto-copy" data-copy="' + esc(webdavUrl) + '" type="button">' +
             '<div class="snap-ic">' + IC_GLOBE + '</div>' +
-            '<div class="snap-txt"><b>WebDAV / HTTPS • Port 8090 (Active)</b><span>Cloudflare Tunnel &amp; WebDAV Clients: <code>' + esc(webdavUrl) + '</code></span></div>' +
+            '<div class="snap-txt"><b>WebDAV / HTTPS • Remote &amp; LAN (Active)</b><span>Cloudflare Tunnel &amp; WebDAV Clients: <code>' + esc(webdavUrl) + '</code></span></div>' +
           '</button>' +
         '</div>';
 
@@ -1501,14 +1696,99 @@
     });
   });
 
-  // 7E. Audit Log & Active Share Links Manager
+  // 7E. Signed-in devices, Audit Log & Active Share Links Manager
+  function deviceLabel(ua) {
+    ua = ua || '';
+    var os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' :
+             /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : 'Unknown device';
+    var br = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) || /CriOS/.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+    return os + (br ? ' \u2022 ' + br : '');
+  }
+  function agoText(ts) {
+    var d = Math.max(0, Math.round(Date.now() / 1000 - (ts || 0)));
+    if (d < 60) return 'just now';
+    if (d < 3600) return Math.floor(d / 60) + 'm ago';
+    if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+    return Math.floor(d / 86400) + 'd ago';
+  }
+  // New-device alert: popup ONLY when a device that never signed in before has logged in
+  // and nobody has confirmed it yet. Nothing is shown in the normal case.
+  var newDevAsked = {};
+  function checkNewDevices() {
+    if (document.hidden) return;
+    var mask = document.getElementById('iosDialogMask');
+    if (mask && mask.classList.contains('show')) return;
+    fetch(apiUrl('sessions'), { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (res) {
+      if (!res || !res.sessions) return;
+      var x = null;
+      for (var i = 0; i < res.sessions.length; i++) {
+        var s = res.sessions[i];
+        if (s.new && !s.ack && !s.current && !newDevAsked[s.sid]) { x = s; break; }
+      }
+      if (!x) return;
+      newDevAsked[x.sid] = true;
+      var post = function (route, body) {
+        return fetch(apiUrl(route), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+      };
+      showIosDialog({
+        type: 'danger',
+        title: 'New device signed in',
+        message: '<b>' + esc(deviceLabel(x.ua)) + '</b> signed in as <b>' + esc(x.user) + '</b> from IP <b>' + esc(x.ip || '?') + '</b> ' + esc(agoText(x.created)) + '.<br>This kind of device has never signed in before. Was it you?',
+        buttons: [
+          { label: 'Not me \u2013 sign it out', role: 'danger', onClick: function () {
+            post('session_revoke', { sid: x.sid }).then(function () { showToast('Device signed out'); });
+          }},
+          { label: "It's me", role: 'primary', onClick: function () {
+            post('session_ack', { sid: x.sid }).then(function () { showToast('Marked as trusted'); });
+          }}
+        ]
+      });
+    }).catch(function () {});
+  }
+  setTimeout(checkNewDevices, 2500);
+  setInterval(checkNewDevices, 60000);
+
+  function openChangePasswordModal() {
+    var lbl = 'display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em';
+    var inp = 'display:block;width:100%;height:42px;margin:5px 0 12px;border-radius:11px;border:1px solid var(--glass-border);background:rgba(0,0,0,.35);color:var(--text);padding:0 12px;font-size:16px;box-sizing:border-box';
+    openSuiteModal(IC_SHIELD + '<span>Change Password</span>',
+      '<p style="margin:0 0 12px;color:var(--muted);font-size:13.5px;line-height:1.45">The new password is hashed immediately and also applied to SMB, SFTP and FTP. Your other devices are signed out.</p>' +
+      '<label style="' + lbl + '">Current password<input id="cpOld" type="password" autocomplete="current-password" maxlength="128" style="' + inp + '"></label>' +
+      '<label style="' + lbl + '">New password (min. 8 characters)<input id="cpNew" type="password" autocomplete="new-password" maxlength="128" style="' + inp + '"></label>' +
+      '<label style="' + lbl + '">Repeat new password<input id="cpNew2" type="password" autocomplete="new-password" maxlength="128" style="' + inp + '"></label>' +
+      '<div id="cpMsg" style="min-height:18px;margin:-2px 0 12px;font-size:13px;color:var(--muted)"></div>' +
+      '<button id="cpGo" class="act-btn primary" type="button" style="width:100%"><span>Change Password</span></button>');
+    var msg = document.getElementById('cpMsg');
+    function fail(t) { msg.style.color = 'var(--red)'; msg.textContent = t; }
+    document.getElementById('cpGo').addEventListener('click', function () {
+      var o = document.getElementById('cpOld').value, n = document.getElementById('cpNew').value, n2 = document.getElementById('cpNew2').value;
+      if (!o) return fail('Enter your current password.');
+      if (n.length < 8) return fail('The new password needs at least 8 characters.');
+      if (n !== n2) return fail('The two new passwords do not match.');
+      msg.style.color = 'var(--muted)'; msg.textContent = 'Changing Password...';
+      fetch(apiUrl('change_password'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ old: o, new: n }) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) return fail(res.error || 'Failed');
+          if (res.env_override || (res.warnings && res.warnings.length)) {
+            msg.style.color = 'var(--text)';
+            msg.innerHTML = 'Password Changed.' +
+              (res.env_override ? '<br><b>Warning:</b> <code>OMNI_PASS</code> is still set in your compose file and will overwrite this password at the next restart. Remove it.' : '') +
+              (res.warnings && res.warnings.length ? '<br><b>Warning:</b> ' + esc(res.warnings.join('; ')) : '');
+          } else { showToast('Password Changed'); openAuditAndSharesModal(); }
+        }).catch(function () { fail('Network Error'); });
+    });
+  }
+
   function openAuditAndSharesModal() {
-    openSuiteModal(IC_SHIELD + '<span>Security Audit &amp; Share Links</span>', '<div style="text-align:center;padding:24px;color:var(--muted)">Loading security records...</div>');
+    openSuiteModal(IC_SHIELD + '<span>Security: Devices, Shares &amp; Audit</span>', '<div style="text-align:center;padding:24px;color:var(--muted)">Loading security records...</div>');
     Promise.all([
       fetch(apiUrl('shares')).then(function (r) { return r.json(); }),
-      fetch(apiUrl('audit?limit=120')).then(function (r) { return r.json(); })
+      fetch(apiUrl('audit?limit=120')).then(function (r) { return r.json(); }),
+      fetch(apiUrl('sessions')).then(function (r) { return r.json(); }).catch(function () { return { sessions: [] }; })
     ]).then(function (results) {
       var shares = (results[0] && results[0].shares) || [];
+      var sessions = (results[2] && results[2].sessions) || [];
       var logs = (results[1] && results[1].logs) || [];
 
       var sharesRows = shares.length ? shares.map(function (s) {
@@ -1522,7 +1802,7 @@
               '<span class="badge-m badge-SHARE_CREATE">' + esc(timeStr) + '</span>' +
               '<span class="ios-row-title">' + esc(s.name) + '</span>' +
             '</div>' +
-            '<div class="ios-row-sub">' + esc(s.path) + '</div>' +
+            '<div class="ios-row-sub">' + esc(s.path) + ' \u2022 ' + (s.max_uses ? (s.uses || 0) + '/' + s.max_uses + ' downloads' : (s.uses || 0) + ' downloads') + (s.has_password ? ' \u2022 \uD83D\uDD12 password' : '') + '</div>' +
           '</div>' +
           '<button class="ios-row-more share-opt-btn" data-name="' + esc(s.name) + '" data-tok="' + esc(s.token) + '" data-ext="' + esc(extUrl) + '" data-ing="' + esc(ingUrl) + '" type="button" title="Share Link Options">' + MORE_DOTS_SVG + '</button>' +
         '</div>';
@@ -1542,7 +1822,31 @@
         '</div>';
       }).join('') : '<div class="ios-row"><div class="ios-row-sub" style="padding:4px 0">No file modifications or downloads recorded yet.</div></div>';
 
+      var X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+      var sessRows = sessions.length ? sessions.map(function (x) {
+        var where = (x.last_ip && x.last_ip !== x.ip) ? esc(x.last_ip) + ' (login: ' + esc(x.ip || '?') + ')' : esc(x.ip || '?');
+        return '<div class="ios-row">' +
+          '<div class="ios-row-main">' +
+            '<div class="ios-row-top">' +
+              (x.current ? '<span class="badge-m badge-SHARE_CREATE">This device</span>' : '') +
+              (x.new ? '<span class="badge-m" style="background:rgba(255,159,10,.18);color:#ff9f0a;border:1px solid rgba(255,159,10,.35)">NEW DEVICE</span>' : '') +
+              '<span class="ios-row-title">' + esc(deviceLabel(x.ua)) + '</span>' +
+            '</div>' +
+            '<div class="ios-row-sub">' + esc(x.user) + ' \u2022 ' + where + ' \u2022 active ' + esc(agoText(x.last_seen)) + '</div>' +
+          '</div>' +
+          '<button class="ios-row-more sess-revoke-btn" data-sid="' + esc(x.sid) + '" data-cur="' + (x.current ? '1' : '0') + '" data-label="' + esc(deviceLabel(x.ua)) + '" type="button" title="Sign out this device" style="color:var(--red)">' + X_SVG + '</button>' +
+        '</div>';
+      }).join('') : '<div class="ios-row"><div class="ios-row-sub" style="padding:4px 0">No tracked web sessions. (Logins from WebDAV / file apps using Basic Auth are not listed here.)</div></div>';
+
       suiteBody.innerHTML =
+        '<div class="ios-sec-head">' +
+          '<span class="ios-sec-title">Signed-in Devices (' + sessions.length + ')</span>' +
+          '<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">' +
+            (sessions.length > 1 ? '<button id="btnSignOutOthers" class="ed-chip" style="color:var(--red);border-color:rgba(255,69,58,.3)" type="button">Sign out others</button>' : '') +
+            '<button id="btnRotateKey" class="ed-chip" style="color:var(--red);border-color:rgba(255,69,58,.3)" type="button">Sign Out All &amp; Rotate Key</button>' +
+          '</span>' +
+        '</div>' +
+        '<div class="ios-group-card">' + sessRows + '</div>' +
         '<div class="ios-sec-head">' +
           '<span class="ios-sec-title">Active Expiry Share Links (' + shares.length + ')</span>' +
         '</div>' +
@@ -1551,7 +1855,8 @@
           '<span class="ios-sec-title">Recent Security Audit Log</span>' +
           '<button id="btnClearAudit" class="ed-chip" style="color:var(--red);border-color:rgba(255,69,58,.3)" type="button">Clear Log</button>' +
         '</div>' +
-        '<div class="ios-group-card" style="max-height:300px;overflow-y:auto;margin-bottom:0">' + logsRows + '</div>';
+        '<div class="ios-group-card" style="max-height:300px;overflow-y:auto;margin-bottom:0">' + logsRows + '</div>' +
+        '<button id="btnChangePw" class="cp-btn-danger" type="button">Change Password</button>';
 
       [].slice.call(suiteBody.querySelectorAll('.share-opt-btn')).forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -1560,6 +1865,64 @@
           var extU = this.getAttribute('data-ext');
           var ingU = this.getAttribute('data-ing');
           openShareItemOptionsModal(name, tok, extU, ingU);
+        });
+      });
+
+      [].slice.call(suiteBody.querySelectorAll('.sess-revoke-btn')).forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var sid = this.getAttribute('data-sid'), cur = this.getAttribute('data-cur') === '1', label = this.getAttribute('data-label');
+          showIosDialog({
+            type: 'danger',
+            title: cur ? 'Sign out this device?' : 'Sign out ' + label + '?',
+            message: cur ? 'You will be signed out of this browser right now.' : 'That device is signed out immediately and its login token stops working. It must sign in again with the password.',
+            buttons: [
+              { label: 'Sign out', role: 'danger', onClick: function () {
+                fetch(apiUrl('session_revoke'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sid: sid }) })
+                  .then(function (r) { return r.json(); })
+                  .then(function (res) {
+                    if (!res.ok) throw new Error(res.error || 'Failed');
+                    if (cur) { location.reload(); return; }
+                    showToast('Device signed out'); openAuditAndSharesModal();
+                  }).catch(function (e) { showToast('Failed: ' + e.message); });
+              }},
+              { label: 'Cancel', role: 'cancel' }
+            ]
+          });
+        });
+      });
+      var outOthers = document.getElementById('btnSignOutOthers');
+      if (outOthers) outOthers.addEventListener('click', function () {
+        showIosDialog({
+          type: 'danger',
+          title: 'Sign out all other devices?',
+          message: 'Every device except this one is signed out immediately and its login token is revoked.',
+          buttons: [
+            { label: 'Sign out others', role: 'danger', onClick: function () {
+              fetch(apiUrl('session_revoke'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ all_others: true }) })
+                .then(function (r) { return r.json(); })
+                .then(function (res) { showToast('Signed out ' + (res.revoked || 0) + ' device(s)'); openAuditAndSharesModal(); });
+            }},
+            { label: 'Cancel', role: 'cancel' }
+          ]
+        });
+      });
+
+      var cpBtn = document.getElementById('btnChangePw');
+      if (cpBtn) cpBtn.addEventListener('click', openChangePasswordModal);
+      var rotBtn = document.getElementById('btnRotateKey');
+      if (rotBtn) rotBtn.addEventListener('click', function () {
+        showIosDialog({
+          type: 'danger',
+          title: 'Sign out ALL Devices & Rotate Key?',
+          message: 'Every device, <b>including this one</b>, is signed out and a brand-new session signing key is generated, so no old login token can ever be used again. Use this if you think a token leaked.',
+          buttons: [
+            { label: 'Sign Out All & Rotate', role: 'danger', onClick: function () {
+              fetch(apiUrl('session_revoke'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rotate: true }) })
+                .then(function (r) { return r.json(); })
+                .then(function () { location.href = '/.fancyindex/login.html?rd=' + encodeURIComponent(location.pathname); });
+            }},
+            { label: 'Cancel', role: 'cancel' }
+          ]
         });
       });
 
@@ -1582,25 +1945,79 @@
   }
 
   function openShareItemOptionsModal(name, tok, extU, ingU) {
+    var isHA = !!ingressPrefix;
+    var secondBtnHtml = '';
+    
+    // Tự động tạo nút thứ 2 dựa trên môi trường
+    if (isHA) {
+      // Môi trường Home Assistant: Hiện nút Copy Ingress
+      secondBtnHtml = '<button id="optCopyIng" class="snap-card" type="button">' +
+        '<div class="snap-ic">' + IC_SHARE + '</div>' +
+        '<div class="snap-txt"><b>Copy Home Assistant Ingress Link</b><span>Direct download link for logged-in HA sessions</span></div>' +
+      '</button>';
+    } else {
+      // Môi trường Docker: Hiện nút Chia sẻ qua ứng dụng (Web Share API)
+      secondBtnHtml = '<button id="optShareNative" class="snap-card" type="button">' +
+        '<div class="snap-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div>' +
+        '<div class="snap-txt"><b>Share via App...</b><span>Send to Zalo, Telegram, iMessage, AirDrop, Email...</span></div>' +
+      '</button>';
+    }
+
+    // Tên nút Public linh hoạt
+    var publicTitle = isHA ? 'Copy Public / Cloudflare Link' : 'Copy Public Share Link';
+
     openSuiteModal(IC_SHARE + '<span>Share Link Options</span>',
       '<div class="ios-group-card">' +
         '<div class="ios-row"><div class="ios-row-main"><div class="ios-row-title">' + esc(name) + '</div><div class="ios-row-sub">' + esc(extU) + '</div></div></div>' +
       '</div>' +
       '<div class="snap-stack">' +
-        '<button id="optCopyExt" class="snap-card primary" type="button"><div class="snap-ic">' + IC_SHARE + '</div><div class="snap-txt"><b>Copy Public / Cloudflare Link</b><span>Share with external users (no WebDAV password needed)</span></div></button>' +
-        '<button id="optCopyIng" class="snap-card" type="button"><div class="snap-ic">' + IC_SHARE + '</div><div class="snap-txt"><b>Copy Home Assistant Ingress Link</b><span>Direct download link for logged-in HA sessions</span></div></button>' +
+        '<button id="optCopyExt" class="snap-card primary" type="button"><div class="snap-ic">' + IC_SHARE + '</div><div class="snap-txt"><b>' + publicTitle + '</b><span>Share with external users (no WebDAV password needed)</span></div></button>' +
+        secondBtnHtml +
         '<button id="optRevoke" class="snap-card" style="border-color:rgba(255,69,58,.35)" type="button"><div class="snap-ic" style="background:rgba(255,69,58,.15);border-color:rgba(255,69,58,.35);color:var(--red)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></div><div class="snap-txt"><b style="color:var(--red)">Revoke Share Link Immediately</b><span>Disable this download token right now</span></div></button>' +
       '</div>' +
       '<button id="optBackAudit" class="act-btn" style="width:100%" type="button">← Back to Audit &amp; Share Links</button>'
     );
+    
     document.getElementById('optCopyExt').addEventListener('click', function () {
       if (navigator.clipboard) navigator.clipboard.writeText(extU);
       showToast('Copied Public Share URL!');
     });
-    document.getElementById('optCopyIng').addEventListener('click', function () {
-      if (navigator.clipboard) navigator.clipboard.writeText(ingU);
-      showToast('Copied Ingress Share URL!');
-    });
+
+    // Gắn sự kiện cho nút thứ 2 tuỳ theo môi trường
+    if (isHA) {
+      var ingBtn = document.getElementById('optCopyIng');
+      if (ingBtn) {
+        ingBtn.addEventListener('click', function () {
+          if (navigator.clipboard) navigator.clipboard.writeText(ingU);
+          showToast('Copied Ingress Share URL!');
+        });
+      }
+    } else {
+      var natBtn = document.getElementById('optShareNative');
+      if (natBtn) {
+        natBtn.addEventListener('click', function () {
+          // Sử dụng Web Share API của trình duyệt/thiết bị
+          if (navigator.share) {
+            navigator.share({
+              title: 'OmniDrive Share: ' + name,
+              text: 'Download file from OmniDrive Pro:',
+              url: extU
+            }).catch(function(err) {
+              // Người dùng bấm Cancel trên bảng Share của iOS/Android thì không báo lỗi
+              if (err.name !== 'AbortError') {
+                if (navigator.clipboard) navigator.clipboard.writeText(extU);
+                showToast('Link copied to clipboard!');
+              }
+            });
+          } else {
+            // Fallback cho các trình duyệt cũ không hỗ trợ Web Share API (như Chrome trên PC)
+            if (navigator.clipboard) navigator.clipboard.writeText(extU);
+            showToast('Browser does not support native share. Link copied to clipboard!');
+          }
+        });
+      }
+    }
+
     document.getElementById('optRevoke').addEventListener('click', function () {
       showIosDialog({
         type: 'danger',
@@ -1615,13 +2032,14 @@
         ]
       });
     });
+    
     document.getElementById('optBackAudit').addEventListener('click', openAuditAndSharesModal);
   }
-
   document.getElementById('btnSysAudit').addEventListener('click', openAuditAndSharesModal);
 
   // 8. Tạo File, Tạo Folder, Upload, Kéo-Thả & Dán Clipboard
   document.getElementById('btnNewFile').addEventListener('click', function () {
+    if (!requireFolder()) return;
     showIosDialog({
       type: 'info',
       title: 'Create New File',
@@ -1643,6 +2061,7 @@
   });
 
   document.getElementById('btnNewDir').addEventListener('click', function () {
+    if (!requireFolder()) return;
     showIosDialog({
       type: 'info',
       title: 'Create New Folder',
@@ -1666,15 +2085,30 @@
   var fileInput = document.getElementById('fileInput'), uploadProg = document.getElementById('uploadProg'), uploadText = document.getElementById('uploadText'), progBar = document.getElementById('progBar');
   function uploadFileList(files) {
     if (!files || !files.length) return;
-    uploadProg.classList.add('show'); var idx = 0;
+    if (!requireFolder()) return;
+    uploadProg.classList.add('show'); var idx = 0, failed = [];
     function next() {
-      if (idx >= files.length) { showToast('Uploaded ' + files.length + ' file(s)!'); setTimeout(function () { location.reload(); }, 400); return; }
+      if (idx >= files.length) {
+        uploadProg.classList.remove('show');
+        if (failed.length) {
+          showToast('Uploaded ' + (files.length - failed.length) + ', FAILED: ' + failed.join(', '));
+          setTimeout(function () { location.reload(); }, 3500);
+        } else {
+          showToast('Uploaded ' + files.length + ' file(s)!');
+          setTimeout(function () { location.reload(); }, 400);
+        }
+        return;
+      }
       var f = files[idx++], xhr = new XMLHttpRequest();
       xhr.open('PUT', buildWebdavUrl(encodeURIComponent(f.name)), true);
       xhr.upload.onprogress = function (e) {
         if (e.lengthComputable) { var pct = Math.round((e.loaded / e.total) * 100); uploadText.textContent = 'Uploading ' + f.name + ' (' + pct + '%)'; progBar.style.width = pct + '%'; }
       };
-      xhr.onload = next; xhr.onerror = function () { showToast('Failed uploading ' + f.name); next(); };
+      xhr.onload = function () {
+        if (xhr.status < 200 || xhr.status >= 300) failed.push(f.name + ' (HTTP ' + xhr.status + ')');
+        next();
+      };
+      xhr.onerror = function () { failed.push(f.name + ' (network)'); next(); };
       xhr.send(f);
     }
     next();
@@ -1725,27 +2159,95 @@
       : 'Generate a temporary direct download URL for <b>' + esc(item.name) + '</b> without exposing your password.';
     openSuiteModal(IC_SHARE + '<span>Create Expiry Share Link</span>',
       '<p style="margin:0 0 12px;color:var(--muted);font-size:13.5px;line-height:1.45">' + desc + '</p>' +
-      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:14px">' +
+      '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px">' +
+        '<label style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Max downloads' +
+          '<select id="shMax" style="display:block;width:100%;height:40px;margin-top:5px;border-radius:11px;border:1px solid var(--glass-border);background:rgba(0,0,0,.35);color:var(--text);padding:0 10px;font-size:15px">' +
+            '<option value="0">Unlimited</option><option value="1">1 time</option><option value="3">3 times</option><option value="5">5 times</option><option value="10">10 times</option><option value="25">25 times</option><option value="100">100 times</option>' +
+          '</select></label>' +
+        '<label style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">Password (optional)' +
+          '<input id="shPw" type="password" maxlength="128" autocomplete="new-password" placeholder="None" style="display:block;width:100%;height:40px;margin-top:5px;border-radius:11px;border:1px solid var(--glass-border);background:rgba(0,0,0,.35);color:var(--text);padding:0 12px;font-size:16px;box-sizing:border-box">' +
+        '</label>' +
+      '</div>' +
+      '<div id="shTtlGroup" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px">' +
         '<button class="act-btn ttl-btn" data-ttl="3600" type="button"><span>1 Hour</span></button>' +
         '<button class="act-btn ttl-btn" data-ttl="21600" type="button"><span>6 Hours</span></button>' +
         '<button class="act-btn primary ttl-btn" data-ttl="86400" type="button"><span>24 Hours</span></button>' +
         '<button class="act-btn ttl-btn" data-ttl="604800" type="button"><span>7 Days</span></button>' +
       '</div>' +
-      '<div id="shareResultBox" style="padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.38);border:1px solid rgba(255,255,255,.08);font-size:13px;color:var(--muted)">Tap an expiration duration above to generate link.</div>'
+      '<input id="shDays" type="number" min="1" max="365" inputmode="numeric" placeholder="Custom days (1-365)" style="display:block;width:100%;height:40px;margin-bottom:14px;border-radius:11px;border:1px solid var(--glass-border);background:rgba(0,0,0,.35);color:var(--text);padding:0 12px;font-size:16px;box-sizing:border-box">' +
+      '<div style="display:flex;gap:8px;margin-bottom:14px">' +
+        '<button id="shBtnCancel" class="act-btn" type="button" style="flex:1"><span>Cancel</span></button>' +
+        '<button id="shBtnCreate" class="act-btn" type="button" style="flex:1;background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 6px 20px rgba(10,132,255,.38);font-weight:600"><span>Create Link</span></button>' +
+      '</div>' +
+      '<div id="shareResultBox" style="padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.38);border:1px solid rgba(255,255,255,.08);font-size:13px;color:var(--muted)">Choose the limits above, then click Create Link.</div>'
     );
-    [].slice.call(suiteBody.querySelectorAll('.ttl-btn')).forEach(function (b) {
-      b.addEventListener('click', function () {
-        var ttl = parseInt(this.getAttribute('data-ttl'), 10);
-        var box = document.getElementById('shareResultBox');
-        box.textContent = 'Generating secure share token...';
-        fetch(apiUrl('share'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', path: decodeURIComponent(item.internalPath), ttl: ttl }) })
-          .then(function (r) { return r.json(); })
-          .then(function (res) {
-            if (!res.ok) throw new Error(res.error || 'Failed');
-            var externalShareUrl = (ingressPrefix ? (location.protocol + '//' + location.hostname + ':8090') : location.origin) + '/s/' + res.token;
-            var currentOriginUrl = location.origin + ingressPrefix + '/s/' + res.token;
-            openShareItemOptionsModal(res.name, res.token, externalShareUrl, currentOriginUrl);
-          }).catch(function (err) { box.style.color = 'var(--red)'; box.textContent = 'Error: ' + err.message; });
+    
+    var selectedTtl = 86400;
+    var ttlBtns = [].slice.call(suiteBody.querySelectorAll('.ttl-btn'));
+    var shDaysInput = document.getElementById('shDays');
+    var box = document.getElementById('shareResultBox');
+
+    ttlBtns.forEach(function(b) {
+      b.addEventListener('click', function() {
+        ttlBtns.forEach(function(x) { x.classList.remove('primary'); });
+        this.classList.add('primary');
+        selectedTtl = parseInt(this.getAttribute('data-ttl'), 10);
+        shDaysInput.value = '';
+      });
+    });
+
+    shDaysInput.addEventListener('input', function() {
+      if (this.value.trim() !== '') {
+        ttlBtns.forEach(function(x) { x.classList.remove('primary'); });
+      } else {
+        ttlBtns.forEach(function(x) {
+          if (x.getAttribute('data-ttl') === selectedTtl.toString()) x.classList.add('primary');
+        });
+      }
+    });
+
+    document.getElementById('shBtnCancel').addEventListener('click', function() {
+      document.getElementById('suiteClose').click();
+    });
+
+    document.getElementById('shBtnCreate').addEventListener('click', function() {
+      var finalTtl = selectedTtl;
+      var daysStr = shDaysInput.value.trim();
+      if (daysStr !== '') {
+        var days = parseInt(daysStr, 10);
+        if (!(days >= 1 && days <= 365)) {
+          box.style.color = 'var(--red)';
+          box.textContent = 'Custom days must be between 1 and 365.';
+          return;
+        }
+        finalTtl = days * 86400;
+      }
+
+      box.style.color = 'var(--muted)';
+      box.textContent = 'Generating secure share token...';
+
+      fetch(apiUrl('share'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'create',
+          path: decodeURIComponent(item.internalPath),
+          ttl: finalTtl,
+          max_uses: parseInt(document.getElementById('shMax').value, 10) || 0,
+          password: document.getElementById('shPw').value
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (!res.ok) throw new Error(res.error || 'Failed');
+        var externalShareUrl = (ingressPrefix ? (location.protocol + '//' + location.hostname + ':8090') : location.origin) + '/s/' + res.token;
+        var currentOriginUrl = location.origin + ingressPrefix + '/s/' + res.token;
+        openShareItemOptionsModal(res.name, res.token, externalShareUrl, currentOriginUrl);
+        showToast('Link created' + (res.max_uses ? ' \u2022 ' + res.max_uses + ' download(s)' : '') + (res.has_password ? ' \u2022 password protected' : ''));
+      })
+      .catch(function(err) {
+        box.style.color = 'var(--red)';
+        box.textContent = 'Error: ' + err.message;
       });
     });
   });
@@ -1771,11 +2273,12 @@
       defaultValue: 'copy_' + item.name,
       buttons: [
         { label: 'Duplicate', role: 'primary', onClick: function (dupName) {
-          if (!dupName || !dupName.trim()) return;
+          if (!validName(dupName)) { showToast('Invalid name'); return; }
           var destInternal = p + encodeURIComponent(dupName.trim()) + (item.isDir ? '/' : '');
-          fetch(buildWebdavUrl(item.href), { method: 'COPY', credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
+          fetch(buildWebdavUrl(item.href), { method: 'COPY', credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'F' } }).then(function (r) {
             if (r.ok || r.status === 201 || r.status === 204) { showToast('Duplicated'); setTimeout(function () { location.reload(); }, 400); }
-          });
+            else { reportDavError('Duplicate', r); }
+          }).catch(function () { reportDavError('Duplicate', null); });
         }},
         { label: 'Cancel', role: 'cancel' }
       ]
@@ -1791,11 +2294,13 @@
       defaultValue: item.name,
       buttons: [
         { label: 'Rename', role: 'primary', onClick: function (newName) {
-          if (!newName || !newName.trim() || newName.trim() === item.name) return;
+          if (newName && newName.trim() === item.name) return;
+          if (!validName(newName)) { showToast('Invalid name'); return; }
           var destInternal = p + encodeURIComponent(newName.trim()) + (item.isDir ? '/' : '');
-          fetch(buildWebdavUrl(item.href), { method: 'MOVE', credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } }).then(function (r) {
+          fetch(buildWebdavUrl(item.href), { method: 'MOVE', credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'F' } }).then(function (r) {
             if (r.ok || r.status === 201 || r.status === 204) { showToast('Renamed'); setTimeout(function () { location.reload(); }, 400); }
-          });
+            else { reportDavError('Rename', r); }
+          }).catch(function () { reportDavError('Rename', null); });
         }},
         { label: 'Cancel', role: 'cancel' }
       ]
@@ -1811,7 +2316,8 @@
         { label: 'Delete Permanently', role: 'danger', onClick: function () {
           fetch(buildWebdavUrl(item.href), { method: 'DELETE', credentials: 'same-origin' }).then(function (r) {
             if (r.ok || r.status === 200 || r.status === 204) { showToast('Deleted ' + item.name); setTimeout(function () { location.reload(); }, 400); }
-          });
+            else { reportDavError('Delete', r); }
+          }).catch(function () { reportDavError('Delete', null); });
         }},
         { label: 'Cancel', role: 'cancel' }
       ]
@@ -1821,7 +2327,7 @@
   var clipBar = document.getElementById('clipBar'), clipModeEl = document.getElementById('clipMode'), clipNameEl = document.getElementById('clipName');
   function refreshClipBar() {
     try {
-      var raw = sessionStorage.getItem('wpro_clip');
+      var raw = ssGet('wpro_clip');
       if (!raw) { clipBar.classList.remove('show'); return; }
       var clip = JSON.parse(raw);
       clipModeEl.textContent = clip.mode === 'MOVE' ? 'READY TO MOVE' : 'COPIED TO CLIPBOARD';
@@ -1830,7 +2336,16 @@
     } catch (e) { clipBar.classList.remove('show'); }
   }
   refreshClipBar();
-  function setClip(mode, items) { sessionStorage.setItem('wpro_clip', JSON.stringify({ mode: mode, items: items })); refreshClipBar(); }
+  // Hide the Terminal button when the server runs with ENABLE_TERMINAL=false.
+  fetch(apiUrl('protocols'), { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (info) {
+    if (info && info.terminal === false) {
+      var tb = document.getElementById('btnSysTerm');
+      if (tb) tb.remove();
+      var sb = document.querySelector('.sys-bar');
+      if (sb) sb.classList.add('no-term');
+    }
+  }).catch(function () {});
+  function setClip(mode, items) { ssSet('wpro_clip', JSON.stringify({ mode: mode, items: items })); refreshClipBar(); }
 
   document.getElementById('actCopy').addEventListener('click', function () { if (selectedItem) { setClip('COPY', [selectedItem]); closeActionSheet(); showToast('Copied'); } });
   document.getElementById('actCut').addEventListener('click', function () { if (selectedItem) { setClip('MOVE', [selectedItem]); closeActionSheet(); showToast('Cut'); } });
@@ -1845,20 +2360,42 @@
       message: 'Are you sure you want to permanently delete the <b>' + count + ' selected item(s)</b>? This action cannot be undone.',
       buttons: [
         { label: 'Delete All Selected', role: 'danger', onClick: function () {
-          Promise.all(selectedSet.map(function (it) { return fetch(ingressPrefix + it.internalPath, { method: 'DELETE', credentials: 'same-origin' }); })).then(function () { location.reload(); });
+          Promise.all(selectedSet.map(function (it) {
+            return fetch(ingressPrefix + it.internalPath, { method: 'DELETE', credentials: 'same-origin' }).catch(function () { return { ok: false, status: 0 }; });
+          })).then(function (rs) {
+            var bad = rs.filter(function (r) { return !r.ok; }).length;
+            if (bad) { showToast(bad + ' of ' + rs.length + ' item(s) could not be deleted'); setTimeout(function () { location.reload(); }, 2200); }
+            else location.reload();
+          });
         }},
         { label: 'Cancel', role: 'cancel' }
       ]
     });
   });
-  document.getElementById('btnCancelClip').addEventListener('click', function () { sessionStorage.removeItem('wpro_clip'); refreshClipBar(); });
+  document.getElementById('btnCancelClip').addEventListener('click', function () { ssDel('wpro_clip'); refreshClipBar(); });
   document.getElementById('btnPaste').addEventListener('click', function () {
-    var raw = sessionStorage.getItem('wpro_clip'); if (!raw) return; var clip = JSON.parse(raw);
+    var raw = ssGet('wpro_clip'); if (!raw) return;
+    if (!requireFolder()) return;
+    var clip; try { clip = JSON.parse(raw); } catch (e) { ssDel('wpro_clip'); refreshClipBar(); return; }
     Promise.all(clip.items.map(function (it) {
       var destInternal = p + encodeURIComponent(it.name) + (it.isDir ? '/' : '');
-      if (destInternal === it.internalPath) destInternal = p + encodeURIComponent('copy_' + it.name) + (it.isDir ? '/' : '');
-      return fetch(ingressPrefix + it.internalPath, { method: clip.mode, credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'T' } });
-    })).then(function () { if (clip.mode === 'MOVE') sessionStorage.removeItem('wpro_clip'); location.reload(); });
+      if (destInternal === it.internalPath) {
+        if (clip.mode === 'MOVE') return Promise.resolve({ ok: true });   // moving into the same folder: nothing to do
+        destInternal = p + encodeURIComponent('copy_' + it.name) + (it.isDir ? '/' : '');
+      }
+      // Overwrite: F -> never silently replace an existing file/folder (server answers 412 instead).
+      return fetch(ingressPrefix + it.internalPath, { method: clip.mode, credentials: 'same-origin', headers: { 'Destination': buildDestinationHeader(destInternal), 'Overwrite': 'F' } })
+        .catch(function () { return { ok: false, status: 0 }; });
+    })).then(function (rs) {
+      var bad = rs.filter(function (r) { return !r.ok; });
+      if (bad.length) {
+        reportDavError(clip.mode === 'MOVE' ? 'Move' : 'Copy', bad[0]);
+        setTimeout(function () { location.reload(); }, 2600);
+        return;
+      }
+      if (clip.mode === 'MOVE') ssDel('wpro_clip');
+      location.reload();
+    });
   });
 
   // 10. Search, Sort & Grid/List View
@@ -1879,8 +2416,8 @@
   var gridSvg = '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>';
   var listSvg = '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>';
   function applyView(mode) { var g = mode === 'grid'; document.body.classList.toggle('grid-mode', g); viewIcon.innerHTML = g ? listSvg : gridSvg; }
-  var savedView = localStorage.getItem('wpro_view') || 'list'; applyView(savedView);
-  viewBtn.addEventListener('click', function () { savedView = document.body.classList.contains('grid-mode') ? 'list' : 'grid'; localStorage.setItem('wpro_view', savedView); applyView(savedView); });
+  var savedView = lsGet('wpro_view', 'list'); applyView(savedView);
+  viewBtn.addEventListener('click', function () { savedView = document.body.classList.contains('grid-mode') ? 'list' : 'grid'; lsSet('wpro_view', savedView); applyView(savedView); });
 })();
 </script>
 </body>
