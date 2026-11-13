@@ -1,6 +1,6 @@
 # Home Assistant Add-on: OmniDrive Pro
 
-![Version](https://img.shields.io/badge/version-1.0.34-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.29-blue.svg)
 ![Nginx](https://img.shields.io/badge/nginx-1.30.6--r0-009639.svg)
 ![Alpine Base](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg)
 ![Protocols](https://img.shields.io/badge/protocols-WebDAV%20%7C%20SMB%20%7C%20SFTP%20%7C%20FTP-8b5cf6.svg)
@@ -16,6 +16,13 @@ All-in-one Multi-Protocol Storage Hub (**WebDAV, SMB/Samba, SFTP, FTP**), iOS Gl
 **OmniDrive Pro** transforms your Home Assistant into a high-speed, security-hardened multi-protocol storage server and full-featured Cloud IDE. Mount all your Home Assistant directories as a native network drive inside **iOS/iPadOS Files**, **macOS Finder**, **Windows Explorer**, **Infuse / VLC**, or **SFTP/FTP clients** (over LAN, Tailscale, or Cloudflare Zero Trust Tunnels), or manage files, run terminal commands, and edit configuration code directly from the Home Assistant sidebar via Ingress.
 
 This add-on tracks official Alpine Linux and Nginx upstream releases and updates itself automatically via GitHub Actions after passing strict `docker build` verification checks.
+
+## ⚠️ Read before you start
+
+> 1. **Change the default password.** The default password is public (`changeme_strong_password`). Anyone who guesses it gets access to your HA configuration files and terminal. Change it in the **Add-on Configuration** tab.
+> 2. **Root Access and Web Terminal are powerful.** By default, `root_access` is `false` and `enable_terminal` is `true`. If you enable `root_access`, file operations run as root. If you use the Web Terminal, you can execute root commands inside the container. Ensure your Home Assistant instance is not exposed directly to the internet without strong authentication (e.g., use Cloudflare Zero Trust or a VPN).
+> 3. **Check ports.** This add-on requires ports `8090`, `445`, `2222`, `2121`, and `21000-21002`. If Samba (`445`) is already used by another add-on or the host, change the port mapping.
+> 4. **Password Management Quirk:** You can change your password either in the HA Add-on Configuration or via the Web UI (Security -> Change Password). If you change it via the Web UI, it is immediately hashed. However, if you later open the HA Configuration tab and click "Save" without changing the password field, HA will overwrite your Web UI password with the plaintext one in the config. *Always update your password in the HA Configuration tab if you want to make it permanent.*
 
 ## Features
 
@@ -37,8 +44,18 @@ This add-on tracks official Alpine Linux and Nginx upstream releases and updates
   - **Pro Media Player & Background Audio:** Video/audio playback with `↺ -10s` / `↻ +10s` seek, speed control (`0.5x` ➔ `2.0x`), and an **Apple Music-style Mini Player** for background audio playback while browsing or coding.
   - **Hex / Binary & Archive Inspector:** Inspects binary/database files (`.db`, `.sqlite`, `.bin`) in side-by-side `HEX + ASCII` view, and previews `.zip` and Home Assistant `.tar` backups without extraction.
 - **System Operations, Sharing & Security Suite:**
-  - **Integrated Web Terminal (`xterm.js`):** Execute shell and Git commands (`df -h`, `ls -la`, `git status`, `git pull`) directly from the Web UI.
-  - **Storage Analytics (Donut Chart):** Visualizes total NVMe capacity, used/free space, and per-folder storage breakdown.
-  - **1-Tap Quick Zip Snapshot:** Instant 1-tap `.zip` backup of `/config` or `Automations & Scripts` straight into `/backup` before editing code.
-  - **Temporary Expiry Share Links (`/s/<token>`):** Generate public download links for any **file or folder** (folders are automatically zipped on the fly) with custom expiration (`1 Hour`, `6 Hours`, `24 Hours`, `7 Days`) without exposing passwords.
-  - **Security Audit Log:** Tracks logins, file modifications (`PUT`), deletions (`DELETE`), snapshots, and share-link downloads in real time.
+  - **Integrated Web Terminal (`xterm.js`):** Execute shell and Git commands (`df -h`, `ls -la`, `git status`, `git pull`) directly from the Web UI (can be disabled in config).
+  - **Storage Analytics (Donut Chart):** Visualizes total disk capacity, used/free space, and per-folder storage breakdown.
+  - **1-Tap Quick Zip Snapshot:** Instant `.zip` backup of `/config` or `Automations & Scripts` straight into `/backup` before editing code.
+  - **Temporary Expiry Share Links (`/s/<token>`):** Generate public download links for any file or folder (folders are automatically zipped). Set custom expiry (1 hour to 365 days), limit **max downloads**, and protect with a **password**.
+  - **Security Audit Log & Devices:** View real-time file modifications and logins. See all signed-in devices, revoke access instantly, and change passwords securely (hashed with PBKDF2).
+
+## 🔒 Security Notes
+
+OmniDrive Pro is powerful by design, so please harden it:
+
+- **Change the default password** immediately in the add-on configuration.
+- **The Web Terminal runs shell commands as root** inside the container. Disable it (`enable_terminal: false`) if you don't need it, or restrict access to your HA instance.
+- **Do not publish HA ports directly to the internet.** Prefer a VPN (Tailscale/WireGuard) or Cloudflare Zero Trust Tunnel.
+- **Share links (`/s/<token>`) are public** to anyone with the URL until they expire or are revoked. Always set a short expiry, download limit, and password for sensitive files.
+- **Passwords are hashed on disk.** The add-on strips plaintext passwords from `/data/options.json` on startup and replaces them with strong PBKDF2 hashes.
