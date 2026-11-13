@@ -6,12 +6,6 @@ bashio::log.info "--------------------------------------------------------"
 bashio::log.info " Initializing OmniDrive Pro v${ADDON_VERSION} (Multi-Protocol)"
 bashio::log.info "--------------------------------------------------------"
 
-# Đảm bảo openssl được cài đặt để băm mật khẩu
-if ! command -v openssl >/dev/null 2>&1; then
-    bashio::log.info "Installing openssl for password hashing..."
-    apk add --no-cache openssl >/dev/null 2>&1 || true
-fi
-
 CONFIG_PATH=/data/options.json
 HTPASSWD_FILE=/etc/nginx/webdav.htpasswd
 NGINX_CONF=/etc/nginx/nginx.conf
@@ -58,7 +52,7 @@ for (( i=0; i<SHARES_COUNT; i++ )); do
     ln -sfn "$SHARE_PATH" "${ROOT_DIR}/${SHARE_NAME}"
 done
 
-# 3. Accounts provisioning & Hashing (Kế thừa từ Docker)
+# 3. Accounts provisioning & Hashing (Có SHA-512 từ openssl)
 if bashio::var.true "$SMB_ENABLED"; then
     mkdir -p /var/lib/samba /data/wpro/samba
     chmod 700 /data/wpro/samba
@@ -107,6 +101,7 @@ def crypt_hash(pw):
         r = run(["openssl", "passwd", "-6", "-stdin"], str(pw) + "\n")
         return r.stdout.strip() if r.returncode == 0 and r.stdout.startswith("$6$") else ""
     except FileNotFoundError:
+        warn("openssl not found. SFTP/FTP will use plaintext chpasswd.")
         return ""
 
 try:
@@ -153,14 +148,18 @@ for e in out:
     name = e["username"]
     if run(["id", name]).returncode != 0:
         run(["adduser", "-D", "-H", "-h", ROOT_DIR, "-s", "/bin/bash", "-G", "root", name])
-    if name in plain:
-        run(["chpasswd"], "%s:%s\n" % (name, str(plain[name])))
-    elif e.get("crypt_hash"):
+    
+    # Ưu tiên dùng crypt_hash nếu có (SHA-512), nếu không thì fallback về plaintext chpasswd
+    if e.get("crypt_hash"):
         run(["chpasswd", "-e"], "%s:%s\n" % (name, e["crypt_hash"]))
+    elif name in plain:
+        run(["chpasswd"], "%s:%s\n" % (name, str(plain[name])))
+        
     if SMB:
         if name in plain:
             run(["smbpasswd", "-a", "-s", name], "%s\n%s\n" % (str(plain[name]), str(plain[name])))
             run(["smbpasswd", "-e", name])
+            
     log("Provisioned account: " + name)
     
 open(INIT_MARKER, "w").close()
@@ -610,7 +609,9 @@ def change_user_password(username, new_pw):
     try:
         r = subprocess.run(["openssl", "passwd", "-6", "-stdin"], input=new_pw + "\n", capture_output=True, text=True, timeout=20)
         if r.returncode == 0 and r.stdout.startswith("$6$"): crypt = r.stdout.strip()
-    except: pass
+    except FileNotFoundError: pass
+    except Exception: pass
+    
     with CONFIG_LOCK:
         cfg = get_config()
         target = None
@@ -624,11 +625,19 @@ def change_user_password(username, new_pw):
         with open(tmp, "w", encoding="utf-8") as f: json.dump(cfg, f, indent=2)
         os.chmod(tmp, 0o600)
         os.replace(tmp, CONFIG_PATH)
+        
     warnings = []
-    try:
-        r = subprocess.run(["chpasswd"], input="%s:%s\n" % (username, new_pw), capture_output=True, text=True, timeout=20)
-        if r.returncode != 0: warnings.append("SFTP/FTP password could not be updated")
-    except: warnings.append("SFTP/FTP password could not be updated")
+    if crypt:
+        try:
+            r = subprocess.run(["chpasswd", "-e"], input="%s:%s\n" % (username, crypt), capture_output=True, text=True, timeout=20)
+            if r.returncode != 0: warnings.append("SFTP/FTP password could not be updated")
+        except: warnings.append("SFTP/FTP password could not be updated")
+    else:
+        try:
+            r = subprocess.run(["chpasswd"], input="%s:%s\n" % (username, new_pw), capture_output=True, text=True, timeout=20)
+            if r.returncode != 0: warnings.append("SFTP/FTP password could not be updated (fallback)")
+        except: warnings.append("SFTP/FTP password could not be updated (fallback)")
+        
     if cfg.get("smb_enabled", True):
         try:
             r = subprocess.run(["smbpasswd", "-a", "-s", username], input="%s\n%s\n" % (new_pw, new_pw), capture_output=True, text=True, timeout=20)
