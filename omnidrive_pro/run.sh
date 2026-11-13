@@ -50,12 +50,9 @@ if [ -z "$LAN_IP" ]; then
         | jq -r '[.data.interfaces[]? | select((.connected // true) and ((.ipv4.address // []) | length > 0))] | ((map(select(.primary))[0]) // .[0]) | .ipv4.address[0] // empty' 2>/dev/null \
         | cut -d/ -f1 || true)
 fi
-if [ -z "$LAN_IP" ] || [ "$LAN_IP" = "null" ]; then
-    LAN_IP=$(bashio::api.supervisor GET /network/info false '.interfaces[] | select(.primary==true) | .ipv4.address[0]' 2>/dev/null | cut -d/ -f1 || true)
-fi
 [ "$LAN_IP" = "null" ] && LAN_IP=""
 if [ -z "$LAN_IP" ]; then
-    bashio::log.warning "Could not detect the LAN IP automatically. Set 'lan_ip' in the add-on configuration, otherwise the Connect Hub shows the address you browse with."
+    bashio::log.warning "Could not detect the LAN IP automatically (needs 'hassio_api: true' in config.yaml). Set 'lan_ip' in the add-on configuration, otherwise the Connect Hub shows the address you browse with."
 fi
 PUBLIC_URL=$(bashio::config 'public_url' 2>/dev/null || true)
 [ "$PUBLIC_URL" = "null" ] && PUBLIC_URL=""
@@ -63,7 +60,7 @@ PUBLIC_URL=$(bashio::config 'public_url' 2>/dev/null || true)
 # Port thực tế trên host (người dùng có thể đổi ở tab Network của add-on)
 host_port() {
     local p
-    p=$(bashio::addon.port "$1" 2>/dev/null || true)
+    p=$(bashio::app.port "$1" 2>/dev/null || bashio::addon.port "$1" 2>/dev/null || true)
     if [[ "$p" =~ ^[0-9]+$ ]]; then echo "$p"; else echo "${1%/*}"; fi
 }
 SMB_PORT=$(host_port 445/tcp)
