@@ -927,7 +927,7 @@ button:active { transform:scale(.98); }
                 "webdav": True, "smb": bool(cfg.get("smb_enabled", True)), "sftp": bool(cfg.get("sftp_enabled", True)),
                 "ftp": bool(cfg.get("ftp_enabled", True)), "default_user": first_user, "shares": shares,
                 "terminal": TERMINAL_ENABLED, "run_as_root": RUN_AS_ROOT,
-                "lan_ip": os.environ.get("LAN_IP", ""), "public_url": os.environ.get("PUBLIC_URL", ""),
+                "platform": "ha", "lan_ip": os.environ.get("LAN_IP", ""), "public_url": os.environ.get("PUBLIC_URL", ""),
                 "smb_port": int(os.environ.get("SMB_PORT", "445") or 445), "sftp_port": int(os.environ.get("SFTP_PORT", "2222") or 2222),
                 "ftp_port": int(os.environ.get("FTP_PORT", "2121") or 2121), "ext_port": int(os.environ.get("EXT_PORT", "8090") or 8090)
             })
