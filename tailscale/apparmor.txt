@@ -2,15 +2,39 @@
 
 profile tailscale_pro flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
+  #include <abstractions/nameservice>
 
-  capability,
+  capability net_admin,
+  capability net_raw,
+  capability net_bind_service,
+  capability chown,
+  capability dac_override,
+  capability setuid,
+  capability setgid,
+  capability kill,
+
   file,
   signal,
-  mount,
-  umount,
-  remount,
   network,
+
+  /init ix,
+  /run.sh rix,
+  /bin/** rix,
+  /usr/bin/** rix,
+  /sbin/** rix,
+  /usr/sbin/** rix,
+  /usr/lib/bashio/** rix,
+  /etc/s6-overlay/** rix,
+  /run/{s6,s6-rc*,service}/** rix,
+  /package/** rix,
+  /command/** rix,
+
+  /dev/net/tun rw,
+  /dev/tty rw,
 
   deny /proc/sysrq-trigger rwklx,
   deny /proc/kcore rwklx,
+  deny /proc/mem rwklx,
+  deny /proc/kmem rwklx,
+  deny /sys/firmware/** rwklx,
 }
