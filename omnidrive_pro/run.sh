@@ -80,7 +80,7 @@ def warn(msg): print("[WARN] " + msg, flush=True)
 
 def make_hash(pw):
     salt = secrets.token_hex(16)
-    h = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salt), ITER).hex()
+    h = hashlib.pbkdf2_hmac("sha256", str(pw).encode("utf-8"), bytes.fromhex(salt), ITER).hex()
     return "pbkdf2_sha256$%d$%s$%s" % (ITER, salt, h)
 
 def check_hash(stored, pw):
@@ -88,7 +88,7 @@ def check_hash(stored, pw):
         algo, it, salt, h = stored.split("$")
         if algo != "pbkdf2_sha256":
             return False
-        calc = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salt), int(it)).hex()
+        calc = hashlib.pbkdf2_hmac("sha256", str(pw).encode("utf-8"), bytes.fromhex(salt), int(it)).hex()
         return hmac.compare_digest(calc, h)
     except Exception:
         return False
@@ -97,7 +97,7 @@ def run(args, inp=None):
     return subprocess.run(args, input=inp, capture_output=True, text=True)
 
 def crypt_hash(pw):
-    r = run(["openssl", "passwd", "-6", "-stdin"], pw + "\n")
+    r = run(["openssl", "passwd", "-6", "-stdin"], str(pw) + "\n")
     return r.stdout.strip() if r.returncode == 0 and r.stdout.startswith("$6$") else ""
 
 try:
@@ -109,14 +109,12 @@ except Exception as e:
 users = cfg.get("users") or []
 INIT_MARKER = "/data/wpro/.ha_initialized"
 
-# Home Assistant quirk: HA config UI will overwrite pass. 
-# If this is NOT the first run, and HA UI didn't change the password, we use the hashed one.
 plain = {}
 out = []
 for u in users:
     name = str(u.get("username", "")).strip()
     if not name: continue
-    pw = u.get("password")
+    pw = str(u.get("password", ""))
     entry = {"username": name}
     for k, v in u.items():
         if k not in ("username", "password", "password_hash", "crypt_hash"):
@@ -147,12 +145,12 @@ for e in out:
     if run(["id", name]).returncode != 0:
         run(["adduser", "-D", "-H", "-h", ROOT_DIR, "-s", "/bin/bash", "-G", "root", name])
     if name in plain:
-        run(["chpasswd"], "%s:%s\n" % (name, plain[name]))
+        run(["chpasswd"], "%s:%s\n" % (name, str(plain[name])))
     elif e.get("crypt_hash"):
         run(["chpasswd", "-e"], "%s:%s\n" % (name, e["crypt_hash"]))
     if SMB:
         if name in plain:
-            run(["smbpasswd", "-a", "-s", name], "%s\n%s\n" % (plain[name], plain[name]))
+            run(["smbpasswd", "-a", "-s", name], "%s\n%s\n" % (str(plain[name]), str(plain[name])))
             run(["smbpasswd", "-e", name])
     log("Provisioned account: " + name)
     
