@@ -24,12 +24,13 @@ RUN ARCH_CHECK="${BUILD_ARCH}" && \
     -o /usr/bin/cloudflared && \
     chmod +x /usr/bin/cloudflared
 
-# Copy script khởi chạy
-COPY run.sh /
-RUN chmod a+x /run.sh
+# Copy script khởi chạy và làm sạch định dạng dòng
+COPY run.sh /run.sh
+RUN sed -i 's/\r$//' /run.sh && chmod a+x /run.sh
 
 # Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD pgrep cloudflared > /dev/null || exit 1
 
-CMD [ "/run.sh" ]
+# Ép chạy trực tiếp qua bashio để tránh lỗi syntax "(" của /bin/sh
+CMD [ "/usr/bin/with-contenv", "bashio", "/run.sh" ]
