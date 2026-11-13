@@ -3,19 +3,23 @@
 profile cloudflared_pro flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
 
+  capability,
   file,
   signal (send) set=(kill,term,int,hup,cont),
 
-  # S6-Overlay v3 & Bashio permissions
+  # S6-Overlay, Bashio & Script permissions
   /init ix,
+  /run.sh rix,
   /bin/** ix,
   /usr/bin/** ix,
+  /usr/lib/bashio/** ix,
   /run/{s6,s6-rc*,service}/** ix,
   /package/** ix,
   /command/** ix,
   /etc/services.d/** rwix,
   /etc/cont-init.d/** rwix,
   /etc/cont-finish.d/** rwix,
+  /etc/s6-overlay/** rix,
   /run/{,**} rwk,
   /dev/tty rw,
 
