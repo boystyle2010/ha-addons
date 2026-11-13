@@ -18,7 +18,8 @@ RUN apk update && apk add --no-cache \
     samba \
     openssh \
     vsftpd \
-    shadow
+    shadow \
+    openssl
 
 # Create working directories for Nginx, Multi-Protocol daemons & Pro API
 RUN mkdir -p \
