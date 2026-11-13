@@ -4,7 +4,7 @@ configuration:
     description: Khi bật, bạn chỉ cần kết nối vào địa chỉ gốc "/" là thấy toàn bộ các thư mục (config, addon_configs, addons, backup, media, share, ssl) và di chuyển file qua lại giữa chúng.
   smb_enabled:
     name: Kích hoạt giao thức SMB / Samba (Cổng 445)
-    description: Cho phép gắn ổ đĩa mạng trực tiếp vào ứng dụng Tệp (Files) gốc của iPhone/iPad, macOS Finder (smb://), Windows Explorer (\\ip\) và phát video trực tiếp lên Infuse / VLC.
+    description: Cho phép gắn ổ đĩa mạng trực tiếp vào ứng dụng Tệp (Files) gốc của iPhone/iPad, macOS Finder (smb://), Windows Explorer (\\\\ip\\) và phát video trực tiếp lên Infuse / VLC.
   sftp_enabled:
     name: Kích hoạt giao thức SFTP (Cổng 2222)
     description: Bật truyền tải file mã hóa qua giao thức SSH (SFTP) chuyên dụng cho FileZilla, Cyberduck, WinSCP, Termius và FE File Explorer.
@@ -32,6 +32,15 @@ configuration:
   log_level:
     name: Mức độ ghi nhật ký (Log Level)
     description: Độ chi tiết của log hệ thống.
+  root_access:
+    name: Quyền Root (Root Access)
+    description: Khi bật, các tác vụ file (như nén, xoá) sẽ chạy dưới quyền root. Khi tắt, chạy dưới quyền user thường.
+  enable_terminal:
+    name: Kích hoạt Web Terminal
+    description: Cho phép chạy các lệnh shell ẩn trong giao diện web (Chỉ bật nếu bạn tin tưởng thiết bị truy cập).
+  lock_root:
+    name: Khoá thư mục gốc (Root Lock)
+    description: Ngăn chặn việc vô tình tạo hoặc xoá file ngay tại thư mục gốc (Bắt buộc phải vào bên trong thư mục con mới được sửa).
   users:
     name: Danh sách tài khoản (Users)
     description: Khai báo tài khoản và mật khẩu dùng chung cho tất cả giao thức (Web UI, WebDAV, SMB, SFTP và FTP).
