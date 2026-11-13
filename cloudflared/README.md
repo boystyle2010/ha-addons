@@ -9,15 +9,15 @@
 ![Project Stage](https://img.shields.io/badge/project%20stage-production-brightgreen.svg)
 ![Maintained](https://img.shields.io/badge/maintained-yes-brightgreen.svg)
 
-High-stability, multi-arch ( & ), upstream-synced Cloudflare Tunnel add-on for Home Assistant.
+High-stability, multi-arch (`aarch64` & `amd64`), upstream-synced Cloudflare Tunnel add-on for Home Assistant.
 
 ## About
 
-**Cloudflared Pro** connects your Home Assistant instance securely to Cloudflare Zero Trust Tunnels without opening any router ports. It automatically detects your hardware architecture ( / Raspberry Pi 5 or  / x86_64 Mini PC) and pulls the verified official binary directly from Cloudflare.
+**Cloudflared Pro** connects your Home Assistant instance securely to Cloudflare Zero Trust Tunnels without opening any router ports. It automatically detects your hardware architecture (`aarch64` / Raspberry Pi 5 or `amd64` / x86_64 Mini PC) and pulls the verified official binary directly from Cloudflare.
 
 ## Key Features
 
-- **Auto Multi-Arch Support:** Native  (ARM64) and  (x86_64) official binaries
+- **Auto Multi-Arch Support:** Native `aarch64` (ARM64) and `amd64` (x86_64) official binaries
 - **Hardened Security:** Enforced custom AppArmor security profile for maximum Home Assistant Security Rating
 - **Zero-Touch Verified Updates:** Tracks official Cloudflare releases & HA Alpine Base images with SHA256 verification
 - **Post-Quantum Cryptography:** Built-in support for post-quantum tunnel encryption
