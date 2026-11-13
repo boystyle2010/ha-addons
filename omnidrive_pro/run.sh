@@ -6,6 +6,12 @@ bashio::log.info "--------------------------------------------------------"
 bashio::log.info " Initializing OmniDrive Pro v${ADDON_VERSION} (Multi-Protocol)"
 bashio::log.info "--------------------------------------------------------"
 
+# Đảm bảo openssl được cài đặt để băm mật khẩu
+if ! command -v openssl >/dev/null 2>&1; then
+    bashio::log.info "Installing openssl for password hashing..."
+    apk add --no-cache openssl >/dev/null 2>&1 || true
+fi
+
 CONFIG_PATH=/data/options.json
 HTPASSWD_FILE=/etc/nginx/webdav.htpasswd
 NGINX_CONF=/etc/nginx/nginx.conf
@@ -97,8 +103,11 @@ def run(args, inp=None):
     return subprocess.run(args, input=inp, capture_output=True, text=True)
 
 def crypt_hash(pw):
-    r = run(["openssl", "passwd", "-6", "-stdin"], str(pw) + "\n")
-    return r.stdout.strip() if r.returncode == 0 and r.stdout.startswith("$6$") else ""
+    try:
+        r = run(["openssl", "passwd", "-6", "-stdin"], str(pw) + "\n")
+        return r.stdout.strip() if r.returncode == 0 and r.stdout.startswith("$6$") else ""
+    except FileNotFoundError:
+        return ""
 
 try:
     with open(CFG, encoding="utf-8") as f:
