@@ -1,11 +1,11 @@
 # Changelog
 
-## 1.0.1
+## 1.0.2
 _Released: 2026-11-12_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** Bumped from `v1.0.0` ➡️ **`v1.0.1`**
-- **Cloudflared Engine:** Updated from `2026.10.7` ➡️ **`2026.11.0`** *(arm64 binary verified)*
+- **Add-on Release:** `v1.0.2`
+- **Cloudflared Engine:** `2026.11.0` *(arm64 binary verified)*
 - **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
 - **Official Links:** [GitHub Release 2026.11.0](https://github.com/cloudflare/cloudflared/releases/tag/2026.11.0) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
