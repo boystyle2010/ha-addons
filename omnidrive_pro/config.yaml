@@ -9,6 +9,7 @@ arch:
 init: false
 apparmor: true
 auth_api: true
+hassio_api: true
 ingress: true
 ingress_port: 8099
 panel_icon: "mdi:server-network"
