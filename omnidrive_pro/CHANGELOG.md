@@ -1,3 +1,6 @@
+## [1.0.50] - 2026-11-13
+- **Maintenance & Improvements:** Update run.sh
+
 ## [1.0.49] - 2026-11-13
 - **Maintenance & Improvements:** Update run.sh
 
