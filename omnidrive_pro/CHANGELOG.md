@@ -1,3 +1,6 @@
+## [1.0.36] - 2026-11-13
+- **Maintenance & Improvements:** Update run.sh
+
 ## [1.0.35] - 2026-11-13
 - **Maintenance & Improvements:** Update README.md
 

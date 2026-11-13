@@ -1,6 +1,6 @@
 # Home Assistant Add-on: OmniDrive Pro
 
-![Version](https://img.shields.io/badge/version-1.0.35-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.36-blue.svg)
 ![Nginx](https://img.shields.io/badge/nginx-1.30.6--r0-009639.svg)
 ![Alpine Base](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg)
 ![Protocols](https://img.shields.io/badge/protocols-WebDAV%20%7C%20SMB%20%7C%20SFTP%20%7C%20FTP-8b5cf6.svg)
