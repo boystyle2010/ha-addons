@@ -1,7 +1,8 @@
 #!/usr/bin/with-contenv bashio
 
+HOST_ARCH=$(uname -m)
 bashio::log.info "==================================================="
-bashio::log.info " Starting Cloudflared Pro Add-on (Raspberry Pi 5)  "
+bashio::log.info " Starting Cloudflared Pro Add-on (Arch: ${HOST_ARCH})"
 bashio::log.info " Binary version: $(cloudflared --version)"
 bashio::log.info "==================================================="
 
