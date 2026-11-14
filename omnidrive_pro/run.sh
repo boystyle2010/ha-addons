@@ -69,6 +69,7 @@ FTP_PORT=$(host_port 2121/tcp)
 EXT_PORT=$(host_port 8090/tcp)
 SHARE_ZIP_MAX_MB=$(bashio::config 'share_zip_max_mb' 2>/dev/null || true)
 if ! [[ "$SHARE_ZIP_MAX_MB" =~ ^[0-9]+$ ]]; then SHARE_ZIP_MAX_MB=2048; fi
+export WPRO_PLATFORM=ha
 export LAN_IP PUBLIC_URL SMB_PORT SFTP_PORT FTP_PORT EXT_PORT SHARE_ZIP_MAX_MB
 bashio::log.info "Connect Hub: LAN_IP='${LAN_IP}' PUBLIC_URL='${PUBLIC_URL}'"
 
@@ -172,6 +173,7 @@ stored = {str(x.get("username")): x for x in stored_list if isinstance(x, dict)}
 users = cfg.get("users") or []
 plain = {}     # name -> plaintext, only for accounts whose password is (re)applied from the config now
 status = {}
+to_clear = []   # users whose password field in the config gets emptied after applying
 out = []
 for u in users:
     name = str(u.get("username", "")).strip()
@@ -211,6 +213,9 @@ for u in users:
         else:
             status[name] = "created"
             log("User %s: account CREATED from the config password." % name)
+    # Xoá trắng ô cấu hình, trừ khi đó vẫn là mật khẩu mặc định ĐANG CÓ HIỆU LỰC (để người dùng còn thấy và đổi nó)
+    if pw.strip() and (pw != "changeme_strong_password" or not check_hash(entry["password_hash"], pw)):
+        to_clear.append(name)
     out.append(entry)
 
 if not out:
@@ -222,6 +227,16 @@ with open(tmp, "w", encoding="utf-8") as f:
     json.dump(out, f, indent=2)
 os.chmod(tmp, 0o600)
 os.replace(tmp, USERS_FILE)
+
+CLEAR_FILE = "/data/wpro/clear_pw.json"
+try:
+    if to_clear:
+        with open(CLEAR_FILE, "w", encoding="utf-8") as f: json.dump(to_clear, f)
+        os.chmod(CLEAR_FILE, 0o600)
+    elif os.path.exists(CLEAR_FILE):
+        os.remove(CLEAR_FILE)
+except Exception:
+    pass
 
 if any(check_hash(e["password_hash"], "changeme_strong_password") for e in out):
     warn("A user still has the DEFAULT password 'changeme_strong_password'. Change it (Web UI > Change Password, or enter a new one in the add-on configuration) now!")
@@ -253,6 +268,22 @@ for e in out:
 USEREOF
 
 SMB_ENABLED_RESOLVED="$SMB_ENABLED" ROOT_ACCESS="$ROOT_ACCESS" python3 /usr/local/bin/wpro_users.py || bashio::exit.nok "Account provisioning failed."
+
+# Sau khi áp dụng, xoá trắng ô mật khẩu trong cấu hình add-on (mật khẩu thật chỉ nằm trong add-on).
+# Nếu bước này lỗi thì chỉ cảnh báo: mật khẩu cũ trong cấu hình vẫn KHÔNG bị áp dụng lại ở lần khởi động sau.
+CLEAR_FILE=/data/wpro/clear_pw.json
+rm -f /data/wpro/cleared_users.json
+if [ -s "$CLEAR_FILE" ] && [ "$(jq 'length' "$CLEAR_FILE" 2>/dev/null || echo 0)" -gt 0 ]; then
+    NEW_OPTS=$(jq -c --slurpfile cl "$CLEAR_FILE" '.users |= map(if (.username as $u | ($cl[0] | index($u)) != null) then .password = "" else . end)' "$CONFIG_PATH" 2>/dev/null || true)
+    if [ -n "$NEW_OPTS" ] && curl -fsS --max-time 10 -X POST \
+            -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" -H "Content-Type: application/json" \
+            -d "{\"options\": ${NEW_OPTS}}" http://supervisor/addons/self/options >/dev/null 2>&1; then
+        cp "$CLEAR_FILE" /data/wpro/cleared_users.json 2>/dev/null || true
+        bashio::log.info "Password field(s) in the configuration were emptied (the real password is stored by the add-on)."
+    else
+        bashio::log.warning "Could not empty the password field in the configuration automatically. You can empty it by hand; it will NOT be re-applied."
+    fi
+fi
 
 # Root lock
 if bashio::var.true "$LOCK_ROOT"; then
@@ -555,6 +586,8 @@ def login_failed(key):
 def login_ok(key):
     with LOGIN_LOCK: LOGIN_FAILS.pop(key, None)
 
+IS_HA = os.environ.get("WPRO_PLATFORM", "") == "ha"
+CLEARED_FILE = os.path.join(DATA_DIR, "cleared_users.json")
 TERMINAL_ENABLED = os.environ.get("ENABLE_TERMINAL", "true").lower() == "true"
 RUN_AS_ROOT = os.environ.get("ROOT_ACCESS", "false").lower() == "true"
 try:
@@ -810,6 +843,34 @@ def change_user_password(username, new_pw):
             if r.returncode != 0: warnings.append("SMB password could not be updated")
         except: warnings.append("SMB password could not be updated")
     return True, warnings
+
+def config_password_pending(username):
+    """Home Assistant only: True while the add-on configuration still shows a password for this user,
+    i.e. a restart is needed to tidy it up (the new password itself is already active everywhere)."""
+    try:
+        with open(CLEARED_FILE, "r", encoding="utf-8") as f:
+            if username in json.load(f): return False
+    except Exception:
+        pass
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        for u in raw.get("users", []):
+            if u.get("username") == username:
+                return bool(str(u.get("password") or "").strip())
+    except Exception:
+        pass
+    return False
+
+def restart_addon_later():
+    def _go():
+        time.sleep(1.5)
+        try:
+            subprocess.run(["curl", "-fsS", "--max-time", "30", "-X", "POST", "-H", "Authorization: Bearer " + os.environ.get("SUPERVISOR_TOKEN", ""),
+                            "http://supervisor/addons/self/restart"], capture_output=True, timeout=45)
+        except Exception:
+            pass
+    threading.Thread(target=_go, daemon=True).start()
 
 class WProHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args): return
@@ -1132,7 +1193,16 @@ button:active { transform:scale(.98); }
             n = revoke_other_sessions(self.sid)
             append_audit(user, "PASSWORD_CHANGE", "other devices signed out: " + str(n), 200, ip)
             env_override = bool(os.environ.get("OMNI_PASS") or os.environ.get("OMNI_PASS_FILE")) and os.environ.get("OMNI_USER", "") == user
-            self.send_json({"ok": True, "revoked": n, "env_override": env_override, "warnings": warnings}); return
+            self.send_json({"ok": True, "revoked": n, "env_override": env_override, "warnings": warnings, "needs_restart": bool(IS_HA and config_password_pending(user))}); return
+
+        if route == "/__wpro_api/restart_addon":
+            user = self.get_auth_user()
+            if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
+            if not IS_HA: self.send_json({"ok": False, "error": "Not available on this platform"}, 400); return
+            append_audit(user, "ADDON_RESTART", "requested from the Web UI", 200, self.client_ip())
+            self.send_json({"ok": True})
+            restart_addon_later()
+            return
 
         if route == "/__wpro_api/session_ack":
             user = self.get_auth_user()
