@@ -859,7 +859,9 @@ def config_password_pending(username):
             raw = json.load(f)
         for u in raw.get("users", []):
             if u.get("username") == username:
-                return bool(str(u.get("password") or "").strip())
+                # Only the untouched default password is "pending": restarting then just empties the field.
+                # A different password typed in the configuration would be applied (and override this change) on restart.
+                return str(u.get("password") or "") == "changeme_strong_password"
     except Exception:
         pass
     return False
@@ -1202,7 +1204,7 @@ button:active { transform:scale(.98); }
             if login_locked(key): self.send_json({"ok": False, "error": "Too many wrong attempts."}, 429); return
             if not verify_credentials(user, old_pw):
                 login_failed(key); time.sleep(0.4); append_audit(user, "PASSWORD_CHANGE_FAIL", "wrong current password", 403, ip)
-                self.send_json({"ok": False, "error": "Current password is wrong"}, 403); return
+                self.send_json({"ok": False, "error": "Current password is wrong" + (". If you just typed a new password in the add-on configuration, restart the add-on first; until then the previous password is still the active one." if IS_HA else "")}, 403); return
             login_ok(key)
             if len(new_pw) < 8 or len(new_pw) > 128 or any(ord(c) < 32 for c in new_pw):
                 self.send_json({"ok": False, "error": "New password must be 8-128 characters"}, 400); return
