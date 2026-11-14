@@ -61,7 +61,7 @@ configuration:
     description: Thư mục lớn nhất được phép tải xuống dạng zip qua link chia sẻ.
   users:
     name: Danh sách tài khoản (Users)
-    description: Khai báo tài khoản và mật khẩu dùng chung cho tất cả giao thức (Web UI, WebDAV, SMB, SFTP và FTP).
+    description: "Tài khoản dùng chung cho mọi giao thức (Web UI, WebDAV, SMB, SFTP, FTP). Cách dùng ô mật khẩu: (1) TÀI KHOẢN MỚI: nhập mật khẩu. (2) ĐÃ CÓ MẬT KHẨU (hoặc bạn đã đổi trên Web UI): nhập __KEEP__ hoặc để trống: giữ nguyên mật khẩu hiện tại, không đặt lại gì. (3) ĐẶT LẠI: nhập mật khẩu MỚI: thay mật khẩu hiện tại trên TẤT CẢ giao thức, kể cả mật khẩu đã đổi trên Web UI. Add-on nhớ giá trị đã áp dụng lần trước nên không áp dụng lại cùng một mật khẩu mỗi lần khởi động. Xoá user khỏi danh sách này sẽ xoá tài khoản."
   shares:
     name: Danh sách thư mục hệ thống (Shares)
     description: Các phân vùng của Home Assistant được chia sẻ qua OmniDrive Pro.
