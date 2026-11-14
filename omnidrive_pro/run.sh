@@ -139,74 +139,117 @@ def crypt_hash(pw):
         warn("openssl not found. SFTP/FTP will use plaintext chpasswd.")
         return ""
 
+USERS_FILE = "/data/wpro/users.json"
+KEEP_MARKERS = ("", "__keep__")   # empty or __KEEP__ in the config = keep the existing password
+
+def make_fp(pw):
+    salt = secrets.token_hex(16)
+    return {"salt": salt, "hash": hashlib.pbkdf2_hmac("sha256", str(pw).encode("utf-8"), bytes.fromhex(salt), 100000).hex()}
+
+def match_fp(fp, pw):
+    try:
+        calc = hashlib.pbkdf2_hmac("sha256", str(pw).encode("utf-8"), bytes.fromhex(fp["salt"]), 100000).hex()
+        return hmac.compare_digest(calc, fp["hash"])
+    except Exception:
+        return False
+
 try:
     with open(CFG, encoding="utf-8") as f:
         cfg = json.load(f)
 except Exception as e:
     print("[ERROR] cannot read options.json: %s" % e); sys.exit(1)
 
-users = cfg.get("users") or []
-INIT_MARKER = "/data/wpro/.ha_initialized"
+# /data/options.json is rewritten by the Supervisor on every start, so the real account state
+# (hashes, password changed on the Web UI) lives in our own file: /data/wpro/users.json
+try:
+    with open(USERS_FILE, encoding="utf-8") as f:
+        stored_list = json.load(f)
+    if not isinstance(stored_list, list): stored_list = []
+except Exception:
+    stored_list = []
+stored = {str(x.get("username")): x for x in stored_list if isinstance(x, dict)}
 
-plain = {}
+users = cfg.get("users") or []
+plain = {}     # name -> plaintext, only for accounts whose password is (re)applied from the config now
+status = {}
 out = []
 for u in users:
     name = str(u.get("username", "")).strip()
     if not name or ":" in name or "\n" in name or len(name) > 32:
         warn("Skipping invalid username %r" % name); continue
-    pw = str(u.get("password", ""))
+    raw = u.get("password")
+    pw = "" if raw is None else str(raw)
+    keep = pw.strip().lower() in KEEP_MARKERS
+    st = stored.get(name)
+    has_st = bool(st and st.get("password_hash"))
     entry = {"username": name}
     for k, v in u.items():
-        if k not in ("username", "password", "password_hash", "crypt_hash"):
+        if k not in ("username", "password", "password_hash", "crypt_hash", "cfg_fp"):
             entry[k] = v
-    if pw:
-        plain[name] = pw
-        old = u.get("password_hash", "")
-        if old and check_hash(old, pw):
-            entry["password_hash"] = old
-            entry["crypt_hash"] = u.get("crypt_hash") or crypt_hash(pw)
-        else:
-            entry["password_hash"] = make_hash(pw)
-            entry["crypt_hash"] = crypt_hash(pw)
+    if keep:
+        if not has_st:
+            warn("User %s: password is empty / __KEEP__ but this account does not exist yet -> SKIPPED. Enter a password in the add-on configuration to create it." % name)
+            continue
+        entry["password_hash"] = st["password_hash"]
+        entry["crypt_hash"] = st.get("crypt_hash", "")
+        status[name] = "kept"
+        log("User %s: KEEP -> existing password kept (config marker)." % name)
+    elif has_st and st.get("cfg_fp") and match_fp(st["cfg_fp"], pw):
+        entry["password_hash"] = st["password_hash"]
+        entry["crypt_hash"] = st.get("crypt_hash", "")
+        entry["cfg_fp"] = st["cfg_fp"]
+        status[name] = "unchanged"
+        log("User %s: config password unchanged since the last start -> current password kept (the one you set on the Web UI, if you changed it)." % name)
     else:
-        entry["password_hash"] = u.get("password_hash", "")
-        entry["crypt_hash"] = u.get("crypt_hash", "")
-        if not entry["password_hash"]:
-            warn("User %s has no password: skipped" % name); continue
+        entry["password_hash"] = make_hash(pw)
+        entry["crypt_hash"] = crypt_hash(pw)
+        entry["cfg_fp"] = make_fp(pw)
+        plain[name] = pw
+        if has_st:
+            status[name] = "reset"
+            log("User %s: new password in the config -> password RESET on all protocols." % name)
+        else:
+            status[name] = "created"
+            log("User %s: account CREATED from the config password." % name)
     out.append(entry)
 
 if not out:
     print("[ERROR] you must define at least one account under 'users' in the add-on configuration"); sys.exit(1)
 
-cfg["users"] = out
-tmp = CFG + ".tmp"
+os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
+tmp = USERS_FILE + ".tmp"
 with open(tmp, "w", encoding="utf-8") as f:
-    json.dump(cfg, f, indent=2)
+    json.dump(out, f, indent=2)
 os.chmod(tmp, 0o600)
-os.replace(tmp, CFG)
+os.replace(tmp, USERS_FILE)
 
 if any(check_hash(e["password_hash"], "changeme_strong_password") for e in out):
-    warn("A user still has the DEFAULT password 'changeme_strong_password'. Change it in the add-on configuration now!")
+    warn("A user still has the DEFAULT password 'changeme_strong_password'. Change it (Web UI > Change Password, or enter a new one in the add-on configuration) now!")
 
 for e in out:
     name = e["username"]
     if run(["id", name]).returncode != 0:
         run(["adduser", "-D", "-H", "-h", ROOT_DIR, "-s", "/bin/bash", "-G", "root", name])
-    
-    # Ưu tiên dùng crypt_hash nếu có (SHA-512), nếu không thì fallback về plaintext chpasswd
+
+    # SFTP / FTP: system account, recreated at every start from the stored SHA-512 hash
     if e.get("crypt_hash"):
         run(["chpasswd", "-e"], "%s:%s\n" % (name, e["crypt_hash"]))
     elif name in plain:
         run(["chpasswd"], "%s:%s\n" % (name, str(plain[name])))
-        
+    else:
+        warn("User %s has no stored system hash: SFTP/FTP login is unavailable until you enter a new password in the add-on configuration." % name)
+
+    # SMB: the Samba database is persistent (/data/wpro/samba); only touch the password on create / reset
     if SMB:
         if name in plain:
             run(["smbpasswd", "-a", "-s", name], "%s\n%s\n" % (str(plain[name]), str(plain[name])))
             run(["smbpasswd", "-e", name])
-            
-    log("Provisioned account: " + name)
-    
-open(INIT_MARKER, "w").close()
+        elif run(["pdbedit", "-L", "-u", name]).returncode == 0:
+            run(["smbpasswd", "-e", name])
+        else:
+            warn("User %s is missing from the Samba database: enter a new password in the add-on configuration to recreate the SMB login." % name)
+
+    log("Provisioned account: %s (%s)" % (name, status.get(name, "?")))
 USEREOF
 
 SMB_ENABLED_RESOLVED="$SMB_ENABLED" ROOT_ACCESS="$ROOT_ACCESS" python3 /usr/local/bin/wpro_users.py || bashio::exit.nok "Account provisioning failed."
@@ -434,6 +477,7 @@ AUDIT_FILE = os.path.join(DATA_DIR, "audit.jsonl")
 SECRET_FILE = os.path.join(DATA_DIR, "session.secret")
 SESSIONS_FILE = os.path.join(DATA_DIR, "sessions.json")
 DEVICES_FILE = os.path.join(DATA_DIR, "known_devices.json")
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
 
 if not os.path.exists(SECRET_FILE):
     with open(SECRET_FILE, "w") as f:
@@ -446,9 +490,17 @@ with open(SECRET_FILE, "r") as f:
 def get_config():
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+            cfg = json.load(f)
     except Exception:
-        return {}
+        cfg = {}
+    # Accounts (hashes, password changed on the Web UI) are stored in users.json, not in the Supervisor-owned options.json
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            users = json.load(f)
+        if isinstance(users, list): cfg["users"] = users
+    except Exception:
+        pass
+    return cfg
 
 PW_CACHE = {}
 PW_CACHE_KEY = secrets.token_bytes(32)
@@ -721,19 +773,25 @@ def change_user_password(username, new_pw):
     except Exception: pass
     
     with CONFIG_LOCK:
-        cfg = get_config()
+        try:
+            with open(USERS_FILE, "r", encoding="utf-8") as f: users = json.load(f)
+        except Exception:
+            users = []
         target = None
-        for u in cfg.get("users", []):
+        for u in users:
             if u.get("username") == username: target = u; break
         if target is None: return False, ["user not found"]
         target["password_hash"] = _make_pw_hash(new_pw)
         target["crypt_hash"] = crypt
         target.pop("password", None)
-        tmp = CONFIG_PATH + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f: json.dump(cfg, f, indent=2)
+        # cfg_fp (fingerprint of the last config password) is kept on purpose: the config password is only
+        # re-applied when YOU change it there, so a restart never undoes a password changed on the Web UI.
+        tmp = USERS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f: json.dump(users, f, indent=2)
         os.chmod(tmp, 0o600)
-        os.replace(tmp, CONFIG_PATH)
-        
+        os.replace(tmp, USERS_FILE)
+    cfg = get_config()
+
     warnings = []
     if crypt:
         try:
