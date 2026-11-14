@@ -70,6 +70,8 @@ EXT_PORT=$(host_port 8090/tcp)
 SHARE_ZIP_MAX_MB=$(bashio::config 'share_zip_max_mb' 2>/dev/null || true)
 if ! [[ "$SHARE_ZIP_MAX_MB" =~ ^[0-9]+$ ]]; then SHARE_ZIP_MAX_MB=2048; fi
 export WPRO_PLATFORM=ha
+INGRESS_TOKEN=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d " \n")
+export INGRESS_TOKEN
 export LAN_IP PUBLIC_URL SMB_PORT SFTP_PORT FTP_PORT EXT_PORT SHARE_ZIP_MAX_MB
 bashio::log.info "Connect Hub: LAN_IP='${LAN_IP}' PUBLIC_URL='${PUBLIC_URL}'"
 
@@ -876,7 +878,21 @@ class WProHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args): return
     def client_ip(self): return self.headers.get("X-Real-IP", self.client_address[0])
 
+    def is_ingress(self):
+        tok = os.environ.get("INGRESS_TOKEN", "")
+        return bool(tok) and hmac.compare_digest(self.headers.get("X-WPro-Ingress", "").encode("utf-8", "ignore"), tok.encode("utf-8"))
+
     def get_auth_user(self):
+        self.sid = None
+        u = self._get_auth_user_real()
+        if u: return u
+        # Home Assistant Ingress: Supervisor already authenticated the HA user, nginx marks the request with a per-boot secret.
+        if self.is_ingress():
+            users = get_config().get("users", [])
+            if users: return users[0].get("username")
+        return None
+
+    def _get_auth_user_real(self):
         self.sid = None
         cookie_hdr = self.headers.get("Cookie", "")
         if cookie_hdr:
@@ -1177,6 +1193,9 @@ button:active { transform:scale(.98); }
         if route == "/__wpro_api/change_password":
             user = self.get_auth_user()
             if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
+            if self.sid is None and self.is_ingress():
+                want = str(body.get("user", "")).strip()
+                if want and user_exists(want): user = want
             ip = self.client_ip()
             old_pw, new_pw = str(body.get("old", "")), str(body.get("new", ""))
             key = "chpw|" + ip + "|" + user.lower()
@@ -1404,7 +1423,7 @@ http {
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
         location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
         location /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
-        location ^~ /__wpro_api/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; access_log off; }
+        location ^~ /__wpro_api/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress "${INGRESS_TOKEN}"; access_log off; }
         location ^~ /s/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; }
         location / {
             root ${ROOT_DIR};
