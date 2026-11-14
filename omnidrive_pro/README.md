@@ -1,6 +1,6 @@
 # Home Assistant Add-on: OmniDrive Pro
 
-![Version](https://img.shields.io/badge/version-1.0.61-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.52-blue.svg)
 ![Nginx](https://img.shields.io/badge/nginx-1.30.6--r0-009639.svg)
 ![Alpine Base](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg)
 ![Protocols](https://img.shields.io/badge/protocols-WebDAV%20%7C%20SMB%20%7C%20SFTP%20%7C%20FTP-8b5cf6.svg)
@@ -22,7 +22,7 @@ This add-on tracks official Alpine Linux and Nginx upstream releases and updates
 > 1. **Change the default password.** The default password is public (`changeme_strong_password`). Anyone who guesses it gets access to your HA configuration files and terminal. Change it in the **Add-on Configuration** tab.
 > 2. **Root Access and Web Terminal are powerful.** By default, `root_access` is `false` and `enable_terminal` is `true`. If you enable `root_access`, file operations run as root. If you use the Web Terminal, you can execute root commands inside the container. Ensure your Home Assistant instance is not exposed directly to the internet without strong authentication (e.g., use Cloudflare Zero Trust or a VPN).
 > 3. **Check ports.** This add-on requires ports `8090`, `445`, `2222`, `2121`, and `21000-21002`. If Samba (`445`) is already used by another add-on or the host, change the port mapping.
-> 4. **Password Management Quirk:** You can change your password either in the HA Add-on Configuration or via the Web UI (Security -> Change Password). If you change it via the Web UI, it is immediately hashed. However, if you later open the HA Configuration tab and click "Save" without changing the password field, HA will overwrite your Web UI password with the plaintext one in the config. *Always update your password in the HA Configuration tab if you want to make it permanent.*
+> 4. **How passwords work.** Change your password in the Web UI (**Security → Change Password**): it applies at once to every protocol, no restart needed. In the Add-on **Configuration** tab the password box is **empty = keep the current password** (the add-on empties it for you after applying). Type a password there only to create a user or to **reset** a password, then restart the add-on. If a password is still visible in that box, it has not been replaced yet. Details in `DOCS.md`.
 
 ## Features
 
@@ -48,7 +48,8 @@ This add-on tracks official Alpine Linux and Nginx upstream releases and updates
   - **Storage Analytics (Donut Chart):** Visualizes total disk capacity, used/free space, and per-folder storage breakdown.
   - **1-Tap Quick Zip Snapshot:** Instant `.zip` backup of `/config` or `Automations & Scripts` straight into `/backup` before editing code.
   - **Temporary Expiry Share Links (`/s/<token>`):** Generate public download links for any file or folder (folders are automatically zipped). Set custom expiry (1 hour to 365 days), limit **max downloads**, and protect with a **password**.
-  - **Security Audit Log & Devices:** View real-time file modifications and logins. See all signed-in devices, revoke access instantly, and change passwords securely (hashed with PBKDF2).
+  - **Smart Connect Hub:** SMB, SFTP and FTP show the Home Assistant LAN IP (auto-detected), WebDAV shows your own domain. Optional `lan_ip`, `public_url`, `ftp_pasv_address` and `ftp_tls` (FTPS) options.
+  - **Security Audit Log & Devices:** View real-time file modifications and logins. See all signed-in devices, revoke access instantly, and change passwords securely (hashed with PBKDF2-HMAC-SHA512 for Web UI/WebDAV and SHA-512 via OpenSSL for SFTP/FTP).
 
 ## 🔒 Security Notes
 
@@ -58,4 +59,4 @@ OmniDrive Pro is powerful by design, so please harden it:
 - **The Web Terminal runs shell commands as root** inside the container. Disable it (`enable_terminal: false`) if you don't need it, or restrict access to your HA instance.
 - **Do not publish HA ports directly to the internet.** Prefer a VPN (Tailscale/WireGuard) or Cloudflare Zero Trust Tunnel.
 - **Share links (`/s/<token>`) are public** to anyone with the URL until they expire or are revoked. Always set a short expiry, download limit, and password for sensitive files.
-- **Passwords are hashed on disk.** The add-on strips plaintext passwords from `/data/options.json` on startup and replaces them with strong PBKDF2 hashes.
+- **Passwords are hashed on disk.** The add-on stores only hashes (`/data/wpro/users.json`): PBKDF2-HMAC-SHA512 (600,000 iterations) for the Web UI and WebDAV, and a SHA-512 hash generated with OpenSSL (`openssl passwd -6`) for the SFTP/FTP system accounts. It also empties applied password boxes in the add-on configuration, so a plain-text password does not linger there. The default `changeme_strong_password` stays visible until you replace it.

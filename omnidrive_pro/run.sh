@@ -107,7 +107,7 @@ import os, sys, json, hmac, hashlib, secrets, subprocess
 
 CFG = "/data/options.json"
 ROOT_DIR = "/var/webdav_root"
-ITER = 200000
+ITER = 600000
 SMB = os.environ.get("SMB_ENABLED_RESOLVED", "true") == "true"
 RUN_AS_ROOT = os.environ.get("ROOT_ACCESS", "false") == "true"
 PUID = os.environ.get("PUID", "1000")
@@ -118,15 +118,15 @@ def warn(msg): print("[WARN] " + msg, flush=True)
 
 def make_hash(pw):
     salt = secrets.token_hex(16)
-    h = hashlib.pbkdf2_hmac("sha256", str(pw).encode("utf-8"), bytes.fromhex(salt), ITER).hex()
-    return "pbkdf2_sha256$%d$%s$%s" % (ITER, salt, h)
+    h = hashlib.pbkdf2_hmac("sha512", str(pw).encode("utf-8"), bytes.fromhex(salt), ITER).hex()
+    return "pbkdf2_sha512$%d$%s$%s" % (ITER, salt, h)
 
 def check_hash(stored, pw):
     try:
         algo, it, salt, h = stored.split("$")
-        if algo != "pbkdf2_sha256":
+        if algo not in ("pbkdf2_sha256", "pbkdf2_sha512"):
             return False
-        calc = hashlib.pbkdf2_hmac("sha256", str(pw).encode("utf-8"), bytes.fromhex(salt), int(it)).hex()
+        calc = hashlib.pbkdf2_hmac(algo.split("_")[1], str(pw).encode("utf-8"), bytes.fromhex(salt), int(it)).hex()
         return hmac.compare_digest(calc, h)
     except Exception:
         return False
@@ -539,14 +539,14 @@ PW_CACHE = {}
 PW_CACHE_KEY = secrets.token_bytes(32)
 PW_CACHE_TTL = 300
 PW_CACHE_LOCK = threading.Lock()
-_DUMMY_HASH = "pbkdf2_sha256$200000$" + "00" * 16 + "$" + "00" * 32
+_DUMMY_HASH = "pbkdf2_sha512$600000$" + "00" * 16 + "$" + "00" * 64
 
 def _pbkdf2_check(stored, password):
     try:
         algo, it, salt, h = stored.split("$")
-        if algo != "pbkdf2_sha256": return False
+        if algo not in ("pbkdf2_sha256", "pbkdf2_sha512"): return False
         it = max(1, min(int(it), 5000000))
-        calc = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), it).hex()
+        calc = hashlib.pbkdf2_hmac(algo.split("_")[1], password.encode("utf-8"), bytes.fromhex(salt), it).hex()
         return hmac.compare_digest(calc, h)
     except Exception: return False
 
@@ -796,8 +796,8 @@ CONFIG_LOCK = threading.Lock()
 
 def _make_pw_hash(pw):
     salt = secrets.token_hex(16)
-    h = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salt), 200000).hex()
-    return "pbkdf2_sha256$200000$%s$%s" % (salt, h)
+    h = hashlib.pbkdf2_hmac("sha512", pw.encode("utf-8"), bytes.fromhex(salt), 600000).hex()
+    return "pbkdf2_sha512$600000$%s$%s" % (salt, h)
 
 def change_user_password(username, new_pw):
     crypt = ""

@@ -55,10 +55,10 @@ The second action bar in the Web UI provides five dedicated system administratio
    - **Backup Entire `/config` Folder:** Compresses all YAML configurations, `custom_components`, and `.storage` (excluding heavy database/log files) into `/backup/quick_config_YYYYMMDD_HHMMSS.zip`.
    - **Backup Automations & Scripts Only:** Creates a fast, lightweight `.zip` snapshot of your automations, scripts, scenes, and packages.
 4. **Connect (`Multi-Protocol Connect Hub`):**
-   - Displays live connection URLs for **SMB/Samba (`445`)**, **SFTP (`2222`)**, **FTP (`2121`)**, and **WebDAV (`8090`)** with 1-tap copy to clipboard.
+   - Displays live connection URLs with 1-tap copy. **SMB, SFTP and FTP** always show the Home Assistant **LAN IP** (auto-detected, or set with `lan_ip`) because they only work inside your network. **WebDAV** shows your own domain (`public_url`), or the address you are browsing from when it is empty.
 5. **Security (`Devices, Shares & Audit`):**
    - **Signed-in Devices:** View every active session (Device type, IP, Last Active). Instantly sign out any suspicious device or click **Sign Out All & Rotate Key** if you suspect a leak.
-   - **Change Password:** Securely update your password. It is hashed immediately and applied across Web UI, WebDAV, SMB, SFTP, and FTP.
+   - **Change Password:** Securely update your password. It is hashed immediately and applied across Web UI, WebDAV, SMB, SFTP, and FTP, with no restart. On Home Assistant a pop-up may offer to restart the add-on to empty the default password in the Configuration tab (see section 4).
    - **Expiry Share Links:** Tap `⋯` -> **Create Expiry Share Link** on any file/folder. You can set the maximum downloads, password protection, and expiry time.
    - **Security Audit Log:** View real-time logs of web logins, file modifications, deletions, snapshots, and share-link downloads.
 
@@ -82,19 +82,29 @@ The second action bar in the Web UI provides five dedicated system administratio
 | `root_access` | `false` | When `true`, file operations (Web UI, zip, terminal) run as **root**. When `false`, runs as unprivileged user. |
 | `enable_terminal` | `true` | Toggles the built-in Web Terminal inside the UI. |
 | `lock_root` | `true` | Prevents creating/renaming/deleting files directly at the root directory `/`. Forces users to work inside a specific share/folder. |
-| `users` | `[...]` | List of `{ username, password }` accounts authorized across Web UI, WebDAV, SMB, SFTP, and FTP. |
+| `lan_ip` | `""` | LAN IP shown in the Connect Hub for SMB, SFTP and FTP (e.g. `192.168.1.10`). Empty = auto-detected from Home Assistant. |
+| `public_url` | `""` | WebDAV address shown in the Connect Hub (e.g. `https://drive.example.com`). Empty = the address you are browsing from. |
+| `ftp_pasv_address` | `""` | LAN IP announced to FTP clients in passive mode. Empty = the detected LAN IP. A wrong value makes FTP clients hang when listing folders. |
+| `ftp_tls` | `optional` | `optional` = FTPS when the client asks, plain FTP still works. `required` = plain FTP refused. `off` = no encryption. The certificate is generated automatically (or taken from `/ssl`). |
+| `trusted_proxies` | `172.16.0.0/12,127.0.0.0/8` | Reverse proxies / Cloudflare Tunnel allowed to tell the add-on the real client IP (audit log, rate limits, login lockout). `none` disables it. |
+| `share_zip_max_mb` | `2048` | Largest folder (MB) that can be downloaded as a zip through a share link. |
+| `users` | `[...]` | List of `{ username, password }` accounts shared by all protocols. Password box: empty = keep, typed = create/reset (see section 4). |
 | `shares` | `[...]` | List of mapped Home Assistant directories (`config`, `addon_configs`, `addons`, `backup`, `media`, `share`, `ssl`). |
 
 ---
 
 ## 🔑 4. Password Management in Home Assistant
 
-This add-on bridges the Home Assistant configuration UI and its own internal database. Here is how passwords work:
+1. **First start.** The default account is `admin` with the password `changeme_strong_password`. Set your own password in the **Configuration** tab before the first start, or change it later in the Web UI. The password is never stored as plain text: the Web UI and WebDAV use a salted PBKDF2-HMAC-SHA512 hash (600,000 iterations), and the SFTP/FTP system accounts use a SHA-512 hash generated with OpenSSL (`openssl passwd -6`). SMB keeps the NT hash required by Samba. The add-on stores them itself; every protocol (Web UI, WebDAV, SMB, SFTP, FTP) uses it.
+2. **Change it in the Web UI (recommended).** **Security → Change Password** takes effect immediately on all protocols. No restart is needed. Your other signed-in devices are signed out.
+3. **The password box in the Configuration tab.** It follows one simple rule:
+   - **Empty = keep the current password.** After applying a password, the add-on empties the box by itself. An empty box is the normal state, so you do not need to put anything there.
+   - **Typed = set it.** Typing a password creates a new account, or **resets** the password of an existing account on every protocol (this replaces a password changed in the Web UI). Save and **restart the add-on** for it to apply. Until the restart, the previous password stays active.
+   - **A password you can still see** (for example `changeme_strong_password`) has not been replaced yet.
+4. **Restart prompt (Home Assistant only).** If you change the password in the Web UI while the box still holds the default password, a pop-up offers to restart the add-on. The new password is already active; the restart only empties the box. Choose **Restart now** or **Later**. On Docker no restart is ever needed.
+5. **Users.** A new user typed in the Configuration tab is created at the next restart. Removing a user from the list deletes the account.
 
-1. **First Run:** You define a password in the **Configuration** tab of the Home Assistant Add-on. When you start the add-on, this password is read, hashed securely, and stored.
-2. **Changing Password on Web UI:** You can use the **Security -> Change Password** button inside the Web UI. This updates the hash immediately across all protocols.
-3. **The Home Assistant Quirk:** Home Assistant does not know you changed your password via the Web UI. If you go back to the **Add-on Configuration** tab and click "Save" (even if you didn't touch the password field), Home Assistant will overwrite your Web UI password with whatever plaintext is written in the configuration.
-   - *Rule of thumb:* If you change your password on the Web UI, remember to also update it in the Add-on Configuration tab to keep them in sync.
+> The add-on keeps the real passwords in its own storage (`/data/wpro/users.json`), never as plain text. If you forget a password, type a new one in the Configuration tab and restart.
 
 ---
 
