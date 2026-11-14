@@ -61,7 +61,7 @@ configuration:
     description: Largest folder that can be downloaded as a zip through a share link.
   users:
     name: User Accounts
-    description: List of usernames and passwords authorized across all protocols (Web UI, WebDAV, SMB, SFTP, and FTP).
+    description: "Accounts shared by all protocols (Web UI, WebDAV, SMB, SFTP, FTP). How the password field works: (1) NEW ACCOUNT: enter a password. (2) ALREADY HAS A PASSWORD (or you changed it in the Web UI): enter __KEEP__ or leave it empty: the existing password is kept and nothing is reset. (3) RESET: enter a NEW password: it replaces the current password on ALL protocols, even one changed in the Web UI. The add-on remembers the last value it applied, so the same password is not re-applied at every restart. Removing a user from this list deletes the account."
   shares:
     name: Shared Directories
     description: Configure Home Assistant system directories exposed across OmniDrive Pro, including read-only mode and allowed users per share.
