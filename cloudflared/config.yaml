@@ -1,6 +1,6 @@
 name: "Cloudflared Pro"
 description: "Use a Cloudflare Tunnel to remotely connect to Home Assistant without opening any ports"
-version: "1.0.5"
+version: "1.1.0"
 slug: "cloudflared_pro"
 url: "https://github.com/boystyle2010/ha-addons"
 init: false
@@ -10,31 +10,38 @@ arch:
 apparmor: true
 startup: services
 boot: auto
+ports:
+  2000/tcp: null
+ports_description:
+  2000/tcp: "Prometheus metrics (set metrics_port to 2000 and choose a host port here)"
 map:
   - ssl:ro
   - share:rw
 options:
   tunnel_token: ""
   protocol: "auto"
-  ha_Edge_IP_Version: "Auto"
+  edge_ip_version: "Auto"
   post_quantum: false
   log_level: "info"
   retries: 5
   grace_period: "30s"
   metrics_port: 0
+  tunnel_name: "homeassistant"
   external_hostname: ""
   additional_hosts: []
-  catch_all_service: "http://homeassistant:8123"
+  catch_all_service: "http_status:404"
+  nginx_proxy_manager: false
   custom_flags: []
 schema:
   tunnel_token: "password?"
   protocol: "list(auto|quic|http2)"
-  ha_Edge_IP_Version: "list(Auto|IPv4|IPv6)"
+  edge_ip_version: "list(Auto|IPv4|IPv6)"
   post_quantum: "bool"
   log_level: "list(debug|info|warn|error|fatal)"
   retries: "int(1,20)"
   grace_period: "str"
   metrics_port: "int(0,65535)?"
+  tunnel_name: "str?"
   external_hostname: "str?"
   additional_hosts:
     - hostname: "str"
@@ -42,5 +49,6 @@ schema:
       no_tls_verify: "bool?"
       http_host_header: "str?"
   catch_all_service: "str?"
+  nginx_proxy_manager: "bool?"
   custom_flags:
     - "str"
