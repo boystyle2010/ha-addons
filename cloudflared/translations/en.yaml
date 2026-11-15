@@ -1,37 +1,58 @@
 configuration:
   tunnel_token:
-    name: "Cloudflare Tunnel Token (Zero Trust Dashboard)"
-    description: "Paste your tunnel token from the Cloudflare Zero Trust Dashboard. When provided, remote routing rules on Cloudflare take precedence."
+    name: Tunnel Token (optional)
+    description: "Token of a tunnel created in the Cloudflare Zero Trust dashboard. When filled in, routes are managed in Cloudflare and the local options below (hostnames, catch-all, Nginx Proxy Manager) are ignored."
   protocol:
-    name: "Connection Protocol"
-    description: "Protocol used to connect to Cloudflare Edge servers (Recommended: auto or http2 for stability)."
-  ha_Edge_IP_Version:
-    name: "Edge IP Version"
-    description: "Specify the IP address family (Auto, IPv4, or IPv6) for connecting to Cloudflare Edge."
+    name: Connection Protocol
+    description: "Transport used to reach Cloudflare. auto lets cloudflared choose, quic is the fastest, http2 helps on networks that block UDP."
+  edge_ip_version:
+    name: Edge IP Version
+    description: "IP version used to connect to the Cloudflare network. Choose IPv4 if IPv6 is unreliable on your network."
   post_quantum:
-    name: "Post-Quantum Cryptography"
-    description: "Enable post-quantum hybrid key exchange for the tunnel connection."
+    name: Post-Quantum Encryption
+    description: "Enables post-quantum encryption for the tunnel connection."
   log_level:
-    name: "Log Level"
-    description: "Verbosity level of the cloudflared logs."
+    name: Log Level
+    description: "How detailed the cloudflared log is. Use debug only when troubleshooting."
   retries:
-    name: "Maximum Retries"
-    description: "Maximum number of retries for establishing the connection before backing off (Default: 5)."
+    name: Connection Retries
+    description: "Maximum number of retries when the connection to Cloudflare fails (1 to 20)."
   grace_period:
-    name: "Shutdown Grace Period"
-    description: "Time to wait for active requests to finish before shutting down the tunnel (e.g., 30s)."
+    name: Shutdown Grace Period
+    description: "Time cloudflared waits for active requests to finish when it stops, for example 30s."
   metrics_port:
-    name: "Prometheus Metrics Port"
-    description: "Internal port to expose Prometheus metrics (Set to 0 or leave blank to disable)."
+    name: Metrics Port
+    description: "0 keeps metrics internal. Set a port such as 2000 to serve Prometheus metrics; to reach it from outside Home Assistant also choose a host port in the Network section."
+  tunnel_name:
+    name: Tunnel Name (local mode)
+    description: "Name of the tunnel created on the first start in local mode. It must be unique in your Cloudflare account."
   external_hostname:
-    name: "[Local Mode] Primary External Hostname"
-    description: "Only used if Tunnel Token is empty and you manage credentials.json locally in /share/cloudflared/."
+    name: Home Assistant Hostname (local mode)
+    description: "Public hostname that reaches Home Assistant, for example ha.example.com. Leave empty to expose only the additional hosts."
   additional_hosts:
-    name: "[Local Mode] Additional Public Hostnames"
-    description: "Define extra internal services (e.g., Scrypted, Portainer, Z-Wave) when running in Local Mode."
+    name: Additional Hosts (local mode)
+    description: "Other services to expose through the same tunnel, one item per hostname."
+    fields:
+      hostname:
+        name: Hostname
+        description: "Public hostname, for example nas.example.com."
+      service:
+        name: Service URL
+        description: "Where the traffic goes, for example http://192.168.1.20:5000 or https://192.168.1.2:5001."
+      no_tls_verify:
+        name: Skip TLS Verification
+        description: "Turn on to accept a self-signed certificate on an HTTPS service."
+      http_host_header:
+        name: HTTP Host Header
+        description: "Optional value sent as the Host header to the service."
   catch_all_service:
-    name: "[Local Mode] Catch-All Service"
-    description: "Default fallback service when no hostname matches (e.g., http://homeassistant:8123 or http_status:404)."
+    name: Catch-all Service (local mode)
+    description: "What happens to hostnames that are not listed. The default http_status:404 answers with a 404 page; a URL forwards the traffic to that service."
+  nginx_proxy_manager:
+    name: Use Nginx Proxy Manager (local mode)
+    description: "Sends unlisted hostnames to the official Nginx Proxy Manager add-on. Overrides the catch-all service."
   custom_flags:
-    name: "Custom CLI Flags"
-    description: "Additional command-line flags passed directly to cloudflared."
+    name: Custom cloudflared Flags
+    description: "Extra command-line flags for cloudflared, one per item, for example --region=us. Do not repeat options that already have their own setting."
+network:
+  2000/tcp: Prometheus metrics (set the Metrics Port option to 2000)
