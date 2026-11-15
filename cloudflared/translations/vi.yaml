@@ -1,38 +1,58 @@
 configuration:
   tunnel_token:
-    name: "Cloudflare Tunnel Token (Zero Trust Dashboard)"
-    description: "Dán Token lấy từ trang Cloudflare Zero Trust. Nếu dùng Token, cấu hình tên miền trên web Cloudflare sẽ được ưu tiên."
+    name: Tunnel Token (tuỳ chọn)
+    description: "Token của tunnel tạo trong bảng điều khiển Cloudflare Zero Trust. Khi điền, các tuyến đường được quản lý ở Cloudflare và các tuỳ chọn cục bộ bên dưới (tên miền, catch-all, Nginx Proxy Manager) sẽ bị bỏ qua."
   protocol:
-    name: "Giao thức kết nối (Protocol)"
-    description: "Giao thức kết nối đến máy chủ Cloudflare (Khuyên dùng: auto hoặc http2 để ổn định nhất)."
-  ha_Edge_IP_Version:
-    name: "Phiên bản IP kết nối (Edge IP Version)"
-    description: "Chọn Auto, IPv4 hoặc IPv6 khi kết nối tới máy chủ biên Cloudflare Edge."
+    name: Giao thức kết nối
+    description: "Giao thức dùng để kết nối tới Cloudflare. auto để cloudflared tự chọn, quic nhanh nhất, http2 hữu ích khi mạng chặn UDP."
+  edge_ip_version:
+    name: Phiên bản IP kết nối
+    description: "Phiên bản IP dùng để kết nối tới mạng Cloudflare. Chọn IPv4 nếu IPv6 trên mạng của bạn không ổn định."
   post_quantum:
-    name: "Mã hóa Post-Quantum (Bảo mật lượng tử)"
-    description: "Bật thuật toán mã hóa kháng máy tính lượng tử cho đường truyền Tunnel."
+    name: Mã hoá hậu lượng tử
+    description: "Bật mã hoá hậu lượng tử cho kết nối tunnel."
   log_level:
-    name: "Mức độ hiển thị Log (Log Level)"
-    description: "Độ chi tiết của thông tin xuất ra trong tab Log của Add-on."
+    name: Mức độ ghi nhật ký
+    description: "Độ chi tiết của log cloudflared. Chỉ dùng debug khi cần tìm lỗi."
   retries:
-    name: "Số lần thử kết nối lại (Retries)"
-    description: "Số lần tự động thử kết nối lại tối đa khi mạng chập chờn (Mặc định: 5)."
+    name: Số lần thử kết nối lại
+    description: "Số lần thử lại tối đa khi kết nối tới Cloudflare thất bại (1 đến 20)."
   grace_period:
-    name: "Thời gian chờ đóng kết nối an toàn (Grace Period)"
-    description: "Thời gian chờ hoàn tất các truy cập đang diễn ra trước khi tắt Tunnel (VD: 30s)."
+    name: Thời gian chờ khi tắt
+    description: "Thời gian cloudflared chờ các yêu cầu đang chạy hoàn tất khi dừng, ví dụ 30s."
   metrics_port:
-    name: "Cổng Metrics (Prometheus)"
-    description: "Cổng nội bộ để xuất dữ liệu theo dõi trạng thái Tunnel (Để 0 hoặc bỏ trống nếu muốn tắt)."
+    name: Cổng metrics
+    description: "0 giữ metrics ở bên trong. Đặt một cổng như 2000 để phục vụ metrics cho Prometheus; muốn truy cập từ ngoài Home Assistant, hãy chọn thêm cổng máy chủ trong mục Network."
+  tunnel_name:
+    name: Tên tunnel (chế độ cục bộ)
+    description: "Tên tunnel được tạo ở lần khởi động đầu tiên trong chế độ cục bộ. Phải là duy nhất trong tài khoản Cloudflare của bạn."
   external_hostname:
-    name: "[Local Mode] Tên miền chính cho Home Assistant"
-    description: "Chỉ dùng nếu KHÔNG nhập Tunnel Token bên trên và tự quản lý file credentials.json trong /share/cloudflared/."
+    name: Tên miền Home Assistant (chế độ cục bộ)
+    description: "Tên miền công khai dẫn tới Home Assistant, ví dụ ha.example.com. Để trống nếu chỉ muốn chia sẻ các host bổ sung."
   additional_hosts:
-    name: "[Local Mode] Danh sách Subdomain phụ (Additional Hosts)"
-    description: "Khai báo thêm các dịch vụ nội bộ khác (VD: Scrypted, Portainer, Z-Wave...) nếu dùng chế độ Local Mode."
+    name: Host bổ sung (chế độ cục bộ)
+    description: "Các dịch vụ khác chia sẻ qua cùng một tunnel, mỗi tên miền một mục."
+    fields:
+      hostname:
+        name: Tên miền
+        description: "Tên miền công khai, ví dụ nas.example.com."
+      service:
+        name: Địa chỉ dịch vụ
+        description: "Nơi lưu lượng được chuyển tới, ví dụ http://192.168.1.20:5000 hoặc https://192.168.1.2:5001."
+      no_tls_verify:
+        name: Bỏ qua kiểm tra TLS
+        description: "Bật để chấp nhận chứng chỉ tự ký trên dịch vụ HTTPS."
+      http_host_header:
+        name: HTTP Host Header
+        description: "Giá trị tuỳ chọn gửi làm Host header tới dịch vụ."
   catch_all_service:
-    name: "[Local Mode] Dịch vụ mặc định (Catch-All Service)"
-    description: "Đích đến mặc định khi không khớp tên miền nào (VD: http://homeassistant:8123 hoặc http_status:404)."
+    name: Dịch vụ mặc định (chế độ cục bộ)
+    description: "Việc xảy ra với các tên miền chưa khai báo. Mặc định http_status:404 trả về trang 404; nhập một địa chỉ để chuyển lưu lượng tới dịch vụ đó."
+  nginx_proxy_manager:
+    name: Dùng Nginx Proxy Manager (chế độ cục bộ)
+    description: "Chuyển các tên miền chưa khai báo sang add-on Nginx Proxy Manager chính thức. Ghi đè dịch vụ mặc định."
   custom_flags:
-    name: "Tham số dòng lệnh nâng cao (Custom CLI Flags)"
-    description: "Thêm bất kỳ cờ lệnh nâng cao nào của cloudflared."
-
+    name: Cờ cloudflared tuỳ chỉnh
+    description: "Các cờ dòng lệnh bổ sung cho cloudflared, mỗi mục một cờ, ví dụ --region=us. Không lặp lại các tuỳ chọn đã có cài đặt riêng."
+network:
+  2000/tcp: Metrics cho Prometheus (đặt tuỳ chọn Cổng metrics là 2000)
