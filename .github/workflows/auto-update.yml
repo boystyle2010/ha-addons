@@ -40,15 +40,7 @@ jobs:
           D="cloudflared"
           mkdir -p "$D"
 
-          if [ ! -f "$D/icon.png" ]; then
-            curl -sfL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o "$D/icon.png" || true
-          fi
-          if [ ! -f "$D/logo.png" ]; then
-            curl -sfL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o "$D/logo.png" || true
-          fi
-          if [ ! -f "$D/DOCS.md" ]; then
-            curl -sfL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o "$D/DOCS.md" || true
-          fi
+          # DOCS.md is maintained by hand in this repository (never downloaded from another project).
 
           # Tạo hồ sơ bảo mật AppArmor tùy chỉnh để tăng Security Rating trên Home Assistant
           if [ ! -f "$D/apparmor.txt" ]; then
@@ -139,6 +131,8 @@ jobs:
           # Chèn hàng Badges lên đầu DOCS.md để hiển thị đẹp mắt ngay trong tab Documentation của HA
           if [ -f "$D/DOCS.md" ]; then
             sed -i '/img.shields.io\/badge/d' "$D/DOCS.md"
+            # Drop the blank lines left at the top, so every run produces the same file (no growth, no empty commits).
+            sed -i '/./,$!d' "$D/DOCS.md"
             BADGE_LINE="![Version](https://img.shields.io/badge/version-${VER}-blue.svg) ![Cloudflared](https://img.shields.io/badge/cloudflared-${CUR_CF}-F38020.svg) ![Alpine](https://img.shields.io/badge/alpine%20base-${CUR_ALPINE}-0D597F.svg) ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg) ![AppArmor](https://img.shields.io/badge/apparmor-enforced-success.svg)"
             TMP_DOCS=$(mktemp)
             echo "$BADGE_LINE" > "$TMP_DOCS"
