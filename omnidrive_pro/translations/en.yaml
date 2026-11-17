@@ -28,7 +28,7 @@ configuration:
     description: Enables the modern iOS Dark UI with built-in Ace Code Editor, Web Terminal, Disk Analytics, and Share Links when accessed via browser or Home Assistant Ingress.
   show_dotfiles:
     name: Show Hidden Files (Dotfiles)
-    description: Allows viewing and editing hidden files and folders starting with a dot (e.g., .storage, .cloud, .git).
+    description: Lets the file browser list and open items starting with a dot (e.g., .storage, .git). They stay hidden until you tap the eye button; turn this off to block them completely.
   log_level:
     name: Log Level
     description: Controls the verbosity of server logs.

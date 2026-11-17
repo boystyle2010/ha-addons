@@ -28,7 +28,7 @@ configuration:
     description: Hiển thị giao diện duyệt file chuẩn iOS kèm trình sửa code Ace IDE, Web Terminal, biểu đồ dung lượng ổ đĩa và tạo link chia sẻ nhanh.
   show_dotfiles:
     name: Hiển thị file ẩn (Dotfiles)
-    description: Cho phép nhìn thấy và chỉnh sửa các thư mục ẩn như .storage, .cloud, .git trong Home Assistant.
+    description: Cho phép trình quản lý file liệt kê và mở các mục bắt đầu bằng dấu chấm (như .storage, .git). Mặc định chúng được ẩn cho đến khi bạn bấm nút con mắt; tắt tuỳ chọn này để chặn hoàn toàn.
   log_level:
     name: Mức độ ghi nhật ký (Log Level)
     description: Độ chi tiết của log hệ thống.
