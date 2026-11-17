@@ -1,3 +1,6 @@
+## [1.0.67] - 2026-11-17
+- **Maintenance & Improvements:** Add files via upload
+
 ## [1.0.66] - 2026-11-17
 - **Maintenance & Improvements:** Add files via upload
 
