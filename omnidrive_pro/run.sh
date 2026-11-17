@@ -455,8 +455,12 @@ fi
 
 # 8. FancyIndex
 DOTFILES_RULE=""
+FANCY_DOT=""
 if ! bashio::var.true "$SHOW_DOTFILES"; then
     DOTFILES_RULE="location ~ /\. { deny all; }"
+else
+    # List dotfiles (.env, .git ...) - the Web UI hides them by default and offers a Show/Hide toggle
+    FANCY_DOT="fancyindex_show_dotfiles on;"
 fi
 
 if bashio::var.true "$FANCY_UI"; then
@@ -467,6 +471,7 @@ if bashio::var.true "$FANCY_UI"; then
         fancyindex_header \"/.fancyindex/header.html\";
         fancyindex_footer \"/.fancyindex/footer.html\";
         fancyindex_ignore \"fancyindex\";
+        ${FANCY_DOT}
     "
 else
     INDEX_CONFIG="
@@ -1515,7 +1520,7 @@ http {
         if (\$realip_remote_addr != "172.30.32.2") { return 403; }
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
         location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
-        location /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
+        location ^~ /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
         location ^~ /__wpro_api/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress "${INGRESS_TOKEN}"; proxy_read_timeout 600s; access_log off; }
         location ^~ /s/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; }
         location / {
