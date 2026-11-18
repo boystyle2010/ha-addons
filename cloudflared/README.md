@@ -2,7 +2,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)
 ![Cloudflared](https://img.shields.io/badge/cloudflared-2026.11.1-F38020.svg?logo=cloudflare&logoColor=white)
-![Alpine Base](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg?logo=alpinelinux&logoColor=white)
+![Alpine Base](https://img.shields.io/badge/alpine%20base--0D597F.svg?logo=alpinelinux&logoColor=white)
 ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg)
 ![Security](https://img.shields.io/badge/apparmor-enforced-success.svg?logo=linux&logoColor=white)
 ![Post-Quantum](https://img.shields.io/badge/crypto-post--quantum-blueviolet.svg)
