@@ -30,7 +30,7 @@ map:
   - media:rw
   - ssl:ro
   - addons:rw
-  - addon_config:rw
+  - all_addon_configs:rw
 options:
   auth_key: ""
   hostname: "hass-pi5-pro"
