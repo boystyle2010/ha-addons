@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/version-1.1.0-blue.svg) ![Cloudflared](https://img.shields.io/badge/cloudflared-2026.11.0-F38020.svg) ![Alpine](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg) ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg) ![AppArmor](https://img.shields.io/badge/apparmor-enforced-success.svg)
+![Version](https://img.shields.io/badge/version-1.1.1-blue.svg) ![Cloudflared](https://img.shields.io/badge/cloudflared-2026.11.1-F38020.svg) ![Alpine](https://img.shields.io/badge/alpine%20base-3.24-0D597F.svg) ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg) ![AppArmor](https://img.shields.io/badge/apparmor-enforced-success.svg)
 
 # Home Assistant Add-on: Cloudflared Pro
 

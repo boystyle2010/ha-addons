@@ -1,13 +1,36 @@
 # Changelog
 
-## 1.1.0
+## 1.1.1
+_Released: 2026-11-18_
+
+### 📦 Component & Version Matrix
+- **Add-on Release:** Bumped from `v1.1.0` ➡️ **`v1.1.1`**
+- **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64)
+- **Cloudflared Engine:** Updated from `2026.11.0` ➡️ **`2026.11.1`** *(arm64 & amd64 binaries verified)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Official Links:** [GitHub Release 2026.11.1](https://github.com/cloudflare/cloudflared/releases/tag/2026.11.1) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
+
+### 🔐 Binary Integrity (Multi-Arch: aarch64 & amd64)
+- **ARM64 (`aarch64`):** `cloudflared-linux-arm64`
+  - **SHA256:** `b155cec3e48e489cfb8e5c602769fb8c771083018d8881d68b4d18a791567c5a`
+- **AMD64 (`x86_64`):** `cloudflared-linux-amd64`
+  - **SHA256:** `97bb3b02d23a5980fc9c15a1a270e692da1923f103f920d5b16d4931d5ab55e7`
+
+### 🚀 What's Changed in Cloudflared 2026.11.1
+- Release 2026.11.1
+- chore: Update base images to latest versions
+- TUN-11062: Reconnect on account region changes
+- fix: Allow quick tunnels to fall back to HTTP/2
+- VULN-187395: Bump OpenTelemetry to 1.47.0
+
+---
+
+## 2026.11.0
 _Released: 2026-11-12_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** `v1.1.0`
-- **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64)
 - **Cloudflared Engine:** `2026.11.0` *(arm64 & amd64 binaries verified)*
-- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release 2026.11.0](https://github.com/cloudflare/cloudflared/releases/tag/2026.11.0) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
 ### 🔐 Binary Integrity (Multi-Arch: aarch64 & amd64)
@@ -69,28 +92,6 @@ _Released: 2026-10-29_
 - Remove unnecessary comment
 - ci: enable in-build container scanning
 - TUN-11018: Align prechecks with regular cloudflare connection
-
----
-
-## 2026.10.5
-_Released: 2026-10-27_
-
-### 📦 Component & Version Matrix
-- **Cloudflared Engine:** `2026.10.5` *(arm64 & amd64 binaries verified)*
-- **Alpine Base Image:** `Alpine 3.24`
-- **Official Links:** [GitHub Release 2026.10.5](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.5) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
-
-### 🔐 Binary Integrity (Multi-Arch: aarch64 & amd64)
-- **ARM64 (`aarch64`):** `cloudflared-linux-arm64`
-  - **SHA256:** `72e0d05a67e09da87cf495e409a28c3cc5994dd23fc66a982eebea6a55923b7d`
-- **AMD64 (`x86_64`):** `cloudflared-linux-amd64`
-  - **SHA256:** `e1bc0cf084fd9e590554fe769a86b1db46701c3f847a43d902f7b974a4e16298`
-
-### 🚀 What's Changed in Cloudflared 2026.10.5
-- Release 2026.10.5
-- TUN-10996: Allow for validating config from stdin
-- TUN-11015: Ignore unchanged fields in QUIC MetricsUpdated events
-- VULN-183456: Bump github.com/go-chi/chi/v5 to v5.5.0
 
 ---
 

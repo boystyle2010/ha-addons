@@ -5,7 +5,7 @@ FROM ${BUILD_FROM}
 ARG BUILD_ARCH
 
 # Phiên bản Cloudflared thật (bot sẽ tự cập nhật dòng này)
-ARG CLOUDFLARED_VERSION=2026.11.0
+ARG CLOUDFLARED_VERSION=2026.11.1
 
 # Cài đặt các gói cần thiết
 RUN apk update && apk upgrade --no-cache && \
