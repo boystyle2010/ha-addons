@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------------
-      # 1. Tạo AppArmor Profile (+1 Rating), Badges & CHANGELOG - GIỮ NGUYÊN
+      # 1. Tạo AppArmor Profile (+1 Rating), Badges & CHANGELOG
       # ------------------------------------------------------------------
       - name: Prepare AppArmor, Multi-Arch Config, Badges & Smart Changelog
         env:
@@ -57,8 +57,8 @@ jobs:
             sed -i "/^slug:/a image: \"ghcr.io/${OWNER_LC}/cloudflared_pro-{arch}\"" "$D/config.yaml"
           fi
 
-          # Tạo hồ sơ bảo mật AppArmor tùy chỉnh để tăng Security Rating trên Home Assistant
-          if [ ! -f "$D/apparmor.txt" ]; then
+          # Tạo/Cập nhật hồ sơ bảo mật AppArmor tùy chỉnh (Đảm bảo có quyền /run.sh và /usr/lib/** cho bashio)
+          if [ ! -f "$D/apparmor.txt" ] || ! grep -q '/run.sh' "$D/apparmor.txt" 2>/dev/null; then
             cat > "$D/apparmor.txt" <<'EOF'
           #include <tunables/global>
 
@@ -70,8 +70,10 @@ jobs:
             signal (send) set=(kill,term,int,hup,cont),
 
             /init ix,
+            /run.sh rix,
             /bin/** ix,
             /usr/bin/** ix,
+            /usr/lib/** rix,
             /run/{s6,s6-rc*,service}/** ix,
             /package/** ix,
             /command/** ix,
@@ -94,6 +96,7 @@ jobs:
               network inet6 stream,
 
               /usr/bin/cloudflared mr,
+              /etc/** r,
               /share/** rw,
               /ssl/** r,
               /data/** rw,
@@ -111,8 +114,9 @@ jobs:
           # build.yaml đã bị Home Assistant loại bỏ: base image khai báo trực tiếp trong Dockerfile (FROM)
           rm -f "$D/build.yaml"
 
-          # Tạo/Cập nhật 8 ô màu Badges chuyên nghiệp trong cloudflared/README.md
-          cat > "$D/README.md" <<EOF
+          # Chỉ tạo mới README.md nếu chưa tồn tại, nếu đã có thì cập nhật Badges bằng sed để không mất nội dung tự viết
+          if [ ! -f "$D/README.md" ]; then
+            cat > "$D/README.md" <<EOF
           # Home Assistant App: Cloudflared Pro
 
           ![Version](https://img.shields.io/badge/version-${VER}-blue.svg)
@@ -138,15 +142,20 @@ jobs:
           - **Post-Quantum Cryptography:** Built-in support for post-quantum tunnel encryption
           - **Smart Watchdog & Healthcheck:** Internal readiness endpoint monitoring
           EOF
+          else
+            sed -i "s|badge/version-[^-]*-blue.svg|badge/version-${VER}-blue.svg|g" "$D/README.md"
+            sed -i "s|badge/cloudflared-[^-]*-F38020.svg|badge/cloudflared-${CUR_CF}-F38020.svg|g" "$D/README.md"
+            sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${CUR_ALPINE}-0D597F.svg|g" "$D/README.md"
+          fi
 
-          # Chèn hàng Badges lên đầu DOCS.md để hiển thị đẹp mắt ngay trong tab Documentation của HA
+          # Chèn/Cập nhật hàng Badges lên đầu DOCS.md để hiển thị đẹp mắt ngay trong tab Documentation của HA
           if [ -f "$D/DOCS.md" ]; then
             sed -i '/img.shields.io\/badge/d' "$D/DOCS.md"
             BADGE_LINE="![Version](https://img.shields.io/badge/version-${VER}-blue.svg) ![Cloudflared](https://img.shields.io/badge/cloudflared-${CUR_CF}-F38020.svg) ![Alpine](https://img.shields.io/badge/alpine%20base-${CUR_ALPINE}-0D597F.svg) ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg) ![AppArmor](https://img.shields.io/badge/apparmor-enforced-success.svg)"
             TMP_DOCS=$(mktemp)
             echo "$BADGE_LINE" > "$TMP_DOCS"
             echo "" >> "$TMP_DOCS"
-            cat "$D/DOCS.md" >> "$TMP_DOCS"
+             sed '/./,$!d' "$D/DOCS.md" >> "$TMP_DOCS"
             mv "$TMP_DOCS" "$D/DOCS.md"
           fi
 
@@ -309,7 +318,7 @@ jobs:
                     echo "- **Alpine Base Image:** \`Alpine ${CUR_ALPINE}\` *(Home Assistant official base)*"
                     echo "- **Official Links:** [GitHub Release ${CUR_CF}](https://github.com/cloudflare/cloudflared/releases/tag/${CUR_CF}) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)"
                   else
-                    echo "## ${V}"
+                    echo "## Cloudflared ${V}"
                     echo "_Released: ${DATE}_"
                     echo ""
                     echo "### 📦 Component & Version Matrix"
@@ -331,7 +340,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
-      # 2. Kiểm tra phiên bản Cloudflared & Alpine Base cho cả 2 kiến trúc - GIỮ NGUYÊN
+      # 2. Kiểm tra phiên bản Cloudflared & Alpine Base cho cả 2 kiến trúc
       # ------------------------------------------------------------------
       - name: Check Cloudflared & Alpine versions (Multi-Arch Verified)
         id: check
@@ -397,6 +406,7 @@ jobs:
           CF_UPDATED="false"
           ALPINE_UPDATED="false"
           FORCE_MIGRATE="false"
+          MANUAL_CODE_UPDATE="false"
 
           if [ "$CURRENT_BROKEN" -eq 1 ] && [ "$VERIFIED_CF" != "$CURRENT_CF" ]; then
             CF_UPDATED="true"
@@ -408,13 +418,23 @@ jobs:
             ALPINE_UPDATED="true"
           fi
 
+          # Nếu người dùng push commit sửa file trong cloudflared/ nhưng quên tăng version trong config.yaml (và tag đó đã tồn tại), tự động bump PATCH
+          if [ "${{ github.event_name }}" = "push" ] && [ "$CF_UPDATED" = "false" ] && [ "$ALPINE_UPDATED" = "false" ]; then
+            if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q '^cloudflared/' && gh release view "cloudflared-v${CURRENT_ADDON_VERSION}" >/dev/null 2>&1; then
+              PREV_CFG_VER=$(git show HEAD~1:cloudflared/config.yaml 2>/dev/null | grep -oP '^version:\s*"?\K[0-9][^"\s]*' || echo "")
+              if [ "$PREV_CFG_VER" = "$CURRENT_ADDON_VERSION" ]; then
+                MANUAL_CODE_UPDATE="true"
+              fi
+            fi
+          fi
+
           if [[ "$CURRENT_ADDON_VERSION" =~ ^20[0-9]{2}\. ]]; then
             FORCE_MIGRATE="true"
             FINAL_VERSION="1.0.0"
           elif [ "$CF_UPDATED" = "true" ] && [ "$ALPINE_UPDATED" = "true" ]; then
             CUR_MAJOR=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f1)
             FINAL_VERSION="$((CUR_MAJOR + 1)).0.0"
-          elif [ "$CF_UPDATED" = "true" ] || [ "$ALPINE_UPDATED" = "true" ]; then
+          elif [ "$CF_UPDATED" = "true" ] || [ "$ALPINE_UPDATED" = "true" ] || [ "$MANUAL_CODE_UPDATE" = "true" ]; then
             CUR_MAJOR=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f1)
             CUR_MINOR=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f2)
             CUR_PATCH=$(echo "$CURRENT_ADDON_VERSION" | cut -d. -f3)
@@ -424,7 +444,7 @@ jobs:
           fi
 
           UPDATE_NEEDED="false"
-          if [ "$CF_UPDATED" = "true" ] || [ "$ALPINE_UPDATED" = "true" ] || [ "$FORCE_MIGRATE" = "true" ]; then
+          if [ "$CF_UPDATED" = "true" ] || [ "$ALPINE_UPDATED" = "true" ] || [ "$FORCE_MIGRATE" = "true" ] || [ "$MANUAL_CODE_UPDATE" = "true" ]; then
             UPDATE_NEEDED="true"
           fi
 
@@ -442,7 +462,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # ------------------------------------------------------------------
-      # 3. Áp dụng cập nhật, đồng bộ Badges, tạo Changelog & Commit - GIỮ NGUYÊN
+      # 3. Áp dụng cập nhật vào file, đồng bộ Badges & tạo Changelog
       # ------------------------------------------------------------------
       - name: Apply updates, sync Badges and generate Changelog
         id: apply_step
@@ -520,7 +540,7 @@ jobs:
                     fi
                     echo "- **Official Links:** [GitHub Release ${NEW_CF}](https://github.com/cloudflare/cloudflared/releases/tag/${NEW_CF}) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)"
                   else
-                    echo "## ${V}"
+                    echo "## Cloudflared ${V}"
                     echo "_Released: ${DATE}_"
                     echo ""
                     echo "### 📦 Component & Version Matrix"
@@ -541,41 +561,13 @@ jobs:
             fi
           fi
 
-          # Keep-alive (Chống GitHub tắt cron sau 60 ngày)
-          LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
-          NOW_TS=$(date +%s)
-          DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
-          if [ "$DAYS_IDLE" -ge 45 ]; then
-            mkdir -p .github/workflows
-            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
+          HAS_DIFF="false"
+          if ! git diff --quiet cloudflared/ || [ -n "$(git ls-files --others --exclude-standard cloudflared/)" ]; then
+            HAS_DIFF="true"
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add cloudflared/ .github/workflows/.keepalive 2>/dev/null || git add cloudflared/
-
-          COMMITTED="false"
-          if ! git diff --staged --quiet; then
-            if [ "$UPDATE_NEEDED" = "true" ]; then
-              MSG="chore(cloudflared): release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
-            else
-              MSG="chore(cloudflared): add multi-arch amd64, AppArmor profile & sync badges"
-            fi
-            git commit -m "$MSG"
-            for i in 1 2 3; do
-              if git pull --rebase origin main && git push; then break; fi
-              git rebase --abort 2>/dev/null || true
-              sleep $((i * 5))
-            done
-            COMMITTED="true"
-            ACTION_TAKEN="🚀 Released / Synced v${FINAL_VERSION}"
-          else
-            ACTION_TAKEN="✅ Up to date"
-          fi
-
-          # Kiểm tra có cần Build Package & Tạo/Cập nhật Release hay không
           SHOULD_RELEASE="false"
-          if [ "$UPDATE_NEEDED" = "true" ] || [ "$COMMITTED" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "$UPDATE_NEEDED" = "true" ] || [ "$HAS_DIFF" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             SHOULD_RELEASE="true"
           elif ! gh release view "cloudflared-v${FINAL_VERSION}" >/dev/null 2>&1; then
             SHOULD_RELEASE="true"
@@ -585,19 +577,8 @@ jobs:
           echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
           echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
 
-          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
-          ### 📊 Update Decision Summary - Cloudflared Pro (Multi-Arch: aarch64 & amd64)
-
-          | Component                  | Current / Previous | Latest Verified   | Status                  |
-          |---------------------------|--------------------|-------------------|-------------------------|
-          | **Addon Version**         | \`${CURRENT_ADDON_VERSION}\` | \`${FINAL_VERSION}\` | ${ACTION_TAKEN} |
-          | **Cloudflared Engine**    | \`${CUR_CF}\` | \`${NEW_CF}\` | $([ "$CF_UPDATED" = "true" ] && echo "⬆️ UPDATED → ${NEW_CF}" || echo "✅ Up to date") |
-          | **Alpine Base**           | \`${CUR_ALPINE}\` | \`${NEW_ALPINE}\` | $([ "$ALPINE_UPDATED" = "true" ] && echo "⬆️ UPDATED → ${NEW_ALPINE}" || echo "✅ Up to date") |
-          | **Architectures**         | \`aarch64, amd64\` | \`Verified 200 OK\` | ✅ Multi-Arch Ready |
-          EOF
-
       # ------------------------------------------------------------------
-      # 4. Build & Push Pre-built Package (aarch64 + amd64) lên GHCR cho HASS
+      # 4. Build & Push Pre-built Package (aarch64 + amd64) lên GHCR TRƯỚC KHI Commit
       # ------------------------------------------------------------------
       - name: Set up QEMU for Multi-arch Build
         if: steps.apply_step.outputs.should_release == 'true'
@@ -623,6 +604,8 @@ jobs:
           file: cloudflared/Dockerfile
           platforms: linux/arm64
           push: true
+          provenance: false
+          sbom: false
           build-args: |
             BUILD_ARCH=aarch64
           labels: |
@@ -641,6 +624,8 @@ jobs:
           file: cloudflared/Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: false
+          sbom: false
           build-args: |
             BUILD_ARCH=amd64
           labels: |
@@ -652,19 +637,56 @@ jobs:
             ghcr.io/${{ steps.apply_step.outputs.owner_lc }}/cloudflared_pro-amd64:latest
 
       # ------------------------------------------------------------------
-      # 5. Tự động Tạo / Cập nhật GitHub Release trích xuất từ cloudflared/CHANGELOG.md
+      # 5. Commit + Push + Tạo/Cập nhật GitHub Release từ cloudflared/CHANGELOG.md
       # ------------------------------------------------------------------
-      - name: Create or Update GitHub Release from CHANGELOG.md
-        if: steps.apply_step.outputs.should_release == 'true'
+      - name: Commit, Push and Update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VER: ${{ steps.check.outputs.final_version }}
+          UPDATE_NEEDED: ${{ steps.check.outputs.update_needed }}
+          CF_UPDATED: ${{ steps.check.outputs.cf_updated }}
+          ALPINE_UPDATED: ${{ steps.check.outputs.alpine_updated }}
+          NEW_CF: ${{ steps.check.outputs.verified_cf }}
+          NEW_ALPINE: ${{ steps.check.outputs.verified_alpine }}
+          CUR_CF: ${{ steps.check.outputs.current_cf }}
+          CUR_ALPINE: ${{ steps.check.outputs.current_alpine }}
+          CURRENT_ADDON_VERSION: ${{ steps.check.outputs.current_addon_version }}
+          FINAL_VERSION: ${{ steps.check.outputs.final_version }}
+          SHOULD_RELEASE: ${{ steps.apply_step.outputs.should_release }}
         run: |
-          # Dùng tiền tố 'cloudflared-v' để không bao giờ xung đột tag với addon Tailscale trong cùng repo
-          TAG="cloudflared-v${VER}"
+          # Keep-alive (Chống GitHub tắt cron sau 60 ngày)
+          LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
+          NOW_TS=$(date +%s)
+          DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
+          if [ "$DAYS_IDLE" -ge 45 ]; then
+            mkdir -p .github/workflows
+            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
+          fi
 
-          # Trích xuất đúng khối Changelog của phiên bản mới nhất trong cloudflared/CHANGELOG.md
-          python3 - <<'PY' > /tmp/release_notes.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflared/ .github/workflows/.keepalive 2>/dev/null || git add cloudflared/
+
+          if ! git diff --staged --quiet; then
+            if [ "$UPDATE_NEEDED" = "true" ]; then
+              MSG="chore(cloudflared): release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
+            else
+              MSG="chore(cloudflared): add multi-arch amd64, AppArmor profile & sync badges"
+            fi
+            git commit -m "$MSG"
+            for i in 1 2 3; do
+              if git pull --rebase origin main && git push; then break; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((i * 5))
+            done
+            ACTION_TAKEN="🚀 Released / Synced v${FINAL_VERSION}"
+          else
+            ACTION_TAKEN="✅ Up to date"
+          fi
+
+          if [ "$SHOULD_RELEASE" = "true" ]; then
+            TAG="cloudflared-v${FINAL_VERSION}"
+
+            python3 - <<'PY' > /tmp/release_notes.md
           import re
           with open("cloudflared/CHANGELOG.md", "r", encoding="utf-8") as f:
               text = f.read()
@@ -673,19 +695,31 @@ jobs:
           print(first_section)
           PY
 
-          git tag -f "${TAG}"
-          git push origin "${TAG}" --force
+            git tag -f "${TAG}"
+            git push origin "${TAG}" --force
 
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            echo "🔄 Updating existing GitHub Release ${TAG}..."
-            gh release edit "${TAG}" \
-              --title "Cloudflared Pro v${VER}" \
-              --notes-file /tmp/release_notes.md \
-              --latest
-          else
-            echo "🎉 Creating new GitHub Release ${TAG}..."
-            gh release create "${TAG}" \
-              --title "Cloudflared Pro v${VER}" \
-              --notes-file /tmp/release_notes.md \
-              --latest
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              echo "🔄 Updating existing GitHub Release ${TAG}..."
+              gh release edit "${TAG}" \
+                --title "Cloudflared Pro v${FINAL_VERSION}" \
+                --notes-file /tmp/release_notes.md \
+                --latest
+            else
+              echo "🎉 Creating new GitHub Release ${TAG}..."
+              gh release create "${TAG}" \
+                --title "Cloudflared Pro v${FINAL_VERSION}" \
+                --notes-file /tmp/release_notes.md \
+                --latest
+            fi
           fi
+
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ### 📊 Update Decision Summary - Cloudflared Pro (Multi-Arch: aarch64 & amd64)
+
+          | Component                  | Current / Previous | Latest Verified   | Status                  |
+          |---------------------------|--------------------|-------------------|-------------------------|
+          | **Addon Version**         | \`${CURRENT_ADDON_VERSION}\` | \`${FINAL_VERSION}\` | ${ACTION_TAKEN} |
+          | **Cloudflared Engine**    | \`${CUR_CF}\` | \`${NEW_CF}\` | $([ "$CF_UPDATED" = "true" ] && echo "⬆️ UPDATED → ${NEW_CF}" || echo "✅ Up to date") |
+          | **Alpine Base**           | \`${CUR_ALPINE}\` | \`${NEW_ALPINE}\` | $([ "$ALPINE_UPDATED" = "true" ] && echo "⬆️ UPDATED → ${NEW_ALPINE}" || echo "✅ Up to date") |
+          | **Architectures**         | \`aarch64, amd64\` | \`Verified 200 OK\` | ✅ Multi-Arch Ready |
+          EOF
