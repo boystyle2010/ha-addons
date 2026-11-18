@@ -1,10 +1,10 @@
 # Changelog
 
-## 1.0.4
+## 1.0.5
 _Released: 2026-11-12_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** `v1.0.4`
+- **Add-on Release:** `v1.0.5`
 - **Tailscale Engine:** `v1.104.7` *(arm64 & amd64 verified)*
 - **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
 - **Official Links:** [GitHub Release v1.104.7](https://github.com/tailscale/tailscale/releases/tag/v1.104.7) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)
