@@ -40,7 +40,7 @@ jobs:
           VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' "$D/config.yaml" || echo "1.0.1")
           CUR_TAG=$(grep -oP '^ARG TAILSCALE_VERSION=\K\S+' "$D/Dockerfile" || echo "v1.104.5")
           CUR_TS="${CUR_TAG#v}"
-          CUR_ALPINE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' "$D/Dockerfile" || echo "3.24")
+          CUR_ALPINE=$(grep -oP '^FROM ghcr.io/home-assistant/base:\K[0-9.]+' "$D/Dockerfile" || echo "3.24")
 
           # Tải trang changelog chính thức của Tailscale
           curl -sfL -A "Mozilla/5.0" "https://tailscale.com/changelog" -o /tmp/ts_changelog.html || true
@@ -263,7 +263,8 @@ jobs:
             [ "$(curl -s -o /dev/null -L -I -w '%{http_code}' --max-time 30 "$1")" = "200" ]
           }
           base_ok() {
-            docker manifest inspect "ghcr.io/home-assistant/$1-base:$2" >/dev/null 2>&1
+            docker manifest inspect "ghcr.io/home-assistant/base:$2" 2>/dev/null \
+              | jq -e --arg a "$1" '[.manifests[]?.platform.architecture] | index($a) != null' >/dev/null
           }
           tarball_ok() {
             local ver="${1#v}"
@@ -294,11 +295,11 @@ jobs:
 
           CURRENT_VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' tailscale/config.yaml || true)
           CURRENT_TAG=$(grep -oP '^ARG TAILSCALE_VERSION=\K\S+' tailscale/Dockerfile || true)
-          CURRENT_BASE=$(grep -oP '^ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:\K[0-9.]+' tailscale/Dockerfile || true)
+          CURRENT_BASE=$(grep -oP '^FROM ghcr.io/home-assistant/base:\K[0-9.]+' tailscale/Dockerfile || true)
           CURRENT_TS="${CURRENT_TAG#v}"
 
           [ -n "$CURRENT_VER" ]  || fail "Cannot read version in config.yaml"
-          [ -n "$CURRENT_BASE" ] || fail "Cannot read BUILD_FROM in Dockerfile"
+          [ -n "$CURRENT_BASE" ] || fail "Cannot read FROM base image in Dockerfile"
 
           CURRENT_BROKEN=0
           if ! tarball_ok "$CURRENT_TAG"; then
@@ -331,12 +332,12 @@ jobs:
           CAND="$CURRENT_BASE"
           for i in 1 2 3; do
             NEXT="${BASE_MAJOR}.$((BASE_MINOR + i))"
-            if base_ok aarch64 "$NEXT" && base_ok amd64 "$NEXT"; then CAND="$NEXT"; else break; fi
+            if base_ok arm64 "$NEXT" && base_ok amd64 "$NEXT"; then CAND="$NEXT"; else break; fi
           done
 
           if [ "$CAND" != "$CURRENT_BASE" ]; then
             PKGS=$(sed -n '/apk add/,/&&/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
-            if [ -z "$PKGS" ] || docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
+            if [ -z "$PKGS" ] || docker run --rm --entrypoint sh "ghcr.io/home-assistant/base:${CAND}" \
                  -c "apk add --simulate --no-cache ${PKGS}" >/tmp/apk-test.log 2>&1; then
               LATEST_BASE="$CAND"
               pass "Layer 6: Alpine $CAND verified with all packages, upgrading $CURRENT_BASE -> $CAND"
@@ -426,11 +427,10 @@ jobs:
         run: |
           set -e
 
-          sed -i "s|^ARG BUILD_FROM=.*|ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:${NEW_BASE}|" tailscale/Dockerfile
+          sed -i -E "s|^(FROM ghcr.io/home-assistant/base:)[0-9.]+|\1${NEW_BASE}|" tailscale/Dockerfile
           sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
-          if [ -f "tailscale/build.yaml" ]; then
-            sed -i -E "s|(aarch64-base:)[0-9.]+|\1${NEW_BASE}|; s|(amd64-base:)[0-9.]+|\1${NEW_BASE}|" tailscale/build.yaml
-          fi
+          # build.yaml đã bị Home Assistant loại bỏ: base image khai báo trực tiếp trong Dockerfile (FROM)
+          rm -f tailscale/build.yaml
           sed -i "s|^version:.*|version: \"${NEW_ADDON_VER}\"|" tailscale/config.yaml
 
           if [ -f "tailscale/README.md" ]; then
