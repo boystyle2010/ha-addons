@@ -1,9 +1,10 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.24
 ARG TAILSCALE_VERSION=v1.104.7
 
-FROM ${BUILD_FROM}
+# Base image đa kiến trúc (aarch64 + amd64) - thay thế hoàn toàn build.yaml đã bị loại bỏ
+FROM ghcr.io/home-assistant/base:3.24
 
-ARG BUILD_ARCH=aarch64
+ARG TARGETARCH
+ARG BUILD_ARCH
 ARG TAILSCALE_VERSION
 
 RUN apk add --no-cache \
@@ -16,7 +17,7 @@ RUN apk add --no-cache \
     curl \
     jq \
     bash \
-    && ARCH_CHECK="${BUILD_ARCH}" \
+    && ARCH_CHECK="${TARGETARCH:-${BUILD_ARCH}}" \
     && if [ -z "${ARCH_CHECK}" ]; then ARCH_CHECK="$(uname -m)"; fi \
     && case "${ARCH_CHECK}" in \
         aarch64|arm64) TS_ARCH="arm64" ;; \
