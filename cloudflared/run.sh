@@ -37,11 +37,9 @@ bashio::log.info "Connection settings: Protocol=${PROTOCOL} | Edge IP=${EDGE_IP_
 
 if [ -n "${METRICS_PORT}" ] && [ "${METRICS_PORT}" != "0" ] && [ "${METRICS_PORT}" != "null" ]; then
     ARGS+=("--metrics" "0.0.0.0:${METRICS_PORT}")
-    echo "${METRICS_PORT}" > /tmp/metrics_port
     bashio::log.info "Prometheus Metrics & Healthcheck enabled on port: ${METRICS_PORT}"
 else
     ARGS+=("--metrics" "127.0.0.1:49999")
-    echo "49999" > /tmp/metrics_port
     bashio::log.info "Internal Healthcheck endpoint enabled on 127.0.0.1:49999/ready"
 fi
 
