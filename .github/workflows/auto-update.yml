@@ -17,12 +17,13 @@ concurrency:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   check-and-update:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,7 +32,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------------
-      # 1. Tạo AppArmor Profile (+1 Rating), build.yaml, Badges & CHANGELOG
+      # 1. Tạo AppArmor Profile (+1 Rating), Badges & CHANGELOG - GIỮ NGUYÊN
       # ------------------------------------------------------------------
       - name: Prepare AppArmor, Multi-Arch Config, Badges & Smart Changelog
         env:
@@ -48,6 +49,12 @@ jobs:
           fi
           if [ ! -f "$D/DOCS.md" ]; then
             curl -sfL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o "$D/DOCS.md" || true
+          fi
+
+          # Đảm bảo config.yaml luôn có trường image để HASS tải package có sẵn không cần build
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          if ! grep -q '^image:' "$D/config.yaml"; then
+            sed -i "/^slug:/a image: \"ghcr.io/${OWNER_LC}/cloudflared_pro-{arch}\"" "$D/config.yaml"
           fi
 
           # Tạo hồ sơ bảo mật AppArmor tùy chỉnh để tăng Security Rating trên Home Assistant
@@ -324,7 +331,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
-      # 2. Kiểm tra phiên bản Cloudflared & Alpine Base cho cả 2 kiến trúc
+      # 2. Kiểm tra phiên bản Cloudflared & Alpine Base cho cả 2 kiến trúc - GIỮ NGUYÊN
       # ------------------------------------------------------------------
       - name: Check Cloudflared & Alpine versions (Multi-Arch Verified)
         id: check
@@ -435,9 +442,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       # ------------------------------------------------------------------
-      # 3. Áp dụng cập nhật, đồng bộ Badges & tạo Changelog
+      # 3. Áp dụng cập nhật, đồng bộ Badges, tạo Changelog & Commit - GIỮ NGUYÊN
       # ------------------------------------------------------------------
       - name: Apply updates, sync Badges and generate Changelog
+        id: apply_step
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATE_NEEDED: ${{ steps.check.outputs.update_needed }}
@@ -546,6 +554,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add cloudflared/ .github/workflows/.keepalive 2>/dev/null || git add cloudflared/
 
+          COMMITTED="false"
           if ! git diff --staged --quiet; then
             if [ "$UPDATE_NEEDED" = "true" ]; then
               MSG="chore(cloudflared): release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
@@ -558,10 +567,23 @@ jobs:
               git rebase --abort 2>/dev/null || true
               sleep $((i * 5))
             done
+            COMMITTED="true"
             ACTION_TAKEN="🚀 Released / Synced v${FINAL_VERSION}"
           else
             ACTION_TAKEN="✅ Up to date"
           fi
+
+          # Kiểm tra có cần Build Package & Tạo/Cập nhật Release hay không
+          SHOULD_RELEASE="false"
+          if [ "$UPDATE_NEEDED" = "true" ] || [ "$COMMITTED" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RELEASE="true"
+          elif ! gh release view "cloudflared-v${FINAL_VERSION}" >/dev/null 2>&1; then
+            SHOULD_RELEASE="true"
+          fi
+
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
 
           cat <<EOF >> "$GITHUB_STEP_SUMMARY"
           ### 📊 Update Decision Summary - Cloudflared Pro (Multi-Arch: aarch64 & amd64)
@@ -573,3 +595,97 @@ jobs:
           | **Alpine Base**           | \`${CUR_ALPINE}\` | \`${NEW_ALPINE}\` | $([ "$ALPINE_UPDATED" = "true" ] && echo "⬆️ UPDATED → ${NEW_ALPINE}" || echo "✅ Up to date") |
           | **Architectures**         | \`aarch64, amd64\` | \`Verified 200 OK\` | ✅ Multi-Arch Ready |
           EOF
+
+      # ------------------------------------------------------------------
+      # 4. Build & Push Pre-built Package (aarch64 + amd64) lên GHCR cho HASS
+      # ------------------------------------------------------------------
+      - name: Set up QEMU for Multi-arch Build
+        if: steps.apply_step.outputs.should_release == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.apply_step.outputs.should_release == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        if: steps.apply_step.outputs.should_release == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push aarch64 (arm64) Package for HASS
+        if: steps.apply_step.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: cloudflared
+          file: cloudflared/Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            BUILD_ARCH=aarch64
+          labels: |
+            io.hass.version=${{ steps.check.outputs.final_version }}
+            io.hass.type=addon
+            io.hass.arch=aarch64
+          tags: |
+            ghcr.io/${{ steps.apply_step.outputs.owner_lc }}/cloudflared_pro-aarch64:${{ steps.check.outputs.final_version }}
+            ghcr.io/${{ steps.apply_step.outputs.owner_lc }}/cloudflared_pro-aarch64:latest
+
+      - name: Build and Push amd64 Package for HASS
+        if: steps.apply_step.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: cloudflared
+          file: cloudflared/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            BUILD_ARCH=amd64
+          labels: |
+            io.hass.version=${{ steps.check.outputs.final_version }}
+            io.hass.type=addon
+            io.hass.arch=amd64
+          tags: |
+            ghcr.io/${{ steps.apply_step.outputs.owner_lc }}/cloudflared_pro-amd64:${{ steps.check.outputs.final_version }}
+            ghcr.io/${{ steps.apply_step.outputs.owner_lc }}/cloudflared_pro-amd64:latest
+
+      # ------------------------------------------------------------------
+      # 5. Tự động Tạo / Cập nhật GitHub Release trích xuất từ cloudflared/CHANGELOG.md
+      # ------------------------------------------------------------------
+      - name: Create or Update GitHub Release from CHANGELOG.md
+        if: steps.apply_step.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ steps.check.outputs.final_version }}
+        run: |
+          # Dùng tiền tố 'cloudflared-v' để không bao giờ xung đột tag với addon Tailscale trong cùng repo
+          TAG="cloudflared-v${VER}"
+
+          # Trích xuất đúng khối Changelog của phiên bản mới nhất trong cloudflared/CHANGELOG.md
+          python3 - <<'PY' > /tmp/release_notes.md
+          import re
+          with open("cloudflared/CHANGELOG.md", "r", encoding="utf-8") as f:
+              text = f.read()
+          text = re.sub(r'^#\s+Changelog\s*', '', text, flags=re.I).strip()
+          first_section = text.split("\n---\n")[0].strip()
+          print(first_section)
+          PY
+
+          git tag -f "${TAG}"
+          git push origin "${TAG}" --force
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "🔄 Updating existing GitHub Release ${TAG}..."
+            gh release edit "${TAG}" \
+              --title "Cloudflared Pro v${VER}" \
+              --notes-file /tmp/release_notes.md \
+              --latest
+          else
+            echo "🎉 Creating new GitHub Release ${TAG}..."
+            gh release create "${TAG}" \
+              --title "Cloudflared Pro v${VER}" \
+              --notes-file /tmp/release_notes.md \
+              --latest
+          fi
