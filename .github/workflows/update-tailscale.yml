@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   update-tailscale:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -63,6 +64,7 @@ jobs:
           bullets = []
           seen = set()
 
+          # Các từ khóa chỉ dành cho hệ điều hành khác (không liên quan tới Home Assistant / Linux)
           ignore_os_patterns = [
               r'\bwindows\s+\.exe\b',
               r'\bwindows\s+installer\b',
@@ -238,6 +240,7 @@ jobs:
         run: |
           set -uo pipefail
 
+          # Khai báo sớm để skip() -> print_summary_table không lỗi 'unbound variable'
           TS_STATUS="✅ Up to date"
           ALPINE_STATUS="✅ Up to date"
           ADDON_STATUS="✅ Up to date"
@@ -435,6 +438,7 @@ jobs:
 
           sed -i -E "s|^(FROM ghcr.io/home-assistant/base:)[0-9.]+|\1${NEW_BASE}|" tailscale/Dockerfile
           sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
+          # build.yaml đã bị Home Assistant loại bỏ: base image khai báo trực tiếp trong Dockerfile (FROM)
           rm -f tailscale/build.yaml
           sed -i "s|^version:.*|version: \"${NEW_ADDON_VER}\"|" tailscale/config.yaml
 
@@ -501,17 +505,27 @@ jobs:
           } > tailscale/CHANGELOG.md
 
       # ------------------------------------------------------------------
-      # 4. Commit + Push (Cập nhật để xuất tín hiệu cho bước Build & Release)
+      # 4. Commit + Push (Đồng bộ cơ chế Keep-alive & kích hoạt Build/Release)
       # ------------------------------------------------------------------
       - name: Commit and Push
         id: commit_step
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATE_NEEDED: ${{ steps.check.outputs.update_needed }}
           TARGET_VER: ${{ steps.check.outputs.target_addon_ver }}
         run: |
+          # Keep-alive (Chống GitHub tắt cron sau 60 ngày)
+          LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
+          NOW_TS=$(date +%s)
+          DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
+          if [ "$DAYS_IDLE" -ge 45 ]; then
+            mkdir -p .github/workflows
+            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
+          fi
+
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add tailscale/
+          git add tailscale/ .github/workflows/.keepalive 2>/dev/null || git add tailscale/
 
           COMMITTED="false"
           if ! git diff --staged --quiet; then
@@ -530,17 +544,13 @@ jobs:
             COMMITTED="true"
             echo "🚀 Successfully committed and pushed: $MSG"
           else
-            echo "✨ No file modifications needed by bot."
+            echo "✨ Nothing to commit."
           fi
 
-          # Quyết định xem có cần Build Package & Cập nhật Release hay không:
-          # - Có bản cập nhật mới từ Upstream (UPDATE_NEEDED == true)
-          # - Hoặc người dùng vừa push commit mới lên main hoặc bấm chạy workflow thủ công
-          # - Hoặc Release cho version hiện tại chưa tồn tại trên GitHub
           SHOULD_RELEASE="false"
           if [ "$UPDATE_NEEDED" = "true" ] || [ "$COMMITTED" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             SHOULD_RELEASE="true"
-          elif ! gh release view "v${TARGET_VER}" >/dev/null 2>&1; then
+          elif ! gh release view "tailscale-v${TARGET_VER}" >/dev/null 2>&1; then
             SHOULD_RELEASE="true"
           fi
 
@@ -604,7 +614,7 @@ jobs:
             ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-amd64:latest
 
       # ------------------------------------------------------------------
-      # 6. Tự động Tạo / Cập nhật GitHub Release trích xuất từ CHANGELOG.md
+      # 6. Tự động Tạo / Cập nhật GitHub Release trích xuất từ tailscale/CHANGELOG.md
       # ------------------------------------------------------------------
       - name: Create or Update GitHub Release from CHANGELOG.md
         if: steps.commit_step.outputs.should_release == 'true'
@@ -612,34 +622,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VER: ${{ steps.check.outputs.target_addon_ver }}
         run: |
-          TAG="v${VER}"
+          # Dùng tiền tố 'tailscale-v' để tách biệt với 'cloudflared-v' trong cùng repo
+          TAG="tailscale-v${VER}"
 
-          # Trích xuất đúng khối Changelog của phiên bản mới nhất trong tailscale/CHANGELOG.md
           python3 - <<'PY' > /tmp/release_notes.md
           import re
           with open("tailscale/CHANGELOG.md", "r", encoding="utf-8") as f:
               text = f.read()
-          # Bỏ tiêu đề '# Changelog' ở đầu và lấy toàn bộ mục đầu tiên trước dấu '---'
           text = re.sub(r'^#\s+Changelog\s*', '', text, flags=re.I).strip()
           first_section = text.split("\n---\n")[0].strip()
           print(first_section)
           PY
 
-          # Cập nhật Git tag trỏ vào commit mới nhất
           git tag -f "${TAG}"
           git push origin "${TAG}" --force
 
-          # Nếu Release của version này đã tồn tại (do bạn push thêm commit mới), cập nhật lại nội dung; nếu chưa có thì tạo mới
           if gh release view "${TAG}" >/dev/null 2>&1; then
             echo "🔄 Updating existing GitHub Release ${TAG}..."
             gh release edit "${TAG}" \
-              --title "Tailscale Pro ${TAG}" \
+              --title "Tailscale Pro v${VER}" \
               --notes-file /tmp/release_notes.md \
               --latest
           else
             echo "🎉 Creating new GitHub Release ${TAG}..."
             gh release create "${TAG}" \
-              --title "Tailscale Pro ${TAG}" \
+              --title "Tailscale Pro v${VER}" \
               --notes-file /tmp/release_notes.md \
               --latest
           fi
