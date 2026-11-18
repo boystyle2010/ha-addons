@@ -101,13 +101,13 @@ else
     TAILSCALED_ARGS+=("--tun=tailscale0")
 fi
 
-# Khởi chạy tailscaled kèm bộ lọc Log Suppression (ẩn sau 200 dòng nếu được bật)
+# Khởi chạy tailscaled kèm bộ lọc Log Suppression (dùng Process Substitution để giữ đúng PID của tailscaled)
 bashio::log.info "Đang khởi chạy tiến trình nền tailscaled..."
 if bashio::var.true "${LOG_SUPPRESS}"; then
-    tailscaled "${TAILSCALED_ARGS[@]}" 2>&1 | awk '
+    tailscaled "${TAILSCALED_ARGS[@]}" > >(awk '
         NR <= 200 { print; fflush(); next }
         NR == 201 { print "[Tailscale Pro] Log suppression enabled: suppressing further tailscaled output after 200 lines (turn off Log suppression in configuration to view all logs)."; fflush() }
-    ' &
+    ') 2>&1 &
     TAILSCALED_PID=$!
 else
     tailscaled "${TAILSCALED_ARGS[@]}" &
