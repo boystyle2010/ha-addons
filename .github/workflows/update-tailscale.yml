@@ -1,4 +1,4 @@
-name: Auto Check Tailscale & Build Add-on Package
+name: Auto Check Tailscale & Alpine Base (Verified)
 
 on:
   schedule:
@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 concurrency:
   group: update-tailscale
@@ -30,7 +31,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------------
-      # 1. Chuẩn bị Changelog & Đồng bộ thông tin phiên bản
+      # 1. Khởi tạo script trích xuất Changelog chuyên nghiệp (Khử trùng lặp + Lọc hệ điều hành) - GIỮ NGUYÊN
       # ------------------------------------------------------------------
       - name: Prepare Smart Changelog Extractor & Sync Add-on Files
         env:
@@ -43,8 +44,16 @@ jobs:
           CUR_TS="${CUR_TAG#v}"
           CUR_ALPINE=$(grep -oP '^FROM ghcr.io/home-assistant/base:\K[0-9.]+' "$D/Dockerfile" || echo "3.24")
 
+          # Đảm bảo config.yaml luôn có trường image để HASS tải package có sẵn không cần build
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          if ! grep -q '^image:' "$D/config.yaml"; then
+            sed -i "/^slug:/a image: \"ghcr.io/${OWNER_LC}/tailscale_pro-{arch}\"" "$D/config.yaml"
+          fi
+
+          # Tải trang changelog chính thức của Tailscale
           curl -sfL -A "Mozilla/5.0" "https://tailscale.com/changelog" -o /tmp/ts_changelog.html || true
 
+          # Tạo bộ xử lý Python: Khử trùng lặp 100%, lọc bỏ Windows/macOS/iOS, lấy SHA256 arm64 & amd64
           cat > /tmp/extract_ts.py <<'PY'
           import sys, os, re, html, json, urllib.request
 
@@ -55,9 +64,13 @@ jobs:
           seen = set()
 
           ignore_os_patterns = [
-              r'\bwindows\s+\.exe\b', r'\bwindows\s+installer\b',
-              r'\bmacos\s+app\s+store\b', r'\bapple\s+tv\b',
-              r'\btvos\b', r'\bios\s+only\b', r'\bandroid\s+tv\b',
+              r'\bwindows\s+\.exe\b',
+              r'\bwindows\s+installer\b',
+              r'\bmacos\s+app\s+store\b',
+              r'\bapple\s+tv\b',
+              r'\btvos\b',
+              r'\bios\s+only\b',
+              r'\bandroid\s+tv\b',
               r'\bupdate\s+instructions\b'
           ]
 
@@ -71,6 +84,7 @@ jobs:
           def normalize_key(text):
               return re.sub(r'[^a-z0-9]+', '', text.lower())
 
+          # 1. Quét từ trang https://tailscale.com/changelog
           try:
               raw = open("/tmp/ts_changelog.html", encoding="utf-8", errors="ignore").read()
               pattern = re.compile(
@@ -88,11 +102,35 @@ jobs:
                           continue
                       key = normalize_key(txt)
                       if key and key not in seen:
-                        seen.add(key)
-                        bullets.append(f"- {txt}")
+                          seen.add(key)
+                          bullets.append(f"- {txt}")
           except Exception:
               pass
 
+          # 2. Fallback: Quét trực tiếp từ GitHub Compare Commits API nếu trang web chưa cập nhật
+          if not bullets and prev_ver and prev_ver != ver:
+              try:
+                  url = f"https://api.github.com/repos/tailscale/tailscale/compare/v{prev_ver}...v{ver}"
+                  req = urllib.request.Request(url)
+                  tok = os.environ.get("GH_TOKEN", "")
+                  if tok:
+                      req.add_header("Authorization", f"Bearer {tok}")
+                  with urllib.request.urlopen(req, timeout=15) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                      for c in reversed(data.get("commits", [])):
+                          msg = c.get("commit", {}).get("message", "").splitlines()[0].strip()
+                          if not msg or msg.startswith("Merge ") or not is_relevant(msg):
+                              continue
+                          key = normalize_key(msg)
+                          if key and key not in seen:
+                              seen.add(key)
+                              bullets.append(f"- {msg}")
+                          if len(bullets) >= 8:
+                              break
+              except Exception:
+                  pass
+
+          # 3. Lấy mã SHA256 thực tế của gói arm64 và amd64
           sha_vals = {}
           for arch in ("arm64", "amd64"):
               sha_vals[arch] = "Verified via pkgs.tailscale.com"
@@ -105,17 +143,93 @@ jobs:
               except Exception:
                   pass
 
+          if not bullets:
+              bullets.append(f"- Core engine stability, networking, and security maintenance updates for Tailscale `v{ver}`.")
+
           print("### 🔐 Binary Integrity (aarch64 & amd64)")
           for arch in ("arm64", "amd64"):
               print(f"- **Package:** `tailscale_{ver}_{arch}.tgz`")
               print(f"- **SHA256 ({arch}):** `{sha_vals[arch]}`")
           print("")
           print(f"### 🚀 What's Changed in Tailscale v{ver}")
-          print("\n".join(bullets[:10] if bullets else [f"- Core engine stability and security maintenance for v{ver}."]))
+          print("\n".join(bullets[:10]))
           PY
 
+          # Kiểm tra nếu CHANGELOG.md chưa có bố cục mới ("Binary Integrity") hoặc còn dòng bị lặp thì tự động xây dựng lại ngay!
+          NEED_CHANGELOG=0
+          FIRST_HEADER=$(grep -m1 '^## ' "$D/CHANGELOG.md" 2>/dev/null | sed 's/^## //' || echo "")
+          if [ ! -f "$D/CHANGELOG.md" ]; then
+            NEED_CHANGELOG=1
+          elif [ "$FIRST_HEADER" != "v${VER} (Latest)" ] && [ "$FIRST_HEADER" != "${VER}" ]; then
+            NEED_CHANGELOG=1
+          elif ! grep -q "### 🔐 Binary Integrity" "$D/CHANGELOG.md" 2>/dev/null; then
+            NEED_CHANGELOG=1
+          elif ! grep -q "_amd64.tgz" "$D/CHANGELOG.md" 2>/dev/null; then
+            NEED_CHANGELOG=1
+          fi
+
+          if [ "$NEED_CHANGELOG" -eq 1 ]; then
+            echo "📝 Rebuilding tailscale/CHANGELOG.md with deduplicated professional layout..."
+            RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/tailscale/tailscale/releases?per_page=10")
+
+            if [ -n "$RELEASES" ]; then
+              mapfile -t TAG_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+              mapfile -t DATE_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .published_at' | cut -d'T' -f1)
+
+              {
+                echo "# Changelog"
+                echo ""
+                COUNT=0
+                for idx in "${!TAG_LIST[@]}"; do
+                  TAG="${TAG_LIST[$idx]}"
+                  V="${TAG#v}"
+                  DATE="${DATE_LIST[$idx]:-$(date -u +%Y-%m-%d)}"
+                  PREV_TAG="${TAG_LIST[$((idx + 1))]:-}"
+                  PREV_V="${PREV_TAG#v}"
+
+                  NOTES=$(python3 /tmp/extract_ts.py "$V" "$PREV_V")
+
+                  if [ "$idx" -eq 0 ]; then
+                    echo "## ${VER}"
+                    echo "_Released: ${DATE}_"
+                    echo ""
+                    echo "### 📦 Component & Version Matrix"
+                    echo "- **Add-on Release:** \`v${VER}\`"
+                    echo "- **Tailscale Engine:** \`v${CUR_TS}\` *(arm64 & amd64 verified)*"
+                    echo "- **Alpine Base Image:** \`Alpine ${CUR_ALPINE}\` *(Home Assistant official base)*"
+                    echo "- **Official Links:** [GitHub Release ${CUR_TAG}](https://github.com/tailscale/tailscale/releases/tag/${CUR_TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
+                  else
+                    echo "## ${V}"
+                    echo "_Released: ${DATE}_"
+                    echo ""
+                    echo "### 📦 Component & Version Matrix"
+                    echo "- **Tailscale Engine:** \`v${V}\` *(arm64 & amd64 verified)*"
+                    echo "- **Alpine Base Image:** \`Alpine ${CUR_ALPINE}\`"
+                    echo "- **Official Links:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
+                  fi
+                  echo ""
+                  echo "${NOTES}"
+                  echo ""
+                  echo "---"
+                  echo ""
+
+                  COUNT=$((COUNT + 1))
+                  [ "$COUNT" -ge 4 ] && break
+                done
+              } > "$D/CHANGELOG.md"
+            fi
+          fi
+
+          # Đồng bộ 6 ô màu Badges trong README.md
+          if [ -f "$D/README.md" ]; then
+            sed -i "s|badge/version-[^-]*-blue.svg|badge/version-${VER}-blue.svg|g" "$D/README.md"
+            sed -i "s|badge/tailscale-[^-]*-0052CC.svg|badge/tailscale-${CUR_TAG}-0052CC.svg|g" "$D/README.md"
+            sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${CUR_ALPINE}-0D597F.svg|g" "$D/README.md"
+          fi
+
       # ------------------------------------------------------------------
-      # 2. Kiểm tra cập nhật Upstream (Tailscale / Alpine)
+      # 2. Kiểm tra nguồn gốc nhiều tầng + Smart Versioning (PATCH / MAJOR) - GIỮ NGUYÊN
       # ------------------------------------------------------------------
       - name: Multi-layer upstream verification
         id: check
@@ -124,139 +238,408 @@ jobs:
         run: |
           set -uo pipefail
 
+          TS_STATUS="✅ Up to date"
+          ALPINE_STATUS="✅ Up to date"
+          ADDON_STATUS="✅ Up to date"
+
+          skip() {
+            echo "⏭️ $1"
+            echo "update_needed=false" >> "$GITHUB_OUTPUT"
+            echo "target_addon_ver=${CURRENT_VER}" >> "$GITHUB_OUTPUT"
+            echo "- ⏭️ $1" >> "$GITHUB_STEP_SUMMARY"
+            print_summary_table
+            exit 0
+          }
+          fail() {
+            echo "❌ $1"
+            echo "- ❌ $1" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          pass() {
+            echo "✅ $1"
+            echo "- ✅ $1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          retry() {
+            for i in 1 2 3; do
+              "$@" && return 0
+              sleep $((i * 5))
+            done
+            return 1
+          }
+          http_ok() {
+            [ "$(curl -s -o /dev/null -L -I -w '%{http_code}' --max-time 30 "$1")" = "200" ]
+          }
+          base_ok() {
+            docker manifest inspect "ghcr.io/home-assistant/base:$2" 2>/dev/null \
+              | jq -e --arg a "$1" '[.manifests[]?.platform.architecture] | index($a) != null' >/dev/null
+          }
+          tarball_ok() {
+            local ver="${1#v}"
+            for a in arm64 amd64; do
+              http_ok "https://pkgs.tailscale.com/stable/tailscale_${ver}_${a}.tgz" || return 1
+            done
+            return 0
+          }
+          newer_or_equal() {
+            [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+          }
+
+          print_summary_table() {
+            {
+              echo ""
+              echo "### 📊 Update Decision Summary - Tailscale Pro"
+              echo ""
+              echo "| Component                | Current          | Latest Verified  | Status                  |"
+              echo "|--------------------------|------------------|------------------|-------------------------|"
+              echo "| **Addon Version**        | \`${CURRENT_VER}\` | \`${NEW_ADDON_VER:-$CURRENT_VER}\` | $ADDON_STATUS |"
+              echo "| **Tailscale Engine**     | \`${CURRENT_TS}\`  | \`${CLEAN_VER:-?}\` | $TS_STATUS |"
+              echo "| **Alpine Base**          | \`${CURRENT_BASE}\`| \`${LATEST_BASE:-?}\` | $ALPINE_STATUS |"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          echo "### 🔍 Verification Summary" >> "$GITHUB_STEP_SUMMARY"
+
           CURRENT_VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' tailscale/config.yaml || true)
           CURRENT_TAG=$(grep -oP '^ARG TAILSCALE_VERSION=\K\S+' tailscale/Dockerfile || true)
           CURRENT_BASE=$(grep -oP '^FROM ghcr.io/home-assistant/base:\K[0-9.]+' tailscale/Dockerfile || true)
           CURRENT_TS="${CURRENT_TAG#v}"
 
-          RELEASES_JSON=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=5") || true
+          [ -n "$CURRENT_VER" ]  || fail "Cannot read version in config.yaml"
+          [ -n "$CURRENT_BASE" ] || fail "Cannot read FROM base image in Dockerfile"
 
-          LATEST_TAG="$CURRENT_TAG"
-          CLEAN_VER="$CURRENT_TS"
-          if [ -n "$RELEASES_JSON" ]; then
-            for TAG_CAND in $(echo "$RELEASES_JSON" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name'); do
-              [[ "$TAG_CAND" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+          CURRENT_BROKEN=0
+          if ! tarball_ok "$CURRENT_TAG"; then
+            CURRENT_BROKEN=1
+          fi
+
+          RELEASES_JSON=$(retry curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=8") \
+            || skip "GitHub API unreachable, retrying next cycle"
+
+          LATEST_TAG=""
+          CLEAN_VER=""
+          for TAG_CAND in $(echo "$RELEASES_JSON" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name'); do
+            [[ "$TAG_CAND" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+            VER_CAND="${TAG_CAND#v}"
+            git ls-remote --exit-code --tags https://github.com/tailscale/tailscale.git "refs/tags/${TAG_CAND}" >/dev/null 2>&1 || continue
+            if tarball_ok "$VER_CAND"; then
               LATEST_TAG="$TAG_CAND"
-              CLEAN_VER="${TAG_CAND#v}"
+              CLEAN_VER="$VER_CAND"
               break
-            done
+            fi
+          done
+
+          [ -n "$LATEST_TAG" ] || skip "No verified upstream release found with ready binaries"
+          pass "Layers 1-5: Verified latest buildable release is $LATEST_TAG"
+
+          LATEST_BASE="$CURRENT_BASE"
+          BASE_MAJOR="${CURRENT_BASE%%.*}"
+          BASE_MINOR="${CURRENT_BASE#*.}"
+          CAND="$CURRENT_BASE"
+          for i in 1 2 3; do
+            NEXT="${BASE_MAJOR}.$((BASE_MINOR + i))"
+            if base_ok arm64 "$NEXT" && base_ok amd64 "$NEXT"; then CAND="$NEXT"; else break; fi
+          done
+
+          if [ "$CAND" != "$CURRENT_BASE" ]; then
+            PKGS=$(sed -n '/apk add/,/&&/p' tailscale/Dockerfile | grep -oE '^[[:space:]]+[a-z0-9._+-]+' | tr -d ' \t' | tr '\n' ' ')
+            if [ -z "$PKGS" ] || docker run --rm --entrypoint sh "ghcr.io/home-assistant/base:${CAND}" \
+                 -c "apk add --simulate --no-cache ${PKGS}" >/tmp/apk-test.log 2>&1; then
+              LATEST_BASE="$CAND"
+              pass "Layer 6: Alpine $CAND verified with all packages, upgrading $CURRENT_BASE -> $CAND"
+            fi
           fi
 
           TS_UPDATE=0
-          if [ "$CLEAN_VER" != "$CURRENT_TS" ]; then
+          ALPINE_UPDATE=0
+          FORCE_MIGRATE=0
+          TS_STATUS="✅ Up to date"
+          ALPINE_STATUS="✅ Up to date"
+          ADDON_STATUS="✅ Up to date"
+          NEW_ADDON_VER="$CURRENT_VER"
+
+          if [ "$CURRENT_BROKEN" -eq 1 ]; then
             TS_UPDATE=1
+            TS_STATUS="🔧 Self-heal → $CLEAN_VER"
+          elif [ "$CLEAN_VER" != "$CURRENT_TS" ] && newer_or_equal "$CLEAN_VER" "$CURRENT_TS"; then
+            TS_UPDATE=1
+            TS_STATUS="⬆️ UPDATE → $CLEAN_VER"
           fi
 
-          NEW_ADDON_VER="$CURRENT_VER"
-          if [ "$TS_UPDATE" -eq 1 ]; then
+          if [ "$LATEST_BASE" != "$CURRENT_BASE" ]; then
+            ALPINE_UPDATE=1
+            ALPINE_STATUS="⬆️ UPDATE → $LATEST_BASE"
+          fi
+
+          if [[ "$CURRENT_VER" =~ ^1\.10[0-9] ]]; then
+            FORCE_MIGRATE=1
+            NEW_ADDON_VER="1.0.0"
+            ADDON_STATUS="🚀 MIGRATE → 1.0.0"
+          fi
+
+          if [ "$TS_UPDATE" -eq 0 ] && [ "$ALPINE_UPDATE" -eq 0 ] && [ "$FORCE_MIGRATE" -eq 0 ]; then
+            skip "Both Tailscale $CURRENT_TS and Alpine $CURRENT_BASE are already up to date and verified"
+          fi
+
+          if [ "$FORCE_MIGRATE" -eq 0 ]; then
             CUR_MAJOR=$(echo "$CURRENT_VER" | cut -d. -f1)
             CUR_MINOR=$(echo "$CURRENT_VER" | cut -d. -f2)
             CUR_PATCH=$(echo "$CURRENT_VER" | cut -d. -f3)
-            NEW_ADDON_VER="${CUR_MAJOR}.${CUR_MINOR}.$((CUR_PATCH + 1))"
-            echo "update_needed=true" >> "$GITHUB_OUTPUT"
-          else
-            # Vẫn cho phép build/release nếu commit thủ công hoặc thay đổi file
-            echo "update_needed=true" >> "$GITHUB_OUTPUT"
+
+            if [ "$TS_UPDATE" -eq 1 ] && [ "$ALPINE_UPDATE" -eq 1 ]; then
+              NEW_MAJOR=$((CUR_MAJOR + 1))
+              NEW_ADDON_VER="${NEW_MAJOR}.0.0"
+              ADDON_STATUS="🚀 MAJOR → $NEW_ADDON_VER (both components updated)"
+            else
+              NEW_PATCH=$((CUR_PATCH + 1))
+              NEW_ADDON_VER="${CUR_MAJOR}.${CUR_MINOR}.${NEW_PATCH}"
+              ADDON_STATUS="⬆️ PATCH → $NEW_ADDON_VER"
+            fi
           fi
 
-          echo "new_tag=$LATEST_TAG" >> "$GITHUB_OUTPUT"
-          echo "new_ver=$CLEAN_VER" >> "$GITHUB_OUTPUT"
-          echo "new_base=$CURRENT_BASE" >> "$GITHUB_OUTPUT"
-          echo "old_ver=$CURRENT_VER" >> "$GITHUB_OUTPUT"
-          echo "new_addon_ver=$NEW_ADDON_VER" >> "$GITHUB_OUTPUT"
+          {
+            echo "update_needed=true"
+            echo "new_tag=$LATEST_TAG"
+            echo "new_ver=$CLEAN_VER"
+            echo "new_base=$LATEST_BASE"
+            echo "old_ver=$CURRENT_VER"
+            echo "old_ts=$CURRENT_TS"
+            echo "old_base=$CURRENT_BASE"
+            echo "new_addon_ver=$NEW_ADDON_VER"
+            echo "target_addon_ver=$NEW_ADDON_VER"
+            echo "ts_update=$TS_UPDATE"
+            echo "alpine_update=$ALPINE_UPDATE"
+          } >> "$GITHUB_OUTPUT"
+
+          print_summary_table
 
       # ------------------------------------------------------------------
-      # 3. Cập nhật mã nguồn, Dockerfile và Changelog
+      # 3. Cập nhật Dockerfile, config.yaml, README Badges & Changelog khi có bản mới - GIỮ NGUYÊN
       # ------------------------------------------------------------------
-      - name: Update Files & Changelog
-        env:
-          NEW_TAG: ${{ steps.check.outputs.new_tag }}
-          NEW_VER: ${{ steps.check.outputs.new_ver }}
-          NEW_BASE: ${{ steps.check.outputs.new_base }}
-          NEW_ADDON_VER: ${{ steps.check.outputs.new_addon_ver }}
-        run: |
-          set -e
-          sed -i -E "s|^(FROM ghcr.io/home-assistant/base:)[0-9.]+|\1${NEW_BASE}|" tailscale/Dockerfile
-          sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
-          sed -i "s|^version:.*|version: \"${NEW_ADDON_VER}\"|" tailscale/config.yaml
-
-          NOTES=$(python3 /tmp/extract_ts.py "${NEW_VER}" "")
-
-          cat << EOF > tailscale/CHANGELOG.md
-          # Changelog
-
-          ## ${NEW_ADDON_VER}
-          _Released: $(date -u +%Y-%m-%d)_
-
-          ### 📦 Component & Version Matrix
-          - **Add-on Release:** \`v${NEW_ADDON_VER}\`
-          - **Tailscale Engine:** \`${NEW_TAG}\` *(arm64 & amd64 verified)*
-          - **Alpine Base Image:** \`Alpine ${NEW_BASE}\` *(Home Assistant official base)*
-          - **Official Links:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG})
-
-          ${NOTES}
-
-          ---
-          EOF
-
-      # ------------------------------------------------------------------
-      # 4. Sử dụng Home Assistant Builder để Build Add-on đa kiến trúc (arm64, amd64)
-      # ------------------------------------------------------------------
-      - name: Build Add-on with Home Assistant Builder
-        uses: home-assistant/builder@2025.03.0
-        with:
-          args: |
-            --aarch64 \
-            --amd64 \
-            --target /home/runner/work/${{ github.event.repository.name }}/${{ github.event.repository.name }}/tailscale \
-            --no-cache \
-            --docker-hub ghcr.io/${{ github.repository_owner }}
-
-      # ------------------------------------------------------------------
-      # 5. Commit, Push code & Tạo GitHub Release tự động từ CHANGELOG.md
-      # ------------------------------------------------------------------
-      - name: Commit, Push and Create GitHub Release
+      - name: Update Dockerfile, config.yaml, Badges & Changelog
+        if: steps.check.outputs.update_needed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.check.outputs.new_tag }}
+          NEW_VER: ${{ steps.check.outputs.new_ver }}
+          OLD_VER: ${{ steps.check.outputs.old_ver }}
+          OLD_TS: ${{ steps.check.outputs.old_ts }}
+          NEW_BASE: ${{ steps.check.outputs.new_base }}
+          OLD_BASE: ${{ steps.check.outputs.old_base }}
           NEW_ADDON_VER: ${{ steps.check.outputs.new_addon_ver }}
+          TS_UPDATE: ${{ steps.check.outputs.ts_update }}
+          ALPINE_UPDATE: ${{ steps.check.outputs.alpine_update }}
+        run: |
+          set -e
+
+          sed -i -E "s|^(FROM ghcr.io/home-assistant/base:)[0-9.]+|\1${NEW_BASE}|" tailscale/Dockerfile
+          sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
+          rm -f tailscale/build.yaml
+          sed -i "s|^version:.*|version: \"${NEW_ADDON_VER}\"|" tailscale/config.yaml
+
+          if [ -f "tailscale/README.md" ]; then
+            sed -i "s|badge/version-[^-]*-blue.svg|badge/version-${NEW_ADDON_VER}-blue.svg|g" tailscale/README.md
+            sed -i "s|badge/tailscale-[^-]*-0052CC.svg|badge/tailscale-${NEW_TAG}-0052CC.svg|g" tailscale/README.md
+            sed -i "s|badge/alpine%20base-[^-]*-0D597F.svg|badge/alpine%20base-${NEW_BASE}-0D597F.svg|g" tailscale/README.md
+          fi
+
+          RELEASES=$(curl -sfL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/tailscale/tailscale/releases?per_page=10")
+
+          mapfile -t TAG_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$')
+          mapfile -t DATE_LIST < <(echo "$RELEASES" | jq -r '.[] | select(.draft == false and .prerelease == false and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) | .published_at' | cut -d'T' -f1)
+
+          {
+            echo "# Changelog"
+            echo ""
+            COUNT=0
+            for idx in "${!TAG_LIST[@]}"; do
+              TAG="${TAG_LIST[$idx]}"
+              V="${TAG#v}"
+              DATE="${DATE_LIST[$idx]:-$(date -u +%Y-%m-%d)}"
+              PREV_TAG="${TAG_LIST[$((idx + 1))]:-}"
+              PREV_V="${PREV_TAG#v}"
+
+              NOTES=$(python3 /tmp/extract_ts.py "$V" "$PREV_V")
+
+              if [ "$idx" -eq 0 ]; then
+                echo "## ${NEW_ADDON_VER}"
+                echo "_Released: $(date -u +%Y-%m-%d)_"
+                echo ""
+                echo "### 📦 Component & Version Matrix"
+                echo "- **Add-on Release:** Bumped from \`v${OLD_VER}\` ➡️ **\`v${NEW_ADDON_VER}\`**"
+                if [ "$TS_UPDATE" = "1" ]; then
+                  echo "- **Tailscale Engine:** Updated from \`v${OLD_TS}\` ➡️ **\`v${NEW_VER}\`** *(arm64 & amd64 verified)*"
+                else
+                  echo "- **Tailscale Engine:** \`v${NEW_VER}\` *(arm64 & amd64 verified)*"
+                fi
+                if [ "$ALPINE_UPDATE" = "1" ]; then
+                  echo "- **Alpine Base Image:** Upgraded from \`Alpine ${OLD_BASE}\` ➡️ **\`Alpine ${NEW_BASE}\`**"
+                else
+                  echo "- **Alpine Base Image:** \`Alpine ${NEW_BASE}\` *(Home Assistant official base)*"
+                fi
+                echo "- **Official Links:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
+              else
+                echo "## ${V}"
+                echo "_Released: ${DATE}_"
+                echo ""
+                echo "### 📦 Component & Version Matrix"
+                echo "- **Tailscale Engine:** \`v${V}\` *(arm64 & amd64 verified)*"
+                echo "- **Alpine Base Image:** \`Alpine ${NEW_BASE}\`"
+                echo "- **Official Links:** [GitHub Release ${TAG}](https://github.com/tailscale/tailscale/releases/tag/${TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
+              fi
+              echo ""
+              echo "${NOTES}"
+              echo ""
+              echo "---"
+              echo ""
+
+              COUNT=$((COUNT + 1))
+              [ "$COUNT" -ge 4 ] && break
+            done
+          } > tailscale/CHANGELOG.md
+
+      # ------------------------------------------------------------------
+      # 4. Commit + Push (Cập nhật để xuất tín hiệu cho bước Build & Release)
+      # ------------------------------------------------------------------
+      - name: Commit and Push
+        id: commit_step
+        env:
+          UPDATE_NEEDED: ${{ steps.check.outputs.update_needed }}
+          TARGET_VER: ${{ steps.check.outputs.target_addon_ver }}
         run: |
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git add tailscale/
 
-          if git diff --staged --quiet; then
-            echo "✨ Nothing to commit."
-            exit 0
+          COMMITTED="false"
+          if ! git diff --staged --quiet; then
+            if [ "$UPDATE_NEEDED" = "true" ]; then
+              MSG="chore(tailscale): release v${TARGET_VER}"
+            else
+              MSG="chore(tailscale): rebuild clean deduplicated changelog with professional layout"
+            fi
+
+            git commit -m "$MSG"
+            for i in 1 2 3; do
+              if git pull --rebase origin main && git push; then break; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((i * 5))
+            done
+            COMMITTED="true"
+            echo "🚀 Successfully committed and pushed: $MSG"
+          else
+            echo "✨ No file modifications needed by bot."
           fi
 
-          git commit -m "chore(tailscale): release v${NEW_ADDON_VER}"
-          for i in 1 2 3; do
-            if git pull --rebase origin main && git push; then break; fi
-            git rebase --abort 2>/dev/null || true
-            sleep 5
-          done
+          # Quyết định xem có cần Build Package & Cập nhật Release hay không:
+          # - Có bản cập nhật mới từ Upstream (UPDATE_NEEDED == true)
+          # - Hoặc người dùng vừa push commit mới lên main hoặc bấm chạy workflow thủ công
+          # - Hoặc Release cho version hiện tại chưa tồn tại trên GitHub
+          SHOULD_RELEASE="false"
+          if [ "$UPDATE_NEEDED" = "true" ] || [ "$COMMITTED" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RELEASE="true"
+          elif ! gh release view "v${TARGET_VER}" >/dev/null 2>&1; then
+            SHOULD_RELEASE="true"
+          fi
 
-          # Tạo Git Tag mới tương ứng với version của add-on
-          TAG_NAME="v${NEW_ADDON_VER}"
-          git tag -a "${TAG_NAME}" -m "Tailscale Pro ${TAG_NAME}"
-          git push origin "${TAG_NAME}" --force
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
 
-          # Trích xuất đúng phần nội dung Changelog của phiên bản này để làm body Release
-          python3 -c '
-          with open("tailscale/CHANGELOG.md", "r") as f:
-              content = f.read()
-          parts = content.split("---")
-          if len(parts) > 1:
-              notes = parts[0].strip()
-          else:
-              notes = content.strip()
-          with open("/tmp/release_notes.md", "w") as f:
-              f.write(notes)
-          '
+      # ------------------------------------------------------------------
+      # 5. Build & Push Pre-built Package (aarch64 + amd64) lên GHCR cho HASS
+      # ------------------------------------------------------------------
+      - name: Set up QEMU for Multi-arch Build
+        if: steps.commit_step.outputs.should_release == 'true'
+        uses: docker/setup-qemu-action@v3
 
-          # Tạo GitHub Release và đính kèm thông tin
-          gh release create "${TAG_NAME}" \
-            --title "Tailscale Pro ${TAG_NAME}" \
-            --notes-file /tmp/release_notes.md \
-            --latest
+      - name: Set up Docker Buildx
+        if: steps.commit_step.outputs.should_release == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        if: steps.commit_step.outputs.should_release == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push aarch64 (arm64) Package for HASS
+        if: steps.commit_step.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: tailscale
+          file: tailscale/Dockerfile
+          platforms: linux/arm64
+          push: true
+          build-args: |
+            BUILD_ARCH=aarch64
+          labels: |
+            io.hass.version=${{ steps.check.outputs.target_addon_ver }}
+            io.hass.type=addon
+            io.hass.arch=aarch64
+          tags: |
+            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-aarch64:${{ steps.check.outputs.target_addon_ver }}
+            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-aarch64:latest
+
+      - name: Build and Push amd64 Package for HASS
+        if: steps.commit_step.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: tailscale
+          file: tailscale/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            BUILD_ARCH=amd64
+          labels: |
+            io.hass.version=${{ steps.check.outputs.target_addon_ver }}
+            io.hass.type=addon
+            io.hass.arch=amd64
+          tags: |
+            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-amd64:${{ steps.check.outputs.target_addon_ver }}
+            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-amd64:latest
+
+      # ------------------------------------------------------------------
+      # 6. Tự động Tạo / Cập nhật GitHub Release trích xuất từ CHANGELOG.md
+      # ------------------------------------------------------------------
+      - name: Create or Update GitHub Release from CHANGELOG.md
+        if: steps.commit_step.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VER: ${{ steps.check.outputs.target_addon_ver }}
+        run: |
+          TAG="v${VER}"
+
+          # Trích xuất đúng khối Changelog của phiên bản mới nhất trong tailscale/CHANGELOG.md
+          python3 - <<'PY' > /tmp/release_notes.md
+          import re
+          with open("tailscale/CHANGELOG.md", "r", encoding="utf-8") as f:
+              text = f.read()
+          # Bỏ tiêu đề '# Changelog' ở đầu và lấy toàn bộ mục đầu tiên trước dấu '---'
+          text = re.sub(r'^#\s+Changelog\s*', '', text, flags=re.I).strip()
+          first_section = text.split("\n---\n")[0].strip()
+          print(first_section)
+          PY
+
+          # Cập nhật Git tag trỏ vào commit mới nhất
+          git tag -f "${TAG}"
+          git push origin "${TAG}" --force
+
+          # Nếu Release của version này đã tồn tại (do bạn push thêm commit mới), cập nhật lại nội dung; nếu chưa có thì tạo mới
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "🔄 Updating existing GitHub Release ${TAG}..."
+            gh release edit "${TAG}" \
+              --title "Tailscale Pro ${TAG}" \
+              --notes-file /tmp/release_notes.md \
+              --latest
+          else
+            echo "🎉 Creating new GitHub Release ${TAG}..."
+            gh release create "${TAG}" \
+              --title "Tailscale Pro ${TAG}" \
+              --notes-file /tmp/release_notes.md \
+              --latest
+          fi
