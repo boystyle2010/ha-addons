@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
 
       # ------------------------------------------------------------------
-      # 1. Khởi tạo script trích xuất Changelog chuyên nghiệp (Khử trùng lặp + Lọc hệ điều hành) - GIỮ NGUYÊN
+      # 1. Khởi tạo script trích xuất Changelog chuyên nghiệp (Khử trùng lặp + Lọc hệ điều hành)
       # ------------------------------------------------------------------
       - name: Prepare Smart Changelog Extractor & Sync Add-on Files
         env:
@@ -64,7 +64,6 @@ jobs:
           bullets = []
           seen = set()
 
-          # Các từ khóa chỉ dành cho hệ điều hành khác (không liên quan tới Home Assistant / Linux)
           ignore_os_patterns = [
               r'\bwindows\s+\.exe\b',
               r'\bwindows\s+installer\b',
@@ -157,7 +156,7 @@ jobs:
           print("\n".join(bullets[:10]))
           PY
 
-          # Kiểm tra nếu CHANGELOG.md chưa có bố cục mới ("Binary Integrity") hoặc còn dòng bị lặp thì tự động xây dựng lại ngay!
+          # Kiểm tra nếu CHANGELOG.md chưa có bố cục mới hoặc chưa khớp version hiện tại
           NEED_CHANGELOG=0
           FIRST_HEADER=$(grep -m1 '^## ' "$D/CHANGELOG.md" 2>/dev/null | sed 's/^## //' || echo "")
           if [ ! -f "$D/CHANGELOG.md" ]; then
@@ -202,7 +201,7 @@ jobs:
                     echo "- **Alpine Base Image:** \`Alpine ${CUR_ALPINE}\` *(Home Assistant official base)*"
                     echo "- **Official Links:** [GitHub Release ${CUR_TAG}](https://github.com/tailscale/tailscale/releases/tag/${CUR_TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
                   else
-                    echo "## ${V}"
+                    echo "## Tailscale v${V}"
                     echo "_Released: ${DATE}_"
                     echo ""
                     echo "### 📦 Component & Version Matrix"
@@ -231,7 +230,7 @@ jobs:
           fi
 
       # ------------------------------------------------------------------
-      # 2. Kiểm tra nguồn gốc nhiều tầng + Smart Versioning (PATCH / MAJOR) - GIỮ NGUYÊN
+      # 2. Kiểm tra nguồn gốc nhiều tầng + Smart Versioning (PATCH / MAJOR / MANUAL PUSH)
       # ------------------------------------------------------------------
       - name: Multi-layer upstream verification
         id: check
@@ -240,7 +239,6 @@ jobs:
         run: |
           set -uo pipefail
 
-          # Khai báo sớm để skip() -> print_summary_table không lỗi 'unbound variable'
           TS_STATUS="✅ Up to date"
           ALPINE_STATUS="✅ Up to date"
           ADDON_STATUS="✅ Up to date"
@@ -357,6 +355,7 @@ jobs:
           TS_UPDATE=0
           ALPINE_UPDATE=0
           FORCE_MIGRATE=0
+          MANUAL_CODE_UPDATE=0
           TS_STATUS="✅ Up to date"
           ALPINE_STATUS="✅ Up to date"
           ADDON_STATUS="✅ Up to date"
@@ -381,7 +380,17 @@ jobs:
             ADDON_STATUS="🚀 MIGRATE → 1.0.0"
           fi
 
-          if [ "$TS_UPDATE" -eq 0 ] && [ "$ALPINE_UPDATE" -eq 0 ] && [ "$FORCE_MIGRATE" -eq 0 ]; then
+          # Nếu người dùng push commit sửa file trong tailscale/ nhưng quên tăng version trong config.yaml (và tag đó đã tồn tại), tự động bump PATCH để HASS nhận bản cập nhật mới
+          if [ "${{ github.event_name }}" = "push" ] && [ "$TS_UPDATE" -eq 0 ] && [ "$ALPINE_UPDATE" -eq 0 ] && [ "$FORCE_MIGRATE" -eq 0 ]; then
+            if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q '^tailscale/' && gh release view "tailscale-v${CURRENT_VER}" >/dev/null 2>&1; then
+               PREV_CFG_VER=$(git show HEAD~1:tailscale/config.yaml 2>/dev/null | grep -oP '^version:\s*"?\K[0-9][^"\s]*' || echo "")
+               if [ "$PREV_CFG_VER" = "$CURRENT_VER" ]; then
+                MANUAL_CODE_UPDATE=1
+              fi
+            fi
+          fi
+
+          if [ "$TS_UPDATE" -eq 0 ] && [ "$ALPINE_UPDATE" -eq 0 ] && [ "$FORCE_MIGRATE" -eq 0 ] && [ "$MANUAL_CODE_UPDATE" -eq 0 ]; then
             skip "Both Tailscale $CURRENT_TS and Alpine $CURRENT_BASE are already up to date and verified"
           fi
 
@@ -418,7 +427,7 @@ jobs:
           print_summary_table
 
       # ------------------------------------------------------------------
-      # 3. Cập nhật Dockerfile, config.yaml, README Badges & Changelog khi có bản mới - GIỮ NGUYÊN
+      # 3. Cập nhật Dockerfile, config.yaml, README Badges & Changelog khi có bản mới
       # ------------------------------------------------------------------
       - name: Update Dockerfile, config.yaml, Badges & Changelog
         if: steps.check.outputs.update_needed == 'true'
@@ -438,7 +447,6 @@ jobs:
 
           sed -i -E "s|^(FROM ghcr.io/home-assistant/base:)[0-9.]+|\1${NEW_BASE}|" tailscale/Dockerfile
           sed -i "s|^ARG TAILSCALE_VERSION=.*|ARG TAILSCALE_VERSION=${NEW_TAG}|" tailscale/Dockerfile
-          # build.yaml đã bị Home Assistant loại bỏ: base image khai báo trực tiếp trong Dockerfile (FROM)
           rm -f tailscale/build.yaml
           sed -i "s|^version:.*|version: \"${NEW_ADDON_VER}\"|" tailscale/config.yaml
 
@@ -485,7 +493,7 @@ jobs:
                 fi
                 echo "- **Official Links:** [GitHub Release ${NEW_TAG}](https://github.com/tailscale/tailscale/releases/tag/${NEW_TAG}) • [Official Tailscale Changelog](https://tailscale.com/changelog#client)"
               else
-                echo "## ${V}"
+                echo "## Tailscale v${V}"
                 echo "_Released: ${DATE}_"
                 echo ""
                 echo "### 📦 Component & Version Matrix"
@@ -505,14 +513,99 @@ jobs:
           } > tailscale/CHANGELOG.md
 
       # ------------------------------------------------------------------
-      # 4. Commit + Push (Đồng bộ cơ chế Keep-alive & kích hoạt Build/Release)
+      # 4. Kiểm tra điều kiện cần Build Package & Release
       # ------------------------------------------------------------------
-      - name: Commit and Push
-        id: commit_step
+      - name: Determine Build & Release Status
+        id: prep_release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATE_NEEDED: ${{ steps.check.outputs.update_needed }}
           TARGET_VER: ${{ steps.check.outputs.target_addon_ver }}
+        run: |
+          HAS_DIFF="false"
+          if ! git diff --quiet tailscale/; then
+            HAS_DIFF="true"
+          fi
+
+          SHOULD_RELEASE="false"
+          if [ "$UPDATE_NEEDED" = "true" ] || [ "$HAS_DIFF" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RELEASE="true"
+          elif ! gh release view "tailscale-v${TARGET_VER}" >/dev/null 2>&1; then
+            SHOULD_RELEASE="true"
+          fi
+
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
+          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
+
+      # ------------------------------------------------------------------
+      # 5. Build & Push Pre-built Package (aarch64 + amd64) lên GHCR TRƯỚC KHI Commit
+      # ------------------------------------------------------------------
+      - name: Set up QEMU for Multi-arch Build
+        if: steps.prep_release.outputs.should_release == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.prep_release.outputs.should_release == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        if: steps.prep_release.outputs.should_release == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push aarch64 (arm64) Package for HASS
+        if: steps.prep_release.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: tailscale
+          file: tailscale/Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            BUILD_ARCH=aarch64
+          labels: |
+            io.hass.version=${{ steps.check.outputs.target_addon_ver }}
+            io.hass.type=addon
+            io.hass.arch=aarch64
+          tags: |
+            ghcr.io/${{ steps.prep_release.outputs.owner_lc }}/tailscale_pro-aarch64:${{ steps.check.outputs.target_addon_ver }}
+            ghcr.io/${{ steps.prep_release.outputs.owner_lc }}/tailscale_pro-aarch64:latest
+
+      - name: Build and Push amd64 Package for HASS
+        if: steps.prep_release.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: tailscale
+          file: tailscale/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            BUILD_ARCH=amd64
+          labels: |
+            io.hass.version=${{ steps.check.outputs.target_addon_ver }}
+            io.hass.type=addon
+            io.hass.arch=amd64
+          tags: |
+            ghcr.io/${{ steps.prep_release.outputs.owner_lc }}/tailscale_pro-amd64:${{ steps.check.outputs.target_addon_ver }}
+            ghcr.io/${{ steps.prep_release.outputs.owner_lc }}/tailscale_pro-amd64:latest
+
+      # ------------------------------------------------------------------
+      # 6. Commit + Push + Tạo/Cập nhật GitHub Release từ CHANGELOG.md (Sau khi Package đã sẵn sàng trên GHCR)
+      # ------------------------------------------------------------------
+      - name: Commit, Push and Update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_NEEDED: ${{ steps.check.outputs.update_needed }}
+          TARGET_VER: ${{ steps.check.outputs.target_addon_ver }}
+          SHOULD_RELEASE: ${{ steps.prep_release.outputs.should_release }}
         run: |
           # Keep-alive (Chống GitHub tắt cron sau 60 ngày)
           LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
@@ -527,7 +620,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git add tailscale/ .github/workflows/.keepalive 2>/dev/null || git add tailscale/
 
-          COMMITTED="false"
           if ! git diff --staged --quiet; then
             if [ "$UPDATE_NEEDED" = "true" ]; then
               MSG="chore(tailscale): release v${TARGET_VER}"
@@ -541,91 +633,15 @@ jobs:
               git rebase --abort 2>/dev/null || true
               sleep $((i * 5))
             done
-            COMMITTED="true"
             echo "🚀 Successfully committed and pushed: $MSG"
           else
             echo "✨ Nothing to commit."
           fi
 
-          SHOULD_RELEASE="false"
-          if [ "$UPDATE_NEEDED" = "true" ] || [ "$COMMITTED" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            SHOULD_RELEASE="true"
-          elif ! gh release view "tailscale-v${TARGET_VER}" >/dev/null 2>&1; then
-            SHOULD_RELEASE="true"
-          fi
+          if [ "$SHOULD_RELEASE" = "true" ]; then
+            TAG="tailscale-v${TARGET_VER}"
 
-          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "should_release=${SHOULD_RELEASE}" >> "$GITHUB_OUTPUT"
-          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
-
-      # ------------------------------------------------------------------
-      # 5. Build & Push Pre-built Package (aarch64 + amd64) lên GHCR cho HASS
-      # ------------------------------------------------------------------
-      - name: Set up QEMU for Multi-arch Build
-        if: steps.commit_step.outputs.should_release == 'true'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        if: steps.commit_step.outputs.should_release == 'true'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry (GHCR)
-        if: steps.commit_step.outputs.should_release == 'true'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push aarch64 (arm64) Package for HASS
-        if: steps.commit_step.outputs.should_release == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: tailscale
-          file: tailscale/Dockerfile
-          platforms: linux/arm64
-          push: true
-          build-args: |
-            BUILD_ARCH=aarch64
-          labels: |
-            io.hass.version=${{ steps.check.outputs.target_addon_ver }}
-            io.hass.type=addon
-            io.hass.arch=aarch64
-          tags: |
-            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-aarch64:${{ steps.check.outputs.target_addon_ver }}
-            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-aarch64:latest
-
-      - name: Build and Push amd64 Package for HASS
-        if: steps.commit_step.outputs.should_release == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: tailscale
-          file: tailscale/Dockerfile
-          platforms: linux/amd64
-          push: true
-          build-args: |
-            BUILD_ARCH=amd64
-          labels: |
-            io.hass.version=${{ steps.check.outputs.target_addon_ver }}
-            io.hass.type=addon
-            io.hass.arch=amd64
-          tags: |
-            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-amd64:${{ steps.check.outputs.target_addon_ver }}
-            ghcr.io/${{ steps.commit_step.outputs.owner_lc }}/tailscale_pro-amd64:latest
-
-      # ------------------------------------------------------------------
-      # 6. Tự động Tạo / Cập nhật GitHub Release trích xuất từ tailscale/CHANGELOG.md
-      # ------------------------------------------------------------------
-      - name: Create or Update GitHub Release from CHANGELOG.md
-        if: steps.commit_step.outputs.should_release == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VER: ${{ steps.check.outputs.target_addon_ver }}
-        run: |
-          # Dùng tiền tố 'tailscale-v' để tách biệt với 'cloudflared-v' trong cùng repo
-          TAG="tailscale-v${VER}"
-
-          python3 - <<'PY' > /tmp/release_notes.md
+            python3 - <<'PY' > /tmp/release_notes.md
           import re
           with open("tailscale/CHANGELOG.md", "r", encoding="utf-8") as f:
               text = f.read()
@@ -634,19 +650,20 @@ jobs:
           print(first_section)
           PY
 
-          git tag -f "${TAG}"
-          git push origin "${TAG}" --force
+            git tag -f "${TAG}"
+            git push origin "${TAG}" --force
 
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            echo "🔄 Updating existing GitHub Release ${TAG}..."
-            gh release edit "${TAG}" \
-              --title "Tailscale Pro v${VER}" \
-              --notes-file /tmp/release_notes.md \
-              --latest
-          else
-            echo "🎉 Creating new GitHub Release ${TAG}..."
-            gh release create "${TAG}" \
-              --title "Tailscale Pro v${VER}" \
-              --notes-file /tmp/release_notes.md \
-              --latest
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              echo "🔄 Updating existing GitHub Release ${TAG}..."
+              gh release edit "${TAG}" \
+                --title "Tailscale Pro v${TARGET_VER}" \
+                --notes-file /tmp/release_notes.md \
+                --latest
+            else
+              echo "🎉 Creating new GitHub Release ${TAG}..."
+              gh release create "${TAG}" \
+                --title "Tailscale Pro v${TARGET_VER}" \
+                --notes-file /tmp/release_notes.md \
+                --latest
+            fi
           fi
