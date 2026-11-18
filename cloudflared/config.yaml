@@ -10,6 +10,8 @@ arch:
 apparmor: true
 startup: services
 boot: auto
+# cloudflared chờ tối đa grace_period (mặc định 30s) khi dừng; mặc định 10s của Supervisor gây exit code 137
+timeout: 45
 ports:
   2000/tcp: null
 ports_description:

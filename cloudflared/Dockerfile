@@ -1,7 +1,8 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base:3.24
-FROM ${BUILD_FROM}
+# Base image đa kiến trúc (aarch64 + amd64) - thay thế hoàn toàn build.yaml đã bị loại bỏ
+FROM ghcr.io/home-assistant/base:3.24
 
-# Nhận diện kiến trúc từ Home Assistant Supervisor (aarch64 hoặc amd64)
+# Kiến trúc: TARGETARCH do BuildKit tự điền (arm64/amd64), BUILD_ARCH là dự phòng, cuối cùng là uname -m
+ARG TARGETARCH
 ARG BUILD_ARCH
 
 # Phiên bản Cloudflared thật (bot sẽ tự cập nhật dòng này)
@@ -12,7 +13,7 @@ RUN apk update && apk upgrade --no-cache && \
     apk add --no-cache curl ca-certificates tzdata jq
 
 # Tự động chọn đúng binary theo cấu trúc phần cứng (aarch64 -> arm64 | amd64 -> amd64)
-RUN ARCH_CHECK="${BUILD_ARCH}" && \
+RUN ARCH_CHECK="${TARGETARCH:-${BUILD_ARCH}}" && \
     if [ -z "${ARCH_CHECK}" ]; then ARCH_CHECK="$(uname -m)"; fi && \
     case "${ARCH_CHECK}" in \
         aarch64|arm64) CF_ARCH="arm64" ;; \
