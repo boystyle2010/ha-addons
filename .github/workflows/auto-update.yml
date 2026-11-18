@@ -40,7 +40,15 @@ jobs:
           D="cloudflared"
           mkdir -p "$D"
 
-          # DOCS.md is maintained by hand in this repository (never downloaded from another project).
+          if [ ! -f "$D/icon.png" ]; then
+            curl -sfL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/icon.png" -o "$D/icon.png" || true
+          fi
+          if [ ! -f "$D/logo.png" ]; then
+            curl -sfL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/logo.png" -o "$D/logo.png" || true
+          fi
+          if [ ! -f "$D/DOCS.md" ]; then
+            curl -sfL "https://raw.githubusercontent.com/brenner-tobias/addon-cloudflared/main/cloudflared/DOCS.md" -o "$D/DOCS.md" || true
+          fi
 
           # Tạo hồ sơ bảo mật AppArmor tùy chỉnh để tăng Security Rating trên Home Assistant
           if [ ! -f "$D/apparmor.txt" ]; then
@@ -91,14 +99,10 @@ jobs:
 
           VER=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' "$D/config.yaml" || echo "1.0.2")
           CUR_CF=$(grep -oP '^ARG CLOUDFLARED_VERSION=\K[0-9.]+' "$D/Dockerfile" || echo "2026.11.0")
-          CUR_ALPINE=$(grep -oP '(aarch64|amd64)-base:\K[0-9.]+' "$D/Dockerfile" | head -1 || echo "3.24")
+          CUR_ALPINE=$(grep -oP '^FROM ghcr.io/home-assistant/base:\K[0-9.]+' "$D/Dockerfile" | head -1 || echo "3.24")
 
-          # Đảm bảo file build.yaml luôn đồng bộ cả 2 kiến trúc aarch64 và amd64
-          cat > "$D/build.yaml" <<EOF
-          build_from:
-            aarch64: ghcr.io/home-assistant/aarch64-base:${CUR_ALPINE}
-            amd64: ghcr.io/home-assistant/amd64-base:${CUR_ALPINE}
-          EOF
+          # build.yaml đã bị Home Assistant loại bỏ: base image khai báo trực tiếp trong Dockerfile (FROM)
+          rm -f "$D/build.yaml"
 
           # Tạo/Cập nhật 8 ô màu Badges chuyên nghiệp trong cloudflared/README.md
           cat > "$D/README.md" <<EOF
@@ -131,8 +135,6 @@ jobs:
           # Chèn hàng Badges lên đầu DOCS.md để hiển thị đẹp mắt ngay trong tab Documentation của HA
           if [ -f "$D/DOCS.md" ]; then
             sed -i '/img.shields.io\/badge/d' "$D/DOCS.md"
-            # Drop the blank lines left at the top, so every run produces the same file (no growth, no empty commits).
-            sed -i '/./,$!d' "$D/DOCS.md"
             BADGE_LINE="![Version](https://img.shields.io/badge/version-${VER}-blue.svg) ![Cloudflared](https://img.shields.io/badge/cloudflared-${CUR_CF}-F38020.svg) ![Alpine](https://img.shields.io/badge/alpine%20base-${CUR_ALPINE}-0D597F.svg) ![Arch](https://img.shields.io/badge/arch-aarch64%20%7C%20amd64-blue.svg) ![AppArmor](https://img.shields.io/badge/apparmor-enforced-success.svg)"
             TMP_DOCS=$(mktemp)
             echo "$BADGE_LINE" > "$TMP_DOCS"
@@ -335,7 +337,8 @@ jobs:
             [ "$(curl -s -o /dev/null -L -I -w '%{http_code}' --max-time 30 "$1")" = "200" ]
           }
           base_ok() {
-            docker manifest inspect "ghcr.io/home-assistant/$1-base:$2" >/dev/null 2>&1
+            docker manifest inspect "ghcr.io/home-assistant/base:$2" 2>/dev/null \
+              | jq -e --arg a "$1" '[.manifests[]?.platform.architecture] | index($a) != null' >/dev/null
           }
           newer_or_equal() {
             [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
@@ -343,7 +346,7 @@ jobs:
 
           CURRENT_ADDON_VERSION=$(grep -oP '^version:\s*"?\K[0-9][^"\s]*' cloudflared/config.yaml || echo "1.0.2")
           CURRENT_CF=$(grep -oP '^ARG CLOUDFLARED_VERSION=\K[0-9.]+' cloudflared/Dockerfile || echo "2026.11.0")
-          CURRENT_ALPINE=$(grep -oP '(aarch64|amd64)-base:\K[0-9.]+' cloudflared/Dockerfile | head -1 || echo "3.24")
+          CURRENT_ALPINE=$(grep -oP '^FROM ghcr.io/home-assistant/base:\K[0-9.]+' cloudflared/Dockerfile | head -1 || echo "3.24")
 
           CURRENT_BROKEN=0
           if ! http_ok "https://github.com/cloudflare/cloudflared/releases/download/${CURRENT_CF}/cloudflared-linux-arm64" || \
@@ -373,12 +376,12 @@ jobs:
           CAND="$CURRENT_ALPINE"
           for i in 1 2 3; do
             NEXT="${BASE_MAJOR}.$((BASE_MINOR + i))"
-            if base_ok aarch64 "$NEXT" && base_ok amd64 "$NEXT"; then CAND="$NEXT"; else break; fi
+            if base_ok arm64 "$NEXT" && base_ok amd64 "$NEXT"; then CAND="$NEXT"; else break; fi
           done
 
           if [ "$CAND" != "$CURRENT_ALPINE" ]; then
             PKGS=$(grep -oP 'apk add --no-cache \K[^&\\]+' cloudflared/Dockerfile | tail -1 | tr -s ' \t\n' ' ')
-            if [ -z "$PKGS" ] || docker run --rm --entrypoint sh "ghcr.io/home-assistant/amd64-base:${CAND}" \
+            if [ -z "$PKGS" ] || docker run --rm --entrypoint sh "ghcr.io/home-assistant/base:${CAND}" \
                  -c "apk add --simulate --no-cache ${PKGS}" >/dev/null 2>&1; then
               VERIFIED_ALPINE="$CAND"
             fi
@@ -452,14 +455,10 @@ jobs:
 
           if [ "$UPDATE_NEEDED" = "true" ]; then
             sed -i "s|^ARG CLOUDFLARED_VERSION=.*|ARG CLOUDFLARED_VERSION=${NEW_CF}|" cloudflared/Dockerfile
-            sed -i "s|aarch64-base:[0-9.]*|aarch64-base:${NEW_ALPINE}|g" cloudflared/Dockerfile
+            sed -i -E "s|^(FROM ghcr.io/home-assistant/base:)[0-9.]+|\1${NEW_ALPINE}|" cloudflared/Dockerfile
             sed -i "s|^version:.*|version: \"${FINAL_VERSION}\"|" cloudflared/config.yaml
 
-            cat > cloudflared/build.yaml <<EOF
-          build_from:
-            aarch64: ghcr.io/home-assistant/aarch64-base:${NEW_ALPINE}
-            amd64: ghcr.io/home-assistant/amd64-base:${NEW_ALPINE}
-          EOF
+            rm -f cloudflared/build.yaml
 
             for f in cloudflared/README.md cloudflared/DOCS.md; do
               if [ -f "$f" ]; then
