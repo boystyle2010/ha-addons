@@ -1,10 +1,10 @@
 # Changelog
 
-## 1.1.2
-_Released: 2026-11-17_
+## 1.1.3
+_Released: 2026-11-18_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** `v1.1.2`
+- **Add-on Release:** Bumped from `v1.1.2` ➡️ **`v1.1.3`**
 - **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64)
 - **Cloudflared Engine:** `2026.11.1` *(arm64 & amd64 binaries verified)*
 - **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
@@ -25,7 +25,7 @@ _Released: 2026-11-17_
 
 ---
 
-## 2026.11.0
+## Cloudflared 2026.11.0
 _Released: 2026-11-12_
 
 ### 📦 Component & Version Matrix
@@ -48,7 +48,7 @@ _Released: 2026-11-12_
 
 ---
 
-## 2026.10.7
+## Cloudflared 2026.10.7
 _Released: 2026-10-30_
 
 ### 📦 Component & Version Matrix
@@ -69,7 +69,7 @@ _Released: 2026-10-30_
 
 ---
 
-## 2026.10.6
+## Cloudflared 2026.10.6
 _Released: 2026-10-29_
 
 ### 📦 Component & Version Matrix
