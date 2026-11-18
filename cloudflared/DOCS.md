@@ -3,6 +3,7 @@
 
 
 
+
 # Home Assistant Add-on: Cloudflared Pro
 
 Cloudflared Pro runs the official `cloudflared` binary from Cloudflare inside Home Assistant and connects your network to Cloudflare through an outbound tunnel. You can reach Home Assistant, and other services in your home, from the internet **without opening any port on your router**.
