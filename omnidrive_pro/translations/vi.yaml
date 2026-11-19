@@ -7,10 +7,10 @@ configuration:
     description: Cho phép gắn ổ đĩa mạng trực tiếp vào ứng dụng Tệp (Files) gốc của iPhone/iPad, macOS Finder (smb://), Windows Explorer (\\\\ip\\) và phát video trực tiếp lên Infuse / VLC.
   sftp_enabled:
     name: Kích hoạt giao thức SFTP (Cổng 2222)
-    description: Bật truyền tải file mã hóa qua giao thức SSH (SFTP) chuyên dụng cho FileZilla, Cyberduck, WinSCP, Termius và FE File Explorer.
+    description: Bật truyền tải file mã hóa qua giao thức SSH (SFTP) chuyên dụng cho FileZilla, Cyberduck, WinSCP, Termius và FE File Explorer (chỉ áp dụng cho tài khoản có role "admin").
   ftp_enabled:
     name: Kích hoạt giao thức FTP (Cổng 2121)
-    description: Bật máy chủ FTP tiêu chuẩn tốc độ cao trong mạng LAN (kèm dải cổng Passive 21000–21002) cho các thiết bị mạng, camera hoặc ứng dụng quản lý file cổ điển.
+    description: Bật máy chủ FTP tiêu chuẩn tốc độ cao trong mạng LAN (kèm dải cổng Passive 21000–21002) cho các thiết bị mạng, camera hoặc ứng dụng quản lý file cổ điển (chỉ áp dụng cho tài khoản có role "admin").
   ssl:
     name: Kích hoạt SSL (HTTPS)
     description: Bật mã hóa trực tiếp bằng chứng chỉ trong thư mục /ssl (Đặt là Tắt nếu bạn dùng qua Cloudflare Tunnel hoặc Reverse Proxy).
@@ -34,10 +34,10 @@ configuration:
     description: Độ chi tiết của log hệ thống.
   root_access:
     name: Quyền Root (Root Access)
-    description: Khi bật, các tác vụ file (như nén, xoá) sẽ chạy dưới quyền root. Khi tắt, chạy dưới quyền user thường.
+    description: Khi bật, các tác vụ hệ thống (như nén, đổi chủ sở hữu chown, chạy lệnh Terminal) của admin sẽ chạy dưới quyền root. Khi tắt, chạy dưới quyền user thường.
   enable_terminal:
-    name: Kích hoạt Web Terminal
-    description: Cho phép chạy các lệnh shell ẩn trong giao diện web (Chỉ bật nếu bạn tin tưởng thiết bị truy cập).
+    name: Kích hoạt Web Terminal (Chỉ Admin)
+    description: Cho phép tài khoản có role "admin" chạy lệnh shell trong giao diện web (tài khoản "user" luôn bị chặn). Chỉ bật nếu bạn tin tưởng thiết bị truy cập.
   lock_root:
     name: Khoá thư mục gốc (Root Lock)
     description: Ngăn chặn việc vô tình tạo hoặc xoá file ngay tại thư mục gốc (Bắt buộc phải vào bên trong thư mục con mới được sửa).
@@ -55,21 +55,21 @@ configuration:
     description: "optional = mã hoá khi client yêu cầu, FTP thường vẫn dùng được. required = từ chối FTP không mã hoá. off = không mã hoá. Chứng chỉ được tạo tự động (hoặc lấy từ /ssl)."
   trusted_proxies:
     name: Proxy tin cậy (IP thật của client)
-    description: IP hoặc dải IP (cách nhau bằng dấu phẩy) của reverse proxy hoặc Cloudflare Tunnel đi vào cổng 8090, để nhật ký, giới hạn tốc độ và khoá đăng nhập dùng IP thật của client. Điền "none" để tắt.
+    description: IP hoặc dải IP (cách nhau bằng dấu phẩy) của reverse proxy hoặc Cloudflare Tunnel đi vào cổng WebDAV/Web UI (8090), để nhật ký, giới hạn tốc độ và khoá đăng nhập dùng IP thật của client. Điền "none" để tắt.
   share_zip_max_mb:
     name: Dung lượng thư mục tối đa khi chia sẻ dạng zip (MB)
     description: Thư mục lớn nhất được phép tải xuống dạng zip qua link chia sẻ.
   users:
-    name: Danh sách tài khoản (Users)
-    description: "Tài khoản dùng chung cho mọi giao thức (Web UI, WebDAV, SMB, SFTP, FTP). Ô MẬT KHẨU: để TRỐNG = giữ nguyên mật khẩu hiện tại (add-on tự xoá trắng ô này sau khi áp dụng). Nhập mật khẩu = tạo tài khoản mới, hoặc ĐẶT LẠI mật khẩu của tài khoản đã có trên tất cả giao thức (thay cả mật khẩu đã đổi trên Web UI). Chỉ giữ mật khẩu mặc định cho lần khởi động đầu tiên. Xoá user khỏi danh sách này sẽ xoá tài khoản."
+    name: Danh sách tài khoản & Phân quyền (Users)
+    description: "Quản lý tài khoản và vai trò (role): 'admin' có toàn quyền (Web UI, WebDAV, SMB, SFTP, FTP, Terminal, Snapshot, Chmod); 'user' chỉ truy cập Web UI, WebDAV và SMB trong phạm vi thư mục được cấp phép tại mục Shares (bị chặn Terminal, SFTP, FTP và các thao tác quản trị). Nếu không ghi role, tài khoản đầu tiên là admin, các tài khoản sau là user. Ô MẬT KHẨU: để TRỐNG = giữ mật khẩu hiện tại (add-on tự xoá trắng sau khi áp dụng); nhập mới = tạo tài khoản hoặc ĐẶT LẠI mật khẩu trên mọi giao thức."
   shares:
-    name: Danh sách thư mục hệ thống (Shares)
-    description: Các phân vùng của Home Assistant được chia sẻ qua OmniDrive Pro.
+    name: Danh sách thư mục hệ thống & Quyền truy cập (Shares)
+    description: "Cấu hình các thư mục chia sẻ qua OmniDrive Pro. Đặt 'read_only: true' để chỉ cho xem/tải. Điền 'allowed_users' (ví dụ: ['admin'] hoặc ['guest']) để giới hạn người dùng được truy cập; để trống [] = mọi tài khoản đều xem được. Tài khoản 'admin' luôn có quyền truy cập tất cả thư mục."
 network:
-  8090/tcp: Cổng Web UI, WebDAV Server & Link chia sẻ tạm thời
+  8090/tcp: Cổng Web UI, WebDAV Server & Link chia sẻ tạm thời (có thể đổi sang cổng khác nếu bị trùng)
   445/tcp: Cổng SMB / Samba Server (iOS Files, macOS Finder, Windows)
-  2222/tcp: Cổng SFTP Server (Truyền file bảo mật qua SSH)
-  2121/tcp: Cổng điều khiển FTP Server
+  2222/tcp: Cổng SFTP Server (Truyền file bảo mật qua SSH - Chỉ Admin)
+  2121/tcp: Cổng điều khiển FTP Server (Chỉ Admin)
   21000/tcp: Cổng dữ liệu FTP Passive 1
   21001/tcp: Cổng dữ liệu FTP Passive 2
   21002/tcp: Cổng dữ liệu FTP Passive 3
