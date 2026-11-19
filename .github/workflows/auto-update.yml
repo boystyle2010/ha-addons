@@ -637,7 +637,7 @@ jobs:
             ghcr.io/${{ steps.apply_step.outputs.owner_lc }}/cloudflared_pro-amd64:latest
 
       # ------------------------------------------------------------------
-      # 5. Commit + Push + Tạo/Cập nhật GitHub Release từ cloudflared/CHANGELOG.md
+      # 5. Commit (Verified GPG via GraphQL API) + Tạo/Cập nhật GitHub Release
       # ------------------------------------------------------------------
       - name: Commit, Push and Update GitHub Release
         env:
@@ -653,32 +653,107 @@ jobs:
           FINAL_VERSION: ${{ steps.check.outputs.final_version }}
           SHOULD_RELEASE: ${{ steps.apply_step.outputs.should_release }}
         run: |
-          # Keep-alive (Chống GitHub tắt cron sau 60 ngày)
+          set -e
+
+          # Keep-alive (đặt tại .github/.keepalive để GITHUB_TOKEN được phép ghi)
           LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
           NOW_TS=$(date +%s)
           DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
           if [ "$DAYS_IDLE" -ge 45 ]; then
-            mkdir -p .github/workflows
-            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
+            mkdir -p .github
+            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/.keepalive
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add cloudflared/ .github/workflows/.keepalive 2>/dev/null || git add cloudflared/
+          git add cloudflared/ .github/.keepalive 2>/dev/null || git add cloudflared/
 
           if ! git diff --staged --quiet; then
             if [ "$UPDATE_NEEDED" = "true" ]; then
-              MSG="chore(cloudflared): release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
+              export COMMIT_MSG="chore(cloudflared): release v${FINAL_VERSION} (Cloudflared ${NEW_CF} / Alpine ${NEW_ALPINE})"
             else
-              MSG="chore(cloudflared): add multi-arch amd64, AppArmor profile & sync badges"
+              export COMMIT_MSG="chore(cloudflared): sync multi-arch config, AppArmor profile & badges"
             fi
-            git commit -m "$MSG"
-            for i in 1 2 3; do
-              if git pull --rebase origin main && git push; then break; fi
-              git rebase --abort 2>/dev/null || true
-              sleep $((i * 5))
-            done
-            ACTION_TAKEN="🚀 Released / Synced v${FINAL_VERSION}"
+
+            python3 - <<'PY'
+          import base64, json, os, subprocess, sys, time, urllib.request, urllib.error
+
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          msg = os.environ["COMMIT_MSG"]
+
+          raw = subprocess.check_output(["git", "diff", "--cached", "--no-renames", "--name-status", "-z"])
+          parts = [p for p in raw.split(b"\x00") if p]
+          additions, deletions = [], []
+          for i in range(0, len(parts), 2):
+              st = parts[i].decode("utf-8")
+              path = parts[i + 1].decode("utf-8")
+              if st == "D":
+                  deletions.append({"path": path})
+              else:
+                  with open(path, "rb") as f:
+                      b64 = base64.b64encode(f.read()).decode("ascii")
+                  additions.append({"path": path, "contents": b64})
+
+          if not additions and not deletions:
+              sys.exit(0)
+
+          file_changes = {}
+          if additions: file_changes["additions"] = additions
+          if deletions: file_changes["deletions"] = deletions
+
+          query = """
+          mutation($input: CreateCommitOnBranchInput!) {
+            createCommitOnBranch(input: $input) {
+              commit { oid url }
+            }
+          }
+          """
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Content-Type": "application/json",
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "github-actions-verified-commit"
+          }
+
+          for attempt in range(1, 4):
+              ref_req = urllib.request.Request(f"https://api.github.com/repos/{repo}/git/ref/heads/main", headers=headers)
+              with urllib.request.urlopen(ref_req, timeout=20) as r:
+                  head_oid = json.loads(r.read().decode("utf-8"))["object"]["sha"]
+
+              payload = {
+                  "query": query,
+                  "variables": {
+                      "input": {
+                          "branch": {"repositoryNameWithOwner": repo, "branchName": "main"},
+                          "message": {"headline": msg},
+                          "fileChanges": file_changes,
+                          "expectedHeadOid": head_oid
+                      }
+                  }
+              }
+              gql_req = urllib.request.Request(
+                  "https://api.github.com/graphql",
+                  data=json.dumps(payload).encode("utf-8"),
+                  headers=headers,
+                  method="POST"
+              )
+              try:
+                  with urllib.request.urlopen(gql_req, timeout=30) as r:
+                      resp = json.loads(r.read().decode("utf-8"))
+                  if "errors" not in resp:
+                      c = resp["data"]["createCommitOnBranch"]["commit"]
+                      print(f"✅ Verified commit created: {c['oid']} ({c['url']})")
+                      sys.exit(0)
+                  print(f"⚠️ Attempt {attempt} GraphQL error: {resp['errors']}", file=sys.stderr)
+              except urllib.error.HTTPError as e:
+                  print(f"⚠️ Attempt {attempt} HTTP {e.code}: {e.read().decode('utf-8', 'ignore')}", file=sys.stderr)
+              time.sleep(attempt * 5)
+          sys.exit(1)
+          PY
+
+            git reset --hard HEAD
+            git fetch origin main
+            git checkout -B main origin/main
+            ACTION_TAKEN="🚀 Released / Synced v${FINAL_VERSION} (Verified)"
           else
             ACTION_TAKEN="✅ Up to date"
           fi
