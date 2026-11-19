@@ -10,10 +10,12 @@ on:
       - main
     paths:
       - "omnidrive_pro/**"
+      - ".github/workflows/omnidrive_pro.yml"
       - ".github/workflows/omnidrive_pro.yaml"
 
 permissions:
   contents: write
+  packages: write
 
 concurrency:
   group: omnidrive_pro_workflow
@@ -23,22 +25,30 @@ jobs:
   update_and_verify:
     name: "🚀 OmniDrive Pro CI/CD Pipeline"
     runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    timeout-minutes: 30
+    if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip ci]')
     steps:
       - name: "📥 1. Checkout Repository"
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-      - name: "🎨 2. Generate OmniDrive Pro PNG Icon & Logo"
+      - name: "🎨 2. Sync Multi-Arch Config & Generate OmniDrive Pro Icon/Logo"
         id: gen_icons
         run: |
           set -e
-          echo "::group::🎨 Kiểm tra & Khởi tạo bộ Icon/Logo OmniDrive Pro chuẩn PNG 32-bit"
+          echo "::group::🎨 Kiểm tra cấu hình chuẩn mới & Bộ Icon/Logo OmniDrive Pro"
           ICONS_CREATED="false"
           ICON_STATUS="✅ Đã có sẵn (Giữ nguyên)"
 
-          # Tự động tạo mới nếu chưa có hoặc nếu vẫn còn chữ WebDAV cũ
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          if ! grep -q '^image:' omnidrive_pro/config.yaml; then
+            sed -i "/^slug:/a image: \"ghcr.io/${OWNER_LC}/omnidrive_pro-{arch}\"" omnidrive_pro/config.yaml
+          fi
+          # Loại bỏ build.yaml theo chuẩn mới của Home Assistant
+          rm -f omnidrive_pro/build.yaml
+
           if [ ! -f "omnidrive_pro/icon.png" ] || [ ! -f "omnidrive_pro/logo.png" ] || [ ! -f "omnidrive_pro/.omnidrive_art_v3" ]; then
             echo "⏳ Đang cài đặt librsvg2-bin và kết xuất bộ nhận diện OmniDrive Pro mới..."
             sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin
@@ -60,16 +70,12 @@ jobs:
                   <stop offset="100%" stop-color="#6366f1"/>
                 </linearGradient>
               </defs>
-              <!-- iOS Squircle Background -->
               <rect x="24" y="24" width="464" height="464" rx="108" fill="url(#bg)" stroke="#38bdf8" stroke-width="8" stroke-opacity="0.42"/>
-              <!-- Outer Multi-Protocol Orbit Ring -->
               <circle cx="256" cy="256" r="168" fill="none" stroke="url(#purplePink)" stroke-width="8" stroke-dasharray="22 14" stroke-opacity="0.65"/>
-              <!-- 4 Protocol Nodes (WebDAV, SMB, SFTP, FTP) -->
               <circle cx="256" cy="88" r="16" fill="#38bdf8"/>
               <circle cx="424" cy="256" r="16" fill="#30d158"/>
               <circle cx="256" cy="424" r="16" fill="#a855f7"/>
               <circle cx="88" cy="256" r="16" fill="#ff9f0a"/>
-              <!-- Central Storage Drive / Server Core -->
               <rect x="142" y="152" width="228" height="92" rx="26" fill="#1e293b" stroke="url(#cyanBlue)" stroke-width="14"/>
               <circle cx="186" cy="198" r="12" fill="#30d158"/>
               <circle cx="222" cy="198" r="12" fill="#38bdf8"/>
@@ -121,57 +127,76 @@ jobs:
             touch omnidrive_pro/.omnidrive_art_v3
             ICONS_CREATED="true"
             ICON_STATUS="🆕 Đã tạo mới bộ nhận diện OmniDrive Pro: icon.png (256x256) & logo.png (512x256)"
-            echo "✅ Đã tạo thành công omnidrive_pro/icon.png và omnidrive_pro/logo.png!"
-          else
-            echo "✅ File icon.png và logo.png của OmniDrive Pro đã tồn tại."
           fi
           echo "::endgroup::"
 
           echo "icons_created=${ICONS_CREATED}" >> "$GITHUB_OUTPUT"
           echo "icon_status=${ICON_STATUS}" >> "$GITHUB_OUTPUT"
+          echo "owner_lc=${OWNER_LC}" >> "$GITHUB_OUTPUT"
 
-      - name: "🔍 3. Check Latest Alpine Base & Nginx Upstream Version"
+      - name: "🔍 3. Check Latest Alpine Base & Protocol Engines (Nginx, Samba, OpenSSH, vsftpd, Python)"
         id: check_upstream
         run: |
           set -e
-          echo "::group::🔍 Truy vấn phiên bản Alpine Linux & Nginx Upstream"
-          BUILD_FILE="omnidrive_pro/build.yaml"
+          echo "::group::🔍 Truy vấn phiên bản Alpine Linux & Các Engine từ APKINDEX"
+          DOCKERFILE="omnidrive_pro/Dockerfile"
 
-          CURRENT_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
-          CURRENT_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
+          CURRENT_ALPINE=$(grep -oP '^FROM ghcr\.io/home-assistant/base:\K[0-9.]+' "$DOCKERFILE" | head -n1 | tr -d '[:space:]')
+          CURRENT_NGINX=$(grep -oP '^ARG NGINX_VERSION=\K\S+' "$DOCKERFILE" | head -n1 | tr -d '[:space:]')
+          [ -z "$CURRENT_ALPINE" ] && CURRENT_ALPINE="3.24"
+          [ -z "$CURRENT_NGINX" ] && CURRENT_NGINX="1.30.6-r0"
 
-          echo "┌──────────────────────────────────────────────┐"
-          echo "│ Phiên bản hiện tại trong Repo:               │"
-          echo "│ - Alpine Base : ${CURRENT_ALPINE}"
-          echo "│ - Nginx Pkg   : ${CURRENT_NGINX}"
-          echo "└──────────────────────────────────────────────┘"
+          base_ok() {
+            docker manifest inspect "ghcr.io/home-assistant/base:$2" 2>/dev/null \
+              | jq -e --arg a "$1" '[.manifests[]?.platform.architecture] | index($a) != null' >/dev/null
+          }
 
           LATEST_ALPINE=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/aarch64/latest-releases.yaml" | grep -oP 'version:\s*\K[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "$CURRENT_ALPINE")
-          if [ -z "$LATEST_ALPINE" ]; then LATEST_ALPINE="$CURRENT_ALPINE"; fi
+          [ -z "$LATEST_ALPINE" ] && LATEST_ALPINE="$CURRENT_ALPINE"
 
-          if ! docker manifest inspect "ghcr.io/home-assistant/aarch64-base:${LATEST_ALPINE}" >/dev/null 2>&1; then
-            echo "⚠️ Home Assistant chưa có base image cho Alpine ${LATEST_ALPINE}, giữ nguyên ${CURRENT_ALPINE}"
+          if ! (base_ok arm64 "$LATEST_ALPINE" && base_ok amd64 "$LATEST_ALPINE"); then
+            echo "⚠️ Home Assistant chưa có base image đa kiến trúc cho Alpine ${LATEST_ALPINE}, giữ nguyên ${CURRENT_ALPINE}"
             LATEST_ALPINE="$CURRENT_ALPINE"
           fi
 
-          LATEST_NGINX=$(curl -sL "https://dl-cdn.alpinelinux.org/alpine/v${LATEST_ALPINE}/main/aarch64/APKINDEX.tar.gz" | tar -Oxz APKINDEX 2>/dev/null | awk -F: '$1=="P" && $2=="nginx" {getline; if ($1=="V") print $2}' | head -n1 | tr -d '[:space:]' || true)
+          # Tải APKINDEX của Alpine để lấy phiên bản thực tế của toàn bộ các Engine
+          curl -sfL "https://dl-cdn.alpinelinux.org/alpine/v${LATEST_ALPINE}/main/aarch64/APKINDEX.tar.gz" | tar -Oxz APKINDEX > /tmp/apkindex_main 2>/dev/null || touch /tmp/apkindex_main
+          curl -sfL "https://dl-cdn.alpinelinux.org/alpine/v${LATEST_ALPINE}/community/aarch64/APKINDEX.tar.gz" | tar -Oxz APKINDEX > /tmp/apkindex_comm 2>/dev/null || touch /tmp/apkindex_comm
+          cat /tmp/apkindex_main /tmp/apkindex_comm > /tmp/apkindex_all
 
+          get_pkg_ver() {
+            awk -F: -v pkg="$1" '$1=="P" && $2==pkg {getline; if ($1=="V") {print $2; exit}}' /tmp/apkindex_all | tr -d '[:space:]'
+          }
+
+          LATEST_NGINX=$(get_pkg_ver "nginx")
           if [[ ! "$LATEST_NGINX" =~ ^[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]; then
-            echo "⚠️ Không đọc được APKINDEX hoặc định dạng lạ (${LATEST_NGINX}), giữ nguyên ${CURRENT_NGINX}"
             LATEST_NGINX="$CURRENT_NGINX"
           fi
+          SAMBA_VER=$(get_pkg_ver "samba")
+          OPENSSH_VER=$(get_pkg_ver "openssh")
+          VSFTPD_VER=$(get_pkg_ver "vsftpd")
+          PYTHON_VER=$(get_pkg_ver "python3")
 
-          echo "┌──────────────────────────────────────────────┐"
-          echo "│ Phiên bản mới nhất từ Upstream:              │"
-          echo "│ - Alpine Base : ${LATEST_ALPINE}"
-          echo "│ - Nginx Pkg   : ${LATEST_NGINX}"
-          echo "└──────────────────────────────────────────────┘"
+          [ -z "$SAMBA_VER" ] && SAMBA_VER="latest"
+          [ -z "$OPENSSH_VER" ] && OPENSSH_VER="latest"
+          [ -z "$VSFTPD_VER" ] && VSFTPD_VER="latest"
+          [ -z "$PYTHON_VER" ] && PYTHON_VER="3.x"
+
+          echo "Alpine : ${CURRENT_ALPINE} -> ${LATEST_ALPINE}"
+          echo "Nginx  : ${CURRENT_NGINX} -> ${LATEST_NGINX}"
+          echo "Engines: Samba ${SAMBA_VER} | OpenSSH ${OPENSSH_VER} | vsftpd ${VSFTPD_VER} | Python ${PYTHON_VER}"
           echo "::endgroup::"
 
-          echo "current_alpine=${CURRENT_ALPINE}" >> "$GITHUB_OUTPUT"
-          echo "current_nginx=${CURRENT_NGINX}" >> "$GITHUB_OUTPUT"
-          echo "latest_alpine=${LATEST_ALPINE}" >> "$GITHUB_OUTPUT"
-          echo "latest_nginx=${LATEST_NGINX}" >> "$GITHUB_OUTPUT"
+          {
+            echo "current_alpine=${CURRENT_ALPINE}"
+            echo "current_nginx=${CURRENT_NGINX}"
+            echo "latest_alpine=${LATEST_ALPINE}"
+            echo "latest_nginx=${LATEST_NGINX}"
+            echo "samba_ver=${SAMBA_VER}"
+            echo "openssh_ver=${OPENSSH_VER}"
+            echo "vsftpd_ver=${VSFTPD_VER}"
+            echo "python_ver=${PYTHON_VER}"
+          } >> "$GITHUB_OUTPUT"
 
           if [ "$LATEST_ALPINE" != "$CURRENT_ALPINE" ] || [ "$LATEST_NGINX" != "$CURRENT_NGINX" ]; then
             echo "upstream_changed=true" >> "$GITHUB_OUTPUT"
@@ -179,154 +204,351 @@ jobs:
             echo "upstream_changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: "🏷️ 4. Calculate Version & Update Changelog"
+      - name: "🏷️ 4. Calculate Version & Build Professional Changelog"
         id: calc_version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          echo "::group::🏷️ Tính toán Phiên bản & Cập nhật CHANGELOG.md"
+          echo "::group::🏷️ Tính toán Phiên bản & Tạo CHANGELOG.md chuẩn hệ sinh thái"
           CONFIG_FILE="omnidrive_pro/config.yaml"
-          BUILD_FILE="omnidrive_pro/build.yaml"
+          DOCKERFILE="omnidrive_pro/Dockerfile"
           CHANGELOG_FILE="omnidrive_pro/CHANGELOG.md"
-          [ ! -f "$CHANGELOG_FILE" ] && echo "# Changelog" > "$CHANGELOG_FILE"
+          OWNER_LC="${{ steps.gen_icons.outputs.owner_lc }}"
 
-          CURRENT_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
+          CURRENT_VER=$(grep -oP '^version:\s*"?\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VER"
 
           UPSTREAM_CHANGED="${{ steps.check_upstream.outputs.upstream_changed }}"
           ICONS_CREATED="${{ steps.gen_icons.outputs.icons_created }}"
+          CURRENT_ALPINE="${{ steps.check_upstream.outputs.current_alpine }}"
+          CURRENT_NGINX="${{ steps.check_upstream.outputs.current_nginx }}"
           LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
           LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
-          TODAY=$(date +%Y-%m-%d)
+          SAMBA_VER="${{ steps.check_upstream.outputs.samba_ver }}"
+          OPENSSH_VER="${{ steps.check_upstream.outputs.openssh_ver }}"
+          VSFTPD_VER="${{ steps.check_upstream.outputs.vsftpd_ver }}"
+          PYTHON_VER="${{ steps.check_upstream.outputs.python_ver }}"
+          TODAY=$(date -u +%Y-%m-%d)
 
           NEED_COMMIT="false"
           NEW_VER="$CURRENT_VER"
           UPDATE_TYPE="⏸️ Không có thay đổi phiên bản (Up-to-date)"
-          SUMMARY_REASON="Mã nguồn và gói Upstream đã ở phiên bản mới nhất."
+          SUMMARY_REASON="Mã nguồn và các gói Upstream đã ở phiên bản mới nhất."
+
+          # Hàm chèn mục Changelog mới lên đầu và giữ tối đa 5 bản phát hành sạch gần nhất
+          write_changelog_entry() {
+            local block="$1"
+            local rebuild_clean="$2"
+            python3 - "$CHANGELOG_FILE" "$block" "$rebuild_clean" <<'PY'
+          import sys, re, os
+          path, block, rebuild_clean = sys.argv[1], sys.argv[2].strip(), sys.argv[3] == "true"
+          sections = []
+          if not rebuild_clean and os.path.exists(path):
+              with open(path, "r", encoding="utf-8") as f:
+                  old = f.read()
+              old_body = re.sub(r'^#\s+Changelog\s*', '', old, flags=re.I).strip()
+              if old_body:
+                  raw_parts = [p.strip() for p in old_body.split("\n---\n") if p.strip()]
+                  for p in raw_parts:
+                      if "Add files via upload" in p:
+                          continue
+                      sections.append(p)
+          final_sections = [block] + sections[:4]
+          out = "# Changelog\n\n" + "\n\n---\n\n".join(final_sections) + "\n"
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(out)
+          PY
+          }
+
+          # Kiểm tra xem CHANGELOG.md hiện tại có đang bị định dạng cũ/spam không
+          NEEDS_LAYOUT_REBUILD="false"
+          if [ ! -f "$CHANGELOG_FILE" ] || ! grep -q "### 📦 Component & Version Matrix" "$CHANGELOG_FILE" 2>/dev/null || grep -q "Add files via upload" "$CHANGELOG_FILE" 2>/dev/null; then
+            NEEDS_LAYOUT_REBUILD="true"
+          fi
+
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | grep '^omnidrive_pro/' || true)
+          MANUAL_CHANGELOG=$(echo "$CHANGED_FILES" | grep -q '^omnidrive_pro/CHANGELOG\.md$' && echo "true" || echo "false")
 
           if [ "$UPSTREAM_CHANGED" = "true" ]; then
             NEW_MAJOR=$((MAJOR + 1))
             NEW_VER="${NEW_MAJOR}.0.0"
             NEED_COMMIT="true"
             UPDATE_TYPE="🚀 Nâng cấp Major Version (Upstream Release)"
-            SUMMARY_REASON="Nâng cấp Nginx lên \`${LATEST_NGINX}\` (Alpine Base \`${LATEST_ALPINE}\`)."
+            SUMMARY_REASON="Nâng cấp Nginx lên \`${LATEST_NGINX}\` trên Alpine Base \`${LATEST_ALPINE}\`."
 
-            sed -i "s/aarch64-base:[0-9.]\+/aarch64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
-            sed -i "s/amd64-base:[0-9.]\+/amd64-base:${LATEST_ALPINE}/g" "$BUILD_FILE"
-            sed -i "s/NGINX_VERSION: \".*\"/NGINX_VERSION: \"${LATEST_NGINX}\"/g" "$BUILD_FILE"
-            sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+            sed -i -E "s|^(FROM ghcr\.io/home-assistant/base:)[0-9.]+|\1${LATEST_ALPINE}|" "$DOCKERFILE"
+            sed -i "s|^ARG NGINX_VERSION=.*|ARG NGINX_VERSION=${LATEST_NGINX}|" "$DOCKERFILE"
+            sed -i "s|^version:.*|version: \"${NEW_VER}\"|" "$CONFIG_FILE"
 
-            NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Upstream Update:** Upgraded Nginx to \`${LATEST_NGINX}\` on Home Assistant Alpine Base \`${LATEST_ALPINE}\`.\n- Updated multi-protocol modules (WebDAV, Samba, OpenSSH, vsftpd) with latest security patches.\n"
-            awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
-            echo "✅ Đã nâng Major Version: ${CURRENT_VER} -> ${NEW_VER}"
+            BLOCK=$(cat <<EOF
+          ## ${NEW_VER}
+          _Released: ${TODAY}_
 
-          elif [ "${{ github.event_name }}" = "push" ] || [ "$ICONS_CREATED" = "true" ]; then
-            PREV_VER=$(git show HEAD~1:omnidrive_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "")
-            if [ "$ICONS_CREATED" = "true" ] || { [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ]; }; then
+          ### 📦 Component & Version Matrix
+          - **Add-on Release:** Bumped from \`v${CURRENT_VER}\` ➡️ **\`v${NEW_VER}\`**
+          - **Supported Architectures:** \`aarch64\` (ARM64) & \`amd64\` (x86_64) *(Pre-built GHCR Package)*
+          - **Alpine Base Image:** \`Alpine ${CURRENT_ALPINE}\` ➡️ **\`Alpine ${LATEST_ALPINE}\`** *(Home Assistant official base)*
+          - **Nginx Engine:** \`${CURRENT_NGINX}\` ➡️ **\`${LATEST_NGINX}\`**
+          - **Protocol Stack:** \`Samba ${SAMBA_VER}\` • \`OpenSSH ${OPENSSH_VER}\` • \`vsftpd ${VSFTPD_VER}\` • \`Python ${PYTHON_VER}\`
+
+          ### 🔐 Package Integrity (GHCR Multi-Arch)
+          - **ARM64 (\`aarch64\`):** \`ghcr.io/${OWNER_LC}/omnidrive_pro-aarch64:${NEW_VER}\`
+          - **AMD64 (\`x86_64\`):** \`ghcr.io/${OWNER_LC}/omnidrive_pro-amd64:${NEW_VER}\`
+
+          ### 🚀 What's Changed
+          - Upgraded Nginx to \`${LATEST_NGINX}\` on Home Assistant Alpine Base \`${LATEST_ALPINE}\`.
+          - Refreshed multi-protocol engines (WebDAV, Samba, OpenSSH, vsftpd) with latest upstream security patches.
+          EOF
+            )
+            write_changelog_entry "$BLOCK" "$NEEDS_LAYOUT_REBUILD"
+
+          elif [ "${{ github.event_name }}" = "push" ] || [ "$ICONS_CREATED" = "true" ] || [ "$NEEDS_LAYOUT_REBUILD" = "true" ]; then
+            PREV_VER=$(git show HEAD~1:omnidrive_pro/config.yaml 2>/dev/null | grep -oP '^version:\s*"?\K[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | tr -d '[:space:]' || echo "")
+            BUMP_PATCH="false"
+            if [ "$ICONS_CREATED" = "true" ]; then
+              BUMP_PATCH="true"
+            elif [ "${{ github.event_name }}" = "push" ] && [ -n "$CHANGED_FILES" ] && [ -n "$PREV_VER" ] && [ "$PREV_VER" = "$CURRENT_VER" ] && gh release view "omnidrive-v${CURRENT_VER}" >/dev/null 2>&1; then
+              BUMP_PATCH="true"
+            fi
+
+            if [ "$BUMP_PATCH" = "true" ]; then
               NEW_PATCH=$((PATCH + 1))
               NEW_VER="${MAJOR}.${MINOR}.${NEW_PATCH}"
               NEED_COMMIT="true"
-              COMMIT_MSG=$(git log -1 --pretty=%B | head -n1 | tr -d '"`')
-              UPDATE_TYPE="🔧 Nâng cấp Patch Version (Local Edit / Assets)"
-              SUMMARY_REASON="Cập nhật nội bộ: ${COMMIT_MSG}"
+              UPDATE_TYPE="🔧 Nâng cấp Patch Version (Code / Security Update)"
+              sed -i "s|^version:.*|version: \"${NEW_VER}\"|" "$CONFIG_FILE"
+            elif [ "$NEEDS_LAYOUT_REBUILD" = "true" ]; then
+              NEED_COMMIT="true"
+              UPDATE_TYPE="🧹 Chuẩn hóa Changelog & Chuyển sang Pre-built Package"
+            fi
 
-              sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$CONFIG_FILE"
+            if [ "$MANUAL_CHANGELOG" = "false" ] && { [ "$BUMP_PATCH" = "true" ] || [ "$NEEDS_LAYOUT_REBUILD" = "true" ]; }; then
+              COMMIT_MSG=$(git log -1 --pretty=%s | tr -d '"`')
+              NOTES_LINES=""
+              if [[ ! "$COMMIT_MSG" =~ ^(Add\ files\ via\ upload|Update\ |Create\ |Delete\ |Rename\ |Merge\ ) ]] && [ -n "$COMMIT_MSG" ]; then
+                NOTES_LINES="- **Update:** ${COMMIT_MSG}"
+                SUMMARY_REASON="${COMMIT_MSG}"
+              else
+                echo "$CHANGED_FILES" | grep -q 'run\.sh' && NOTES_LINES+="- **Security & Core Engine:** Hardened RBAC (\`admin\`/\`user\`), enforced \`allowed_users\`/\`read_only\` isolation, blocked \`X-WPro-Ingress\` spoofing, and added graceful service shutdown."$'\n'
+                echo "$CHANGED_FILES" | grep -q 'fancyindex/' && NOTES_LINES+="- **Web UI & IDE:** Refined FancyIndex interface, Cloud Code IDE, and client user experience."$'\n'
+                echo "$CHANGED_FILES" | grep -q 'translations/' && NOTES_LINES+="- **Localization:** Updated add-on interface translations."$'\n'
+                echo "$CHANGED_FILES" | grep -q 'Dockerfile' && NOTES_LINES+="- **Build System:** Migrated to Home Assistant native \`Dockerfile\` multi-arch pre-built GHCR packages (removed deprecated \`build.yaml\`)."$'\n'
+                echo "$CHANGED_FILES" | grep -q 'config\.yaml' && NOTES_LINES+="- **Configuration:** Updated add-on schema, RBAC user roles, and GHCR image source."$'\n'
+                [ -z "$NOTES_LINES" ] && NOTES_LINES="- **Maintenance:** General stability improvements, multi-arch pre-built package sync, and clean changelog layout."
+                SUMMARY_REASON="Cập nhật mã nguồn, bảo mật RBAC & đóng gói package đa kiến trúc."
+              fi
 
-              NEW_LOG="## [${NEW_VER}] - ${TODAY}\n- **Maintenance & Improvements:** ${COMMIT_MSG}\n"
-              awk -v new_log="$NEW_LOG" 'NR==1{print new_log}1' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp" && mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
-              echo "✅ Đã tự động nâng Patch Version: ${CURRENT_VER} -> ${NEW_VER}"
+              VER_LINE="\`v${NEW_VER}\`"
+              [ "$NEW_VER" != "$CURRENT_VER" ] && VER_LINE="Bumped from \`v${CURRENT_VER}\` ➡️ **\`v${NEW_VER}\`**"
+
+              BLOCK=$(cat <<EOF
+          ## ${NEW_VER}
+          _Released: ${TODAY}_
+
+          ### 📦 Component & Version Matrix
+          - **Add-on Release:** ${VER_LINE}
+          - **Supported Architectures:** \`aarch64\` (ARM64) & \`amd64\` (x86_64) *(Pre-built GHCR Package)*
+          - **Alpine Base Image:** \`Alpine ${LATEST_ALPINE}\` *(Home Assistant official base)*
+          - **Nginx Engine:** \`${LATEST_NGINX}\`
+          - **Protocol Stack:** \`Samba ${SAMBA_VER}\` • \`OpenSSH ${OPENSSH_VER}\` • \`vsftpd ${VSFTPD_VER}\` • \`Python ${PYTHON_VER}\`
+
+          ### 🔐 Package Integrity (GHCR Multi-Arch)
+          - **ARM64 (\`aarch64\`):** \`ghcr.io/${OWNER_LC}/omnidrive_pro-aarch64:${NEW_VER}\`
+          - **AMD64 (\`x86_64\`):** \`ghcr.io/${OWNER_LC}/omnidrive_pro-amd64:${NEW_VER}\`
+
+          ### 🚀 What's Changed
+          ${NOTES_LINES}
+          EOF
+              )
+              write_changelog_entry "$BLOCK" "$NEEDS_LAYOUT_REBUILD"
             fi
           fi
 
+          # Đồng bộ Badges trong README.md (chỉ dùng sed, bảo vệ nội dung tự viết)
           README_FILE="omnidrive_pro/README.md"
           README_CHANGED="false"
           README_STATUS="⚠️ Không tìm thấy ${README_FILE}"
           if [ -f "$README_FILE" ]; then
-            BADGE_VER=$(grep -oP '^version:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
-            BADGE_ALPINE=$(grep -oP 'aarch64-base:\K[0-9.]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
-            BADGE_NGINX=$(grep -oP 'NGINX_VERSION:\s*"\K[^"]+' "$BUILD_FILE" | head -n1 | tr -d '[:space:]')
-            SAFE_NGINX=$(echo "$BADGE_NGINX" | sed 's/-/--/g')
+            BADGE_VER=$(grep -oP '^version:\s*"?\K[0-9]+\.[0-9]+\.[0-9]+' "$CONFIG_FILE" | head -n1 | tr -d '[:space:]')
+            SAFE_NGINX=$(echo "$LATEST_NGINX" | sed 's/-/--/g')
 
-            if [ -n "$BADGE_VER" ]; then
-              sed -i -E "s#badge/version-[0-9][0-9.]*-#badge/version-${BADGE_VER}-#g" "$README_FILE"
-            fi
-            if [ -n "$BADGE_NGINX" ]; then
-              sed -i -E "s#badge/nginx-[0-9][0-9.]*(--r[0-9]+)?-#badge/nginx-${SAFE_NGINX}-#g" "$README_FILE"
-            fi
-            if [ -n "$BADGE_ALPINE" ]; then
-              sed -i -E "s#badge/alpine(%20|_| )base-[0-9][0-9.]*-#badge/alpine\1base-${BADGE_ALPINE}-#g" "$README_FILE"
-            fi
+            [ -n "$BADGE_VER" ] && sed -i -E "s#badge/version-[0-9][0-9.]*-#badge/version-${BADGE_VER}-#g" "$README_FILE"
+            [ -n "$LATEST_NGINX" ] && sed -i -E "s#badge/nginx-[0-9][0-9.]*(--r[0-9]+)?-#badge/nginx-${SAFE_NGINX}-#g" "$README_FILE"
+            [ -n "$LATEST_ALPINE" ] && sed -i -E "s#badge/alpine(%20|_| )base-[0-9][0-9.]*-#badge/alpine\1base-${LATEST_ALPINE}-#g" "$README_FILE"
 
             if git diff --quiet -- "$README_FILE"; then
-              README_STATUS="✅ Huy hiệu đã khớp (v${BADGE_VER} / nginx ${BADGE_NGINX} / alpine ${BADGE_ALPINE})"
+              README_STATUS="✅ Huy hiệu đã khớp (v${BADGE_VER} / nginx ${LATEST_NGINX} / alpine ${LATEST_ALPINE})"
             else
               README_CHANGED="true"
-              README_STATUS="🔧 Đã tự sửa huy hiệu cho khớp (v${BADGE_VER} / nginx ${BADGE_NGINX} / alpine ${BADGE_ALPINE})"
+              README_STATUS="🔧 Đã tự sửa huy hiệu cho khớp (v${BADGE_VER} / nginx ${LATEST_NGINX} / alpine ${LATEST_ALPINE})"
             fi
+          fi
+
+          HAS_CHANGES=$( [ -n "$(git status --porcelain omnidrive_pro/)" ] && echo "true" || echo "false" )
+          SHOULD_RELEASE="false"
+          if [ "$NEED_COMMIT" = "true" ] || [ "$HAS_CHANGES" = "true" ] || [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RELEASE="true"
+          elif ! gh release view "omnidrive-v${NEW_VER}" >/dev/null 2>&1; then
+            SHOULD_RELEASE="true"
           fi
           echo "::endgroup::"
 
-          echo "old_ver=${CURRENT_VER}" >> "$GITHUB_OUTPUT"
-          echo "new_ver=${NEW_VER}" >> "$GITHUB_OUTPUT"
-          echo "need_commit=${NEED_COMMIT}" >> "$GITHUB_OUTPUT"
-          echo "update_type=${UPDATE_TYPE}" >> "$GITHUB_OUTPUT"
-          echo "summary_reason=${SUMMARY_REASON}" >> "$GITHUB_OUTPUT"
-          echo "readme_changed=${README_CHANGED}" >> "$GITHUB_OUTPUT"
-          echo "readme_status=${README_STATUS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "old_ver=${CURRENT_VER}"
+            echo "new_ver=${NEW_VER}"
+            echo "need_commit=${NEED_COMMIT}"
+            echo "should_release=${SHOULD_RELEASE}"
+            echo "update_type=${UPDATE_TYPE}"
+            echo "summary_reason=${SUMMARY_REASON}"
+            echo "readme_changed=${README_CHANGED}"
+            echo "readme_status=${README_STATUS}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: "🐳 5. Test Docker Build Before Commit"
-        id: docker_test
-        run: |
-          set -e
-          echo "::group::🐳 Kiểm thử đóng gói Docker Image (Zero-Broken-Build)"
-          LATEST_ALPINE="${{ steps.check_upstream.outputs.latest_alpine }}"
-          LATEST_NGINX="${{ steps.check_upstream.outputs.latest_nginx }}"
-          docker build \
-            --build-arg BUILD_FROM="ghcr.io/home-assistant/amd64-base:${LATEST_ALPINE}" \
-            --build-arg NGINX_VERSION="${LATEST_NGINX}" \
-            -t omnidrive-pro-verify:latest \
-            ./omnidrive_pro
-          echo "✅ Docker Build thành công 100%!"
-          echo "::endgroup::"
+      # ------------------------------------------------------------------
+      # 5. Build & Push Pre-built Package (aarch64 + amd64) lên GHCR TRƯỚC KHI Commit
+      # ------------------------------------------------------------------
+      - name: "⚙️ 5a. Set up QEMU for Multi-arch Build"
+        if: steps.calc_version.outputs.should_release == 'true'
+        uses: docker/setup-qemu-action@v3
 
-      - name: "📤 6. Commit & Push Changes to Main"
+      - name: "⚙️ 5b. Set up Docker Buildx"
+        if: steps.calc_version.outputs.should_release == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: "🔐 5c. Log in to GitHub Container Registry (GHCR)"
+        if: steps.calc_version.outputs.should_release == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "🐳 5d. Build & Push aarch64 (arm64) Package"
+        id: build_arm64
+        if: steps.calc_version.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: omnidrive_pro
+          file: omnidrive_pro/Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            NGINX_VERSION=${{ steps.check_upstream.outputs.latest_nginx }}
+          labels: |
+            io.hass.version=${{ steps.calc_version.outputs.new_ver }}
+            io.hass.type=addon
+            io.hass.arch=aarch64
+          tags: |
+            ghcr.io/${{ steps.gen_icons.outputs.owner_lc }}/omnidrive_pro-aarch64:${{ steps.calc_version.outputs.new_ver }}
+            ghcr.io/${{ steps.gen_icons.outputs.owner_lc }}/omnidrive_pro-aarch64:latest
+
+      - name: "🐳 5e. Build & Push amd64 Package"
+        id: build_amd64
+        if: steps.calc_version.outputs.should_release == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: omnidrive_pro
+          file: omnidrive_pro/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: |
+            NGINX_VERSION=${{ steps.check_upstream.outputs.latest_nginx }}
+          labels: |
+            io.hass.version=${{ steps.calc_version.outputs.new_ver }}
+            io.hass.type=addon
+            io.hass.arch=amd64
+          tags: |
+            ghcr.io/${{ steps.gen_icons.outputs.owner_lc }}/omnidrive_pro-amd64:${{ steps.calc_version.outputs.new_ver }}
+            ghcr.io/${{ steps.gen_icons.outputs.owner_lc }}/omnidrive_pro-amd64:latest
+
+      # ------------------------------------------------------------------
+      # 6. Commit + Push + Tạo/Cập nhật GitHub Release từ CHANGELOG.md
+      # ------------------------------------------------------------------
+      - name: "📤 6. Commit, Push & Update GitHub Release"
         id: git_push
-        if: steps.calc_version.outputs.need_commit == 'true' || steps.gen_icons.outputs.icons_created == 'true' || steps.calc_version.outputs.readme_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VER: ${{ steps.calc_version.outputs.new_ver }}
+          SHOULD_RELEASE: ${{ steps.calc_version.outputs.should_release }}
+          ARM64_DIGEST: ${{ steps.build_arm64.outputs.digest }}
+          AMD64_DIGEST: ${{ steps.build_amd64.outputs.digest }}
         run: |
           set -e
-          echo "::group::📤 Đồng bộ & Đẩy bản phát hành lên nhánh Main"
+          echo "::group::📤 Đồng bộ lên nhánh Main & Tạo GitHub Release"
+
+          # Chèn mã SHA256 Digest thực tế của 2 gói GHCR vào mục mới nhất của CHANGELOG.md
+          if [ -n "$ARM64_DIGEST" ] && [ -n "$AMD64_DIGEST" ] && [ -f "omnidrive_pro/CHANGELOG.md" ]; then
+            sed -i "s|\(omnidrive_pro-aarch64:${NEW_VER}\`\).*|\1 (\`${ARM64_DIGEST}\`)|" omnidrive_pro/CHANGELOG.md
+            sed -i "s|\(omnidrive_pro-amd64:${NEW_VER}\`\).*|\1 (\`${AMD64_DIGEST}\`)|" omnidrive_pro/CHANGELOG.md
+          fi
+
+          # Keep-alive (Chống GitHub tắt cron sau 60 ngày)
+          LAST_COMMIT_TS=$(git log -1 --format=%ct || date +%s)
+          NOW_TS=$(date +%s)
+          DAYS_IDLE=$(( (NOW_TS - LAST_COMMIT_TS) / 86400 ))
+          if [ "$DAYS_IDLE" -ge 45 ]; then
+            mkdir -p .github/workflows
+            echo "Last automated keep-alive check: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .github/workflows/.keepalive
+          fi
+
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add omnidrive_pro/
-          NEW_VER="${{ steps.calc_version.outputs.new_ver }}"
-
-          mkdir -p .git/info
-          echo "omnidrive_pro/CHANGELOG.md merge=union" >> .git/info/attributes
+          git add omnidrive_pro/ .github/workflows/.keepalive 2>/dev/null || git add omnidrive_pro/
 
           if ! git diff --cached --quiet; then
             if [ "${{ steps.calc_version.outputs.need_commit }}" = "true" ]; then
-              git commit -m "chore(omnidrive_pro): release version ${NEW_VER} [skip ci]"
+              git commit -m "chore(omnidrive_pro): release v${NEW_VER} [skip ci]"
             else
-              git commit -m "chore(omnidrive_pro): sync README & assets [skip ci]"
+              git commit -m "chore(omnidrive_pro): sync config, README & changelog [skip ci]"
             fi
-            if ! git pull --rebase --autostash origin main; then
-              for f in $(git diff --name-only --diff-filter=U); do
-                if [ "$f" = "omnidrive_pro/config.yaml" ]; then
-                  git checkout --ours -- "$f"
-                  sed -i "s/^version: \".*\"/version: \"${NEW_VER}\"/" "$f"
-                else
-                  git checkout --theirs -- "$f"
-                fi
-                git add "$f"
-              done
-              GIT_EDITOR=true git rebase --continue
-            fi
-            git push origin HEAD:main
-            echo "✅ Đã đẩy thành công phiên bản ${NEW_VER} lên nhánh main!"
+            for i in 1 2 3; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((i * 5))
+            done
             echo "pushed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "ℹ️ Không có thay đổi nào cần commit."
             echo "pushed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$SHOULD_RELEASE" = "true" ]; then
+            TAG="omnidrive-v${NEW_VER}"
+
+            python3 - <<'PY' > /tmp/release_notes.md
+          import re
+          with open("omnidrive_pro/CHANGELOG.md", "r", encoding="utf-8") as f:
+              text = f.read()
+          text = re.sub(r'^#\s+Changelog\s*', '', text, flags=re.I).strip()
+          if "\n---\n" in text:
+              first_section = text.split("\n---\n")[0].strip()
+          else:
+              parts = re.split(r'\n(?=##\s)', text)
+              first_section = parts[0].strip()
+          print(first_section)
+          PY
+
+            git tag -f "${TAG}"
+            git push origin "${TAG}" --force
+
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              echo "🔄 Updating existing GitHub Release ${TAG}..."
+              gh release edit "${TAG}" \
+                --title "OmniDrive Pro v${NEW_VER}" \
+                --notes-file /tmp/release_notes.md \
+                --latest
+            else
+              echo "🎉 Creating new GitHub Release ${TAG}..."
+              gh release create "${TAG}" \
+                --title "OmniDrive Pro v${NEW_VER}" \
+                --notes-file /tmp/release_notes.md \
+                --latest
+            fi
           fi
           echo "::endgroup::"
 
@@ -350,20 +572,10 @@ jobs:
           | **3. Bộ nhận diện Icon & Logo** | ${{ steps.gen_icons.outputs.icon_status }} |
           | **4. Kiến trúc & Alpine Base** | \`${{ steps.check_upstream.outputs.current_alpine }}\` ➡️ **\`${{ steps.check_upstream.outputs.latest_alpine }}\`** |
           | **5. Phiên bản Gói Nginx** | \`${{ steps.check_upstream.outputs.current_nginx }}\` ➡️ **\`${{ steps.check_upstream.outputs.latest_nginx }}\`** |
-          | **6. Phiên bản Add-on (\`config.yaml\`)** | \`v${{ steps.calc_version.outputs.old_ver }}\` ➡️ **\`v${{ steps.calc_version.outputs.new_ver }}\`** |
-          | **7. Phân loại Cập nhật** | ${{ steps.calc_version.outputs.update_type }} |
-          | **8. Kiểm thử Docker Build** | ${{ steps.docker_test.outcome == 'success' && '✅ Đạt chuẩn (Zero-Broken-Build Verified)' || '❌ Lỗi đóng gói Docker' }} |
-          | **9. Đồng bộ GitHub (\`main\`)** | ${PUSH_STATE} |
-          | **10. Huy hiệu README** | ${{ steps.calc_version.outputs.readme_status }} |
-
-          ---
-
-          ### 📝 Chi tiết công việc đã thực hiện
-          - **Lý do cập nhật:** ${{ steps.calc_version.outputs.summary_reason }}
-          - **Thời gian hoàn tất (UTC):** \`$(date -u +"%Y-%m-%d %H:%M:%S UTC")\`
-
-          ### 📜 Nhật ký CHANGELOG.md mới nhất
-          \`\`\`markdown
-          $(head -n 12 omnidrive_pro/CHANGELOG.md)
-          \`\`\`
+          | **6. Protocol Stack** | \`Samba ${{ steps.check_upstream.outputs.samba_ver }}\` • \`OpenSSH ${{ steps.check_upstream.outputs.openssh_ver }}\` • \`vsftpd ${{ steps.check_upstream.outputs.vsftpd_ver }}\` |
+          | **7. Phiên bản Add-on (\`config.yaml\`)** | \`v${{ steps.calc_version.outputs.old_ver }}\` ➡️ **\`v${{ steps.calc_version.outputs.new_ver }}\`** |
+          | **8. Phân loại Cập nhật** | ${{ steps.calc_version.outputs.update_type }} |
+          | **9. Đóng gói GHCR (arm64 & amd64)** | ${{ steps.build_arm64.outcome == 'success' && steps.build_amd64.outcome == 'success' && '✅ Đã đẩy lên GHCR (aarch64 & amd64)' || '⏭️ Bỏ qua / Lỗi build' }} |
+          | **10. Đồng bộ GitHub (\`main\`)** | ${PUSH_STATE} |
+          | **11. Huy hiệu README** | ${{ steps.calc_version.outputs.readme_status }} |
           EOF
