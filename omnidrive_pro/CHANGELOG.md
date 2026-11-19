@@ -1,3 +1,7 @@
+## [2.0.0] - 2026-11-19
+- **Upstream Update:** Upgraded Nginx to `1.30.7-r0` on Home Assistant Alpine Base `3.24`.
+- Updated multi-protocol modules (WebDAV, Samba, OpenSSH, vsftpd) with latest security patches.
+
 ## [1.0.69] - 2026-11-17
 - **Maintenance & Improvements:** Add files via upload
 
