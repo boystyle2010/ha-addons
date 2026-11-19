@@ -11,8 +11,8 @@ _Released: 2026-11-19_
 - **Protocol Stack:** `Samba 4.23.8-r0` • `OpenSSH 10.3_p1-r2` • `vsftpd 3.0.5-r3` • `Python 3.14.10-r1`
 
 ### 🔐 Package Integrity (GHCR Multi-Arch)
-- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:2.0.0` (`sha256:a9f7fe0c92fd61dad3b534749cc9b35eacb2b934e726fde68640a32a2865930a`)
-- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:2.0.0` (`sha256:488533ff0beee1429177a6383594fa9ee2c3087e9b1c39dabbe982e1133fa01a`)
+- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:2.0.0` (`sha256:6701845d21ecba939b0120e7ee1d1109d0db158f236b2092fba1238e33b1091d`)
+- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:2.0.0` (`sha256:71a6525b3ce5a05fb656ae32627cc3d265c3f9b6a0007ba87152bbad3402448f`)
 
 ### 🚀 What's Changed
 - Upgraded Nginx to `1.30.7-r0` on Home Assistant Alpine Base `3.24`.
