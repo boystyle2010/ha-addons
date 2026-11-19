@@ -1,3 +1,6 @@
+## [2.0.1] - 2026-11-19
+- **Maintenance & Improvements:** Update vi.yaml
+
 ## [2.0.0] - 2026-11-19
 - **Upstream Update:** Upgraded Nginx to `1.30.7-r0` on Home Assistant Alpine Base `3.24`.
 - Updated multi-protocol modules (WebDAV, Samba, OpenSSH, vsftpd) with latest security patches.
