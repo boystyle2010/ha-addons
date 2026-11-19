@@ -7,10 +7,10 @@ configuration:
     description: Enables native network drive mounting on iOS Files ("Connect to Server"), macOS Finder (smb://), Windows Explorer (\\\\ip\\), and media players like Infuse or VLC.
   sftp_enabled:
     name: Enable SFTP Server (Port 2222)
-    description: Enables encrypted SSH File Transfer Protocol for pro clients such as FileZilla, Cyberduck, Transmit, WinSCP, Termius, and FE File Explorer.
+    description: Enables encrypted SSH File Transfer Protocol for pro clients such as FileZilla, Cyberduck, Transmit, WinSCP, Termius, and FE File Explorer (restricted to accounts with role "admin").
   ftp_enabled:
     name: Enable FTP Server (Port 2121)
-    description: Enables standard high-speed FTP file transfers (with Passive ports 21000–21002) for legacy apps, network scanners, and cameras.
+    description: Enables standard high-speed FTP file transfers (with Passive ports 21000–21002) for legacy apps, network scanners, and cameras (restricted to accounts with role "admin").
   ssl:
     name: Enable SSL (HTTPS)
     description: Encrypt WebDAV and Web UI connections using SSL certificates from the /ssl directory (Keep disabled if routing through Cloudflare Tunnel or a Reverse Proxy).
@@ -34,10 +34,10 @@ configuration:
     description: Controls the verbosity of server logs.
   root_access:
     name: Root Access
-    description: If enabled, file operations run as root. If disabled, runs as the default user.
+    description: If enabled, admin file operations (zip, chown, terminal commands) run as root. If disabled, they run as a non-root user.
   enable_terminal:
-    name: Enable Web Terminal
-    description: Allows running shell commands as root inside the container via the Web UI.
+    name: Enable Web Terminal (Admin Only)
+    description: Allows accounts with role "admin" to run shell commands via the Web UI (always blocked for "user" accounts).
   lock_root:
     name: Lock Root Directory
     description: Prevents creating or deleting files directly in the root directory to avoid accidental modifications.
@@ -55,21 +55,21 @@ configuration:
     description: "optional = encrypted when the client asks for it, plain FTP still works. required = plain FTP is refused. off = no encryption. The certificate is generated automatically (or taken from /ssl)."
   trusted_proxies:
     name: Trusted Proxies (Real Client IP)
-    description: IPs or subnets (comma-separated) of your reverse proxy or Cloudflare Tunnel on port 8090, so the real client IP is used in the audit log, rate limiting and login lockout. Use "none" to disable.
+    description: IPs or subnets (comma-separated) of your reverse proxy or Cloudflare Tunnel forwarding to the WebDAV/Web UI port (8090), so the real client IP is used in the audit log, rate limiting and login lockout. Use "none" to disable.
   share_zip_max_mb:
     name: Max Folder Size for Share Zip (MB)
     description: Largest folder that can be downloaded as a zip through a share link.
   users:
-    name: User Accounts
-    description: "Accounts shared by all protocols (Web UI, WebDAV, SMB, SFTP, FTP). PASSWORD FIELD: leave it EMPTY to keep the current password (the add-on empties it by itself after applying). Type a password to create a new account, or to RESET the password of an existing one on all protocols (this replaces a password changed in the Web UI). Keep the default password only for the very first start. Removing a user from this list deletes the account."
+    name: User Accounts & Roles
+    description: "Manage accounts and roles: 'admin' has full access (Web UI, WebDAV, SMB, SFTP, FTP, Terminal, Snapshot, Chmod); 'user' is limited to Web UI, WebDAV, and SMB on shares allowed under Shares (Terminal, SFTP, FTP, and admin actions are blocked). If role is omitted, the first user defaults to admin and others default to user. PASSWORD FIELD: leave EMPTY to keep the current password (auto-cleared after applying); enter a password to create an account or RESET it across all protocols."
   shares:
-    name: Shared Directories
-    description: Configure Home Assistant system directories exposed across OmniDrive Pro, including read-only mode and allowed users per share.
+    name: Shared Directories & Permissions
+    description: "Configure Home Assistant directories exposed across OmniDrive Pro. Set 'read_only: true' to block writes/deletes. Use 'allowed_users' (e.g. ['admin'] or ['guest']) to restrict access per share; leave empty [] to allow all users. Admin accounts always have access to all shares."
 network:
-  8090/tcp: Web UI, WebDAV Server & Public Share Links (HTTP/HTTPS)
+  8090/tcp: Web UI, WebDAV Server & Public Share Links (can be remapped to another host port if 8090 is in use)
   445/tcp: SMB / Samba Server Port (iOS Files, macOS Finder, Windows Explorer)
-  2222/tcp: SFTP Server Port (SSH File Transfer Protocol)
-  2121/tcp: FTP Control Port
+  2222/tcp: SFTP Server Port (SSH File Transfer Protocol - Admin Only)
+  2121/tcp: FTP Control Port (Admin Only)
   21000/tcp: FTP Passive Data Port 1
   21001/tcp: FTP Passive Data Port 2
   21002/tcp: FTP Passive Data Port 3
