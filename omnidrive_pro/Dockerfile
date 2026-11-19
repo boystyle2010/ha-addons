@@ -1,7 +1,7 @@
 # Base image đa kiến trúc (aarch64 + amd64) - thay thế hoàn toàn build.yaml
 FROM ghcr.io/home-assistant/base:3.24
 
-ARG NGINX_VERSION=1.30.6-r0
+ARG NGINX_VERSION=1.30.7-r0
 
 # Install Nginx + WebDAV/FancyIndex, Python3, Git, Zip, plus Samba (SMB), OpenSSH (SFTP) & vsftpd (FTP)
 RUN apk update && apk add --no-cache \
