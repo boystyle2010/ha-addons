@@ -7,7 +7,6 @@ bashio::log.info " Initializing OmniDrive Pro v${ADDON_VERSION} (Multi-Protocol)
 bashio::log.info "--------------------------------------------------------"
 
 CONFIG_PATH=/data/options.json
-HTPASSWD_FILE=/etc/nginx/webdav.htpasswd
 NGINX_CONF=/etc/nginx/nginx.conf
 ROOT_DIR=/var/webdav_root
 WEBDAV_PORT=8090
@@ -18,6 +17,25 @@ WPRO_DATA=/data/wpro
 mkdir -p "$WPRO_DATA"
 touch "$WPRO_DATA/audit.jsonl"
 [ ! -f "$WPRO_DATA/shares.json" ] && echo "{}" > "$WPRO_DATA/shares.json"
+
+# Theo dõi PID các dịch vụ nền để dừng êm khi Supervisor tắt Add-on
+SMBD_PID=""
+SSHD_PID=""
+VSFTPD_PID=""
+API_PID=""
+NGINX_PID=""
+
+cleanup() {
+    bashio::log.info "Shutting down OmniDrive Pro services gracefully..."
+    [ -n "${NGINX_PID}" ]  && kill -TERM "${NGINX_PID}" 2>/dev/null || true
+    [ -n "${API_PID}" ]    && kill -TERM "${API_PID}" 2>/dev/null || true
+    [ -n "${SMBD_PID}" ]   && kill -TERM "${SMBD_PID}" 2>/dev/null || true
+    [ -n "${SSHD_PID}" ]   && kill -TERM "${SSHD_PID}" 2>/dev/null || true
+    [ -n "${VSFTPD_PID}" ] && kill -TERM "${VSFTPD_PID}" 2>/dev/null || true
+    wait 2>/dev/null || true
+    exit 0
+}
+trap cleanup SIGTERM SIGINT
 
 # 1. Read configuration from Home Assistant UI
 UNIFIED_ROOT=$(bashio::config 'unified_root')
@@ -37,15 +55,12 @@ LOCK_ROOT=$(bashio::config 'lock_root')
 TRUSTED_PROXIES=$(bashio::config 'trusted_proxies' 2>/dev/null || true)
 if [ -z "$TRUSTED_PROXIES" ] || [ "$TRUSTED_PROXIES" = "null" ]; then TRUSTED_PROXIES="172.16.0.0/12,127.0.0.0/8"; fi
 
-export ROOT_ACCESS ENABLE_TERMINAL
+export ROOT_ACCESS ENABLE_TERMINAL LOCK_ROOT
 
 # Thông tin hiển thị trong "Connect Hub" (footer.html đọc qua /__wpro_api/protocols)
-# - LAN_IP: ưu tiên option 'lan_ip', nếu trống thì tự lấy IP của interface chính từ Supervisor
-# - PUBLIC_URL: tên miền Cloudflare cho WebDAV (tuỳ chọn)
 LAN_IP=$(bashio::config 'lan_ip' 2>/dev/null || true)
 [ "$LAN_IP" = "null" ] && LAN_IP=""
 if [ -z "$LAN_IP" ]; then
-    # Hỏi Supervisor trực tiếp: lấy interface chính (primary) đang kết nối, nếu không có thì interface đầu tiên có IPv4
     LAN_IP=$(curl -fsS --max-time 5 -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" http://supervisor/network/info 2>/dev/null \
         | jq -r '[.data.interfaces[]? | select((.connected // true) and ((.ipv4.address // []) | length > 0))] | ((map(select(.primary))[0]) // .[0]) | .ipv4.address[0] // empty' 2>/dev/null \
         | cut -d/ -f1 || true)
@@ -57,7 +72,6 @@ fi
 PUBLIC_URL=$(bashio::config 'public_url' 2>/dev/null || true)
 [ "$PUBLIC_URL" = "null" ] && PUBLIC_URL=""
 
-# Port thực tế trên host (người dùng có thể đổi ở tab Network của add-on)
 host_port() {
     local p
     p=$(bashio::app.port "$1" 2>/dev/null || bashio::addon.port "$1" 2>/dev/null || true)
@@ -90,7 +104,9 @@ for (( i=0; i<SHARES_COUNT; i++ )); do
     ln -sfn "$SHARE_PATH" "${ROOT_DIR}/${SHARE_NAME}"
 done
 
-# 3. Accounts provisioning & Hashing (Có SHA-512 từ openssl)
+# 3. Accounts provisioning, Role RBAC & Hashing (SHA-512 từ openssl)
+addgroup -S omnidrive 2>/dev/null || true
+
 if bashio::var.true "$SMB_ENABLED"; then
     mkdir -p /var/lib/samba /data/wpro/samba
     chmod 700 /data/wpro/samba
@@ -109,9 +125,6 @@ CFG = "/data/options.json"
 ROOT_DIR = "/var/webdav_root"
 ITER = 600000
 SMB = os.environ.get("SMB_ENABLED_RESOLVED", "true") == "true"
-RUN_AS_ROOT = os.environ.get("ROOT_ACCESS", "false") == "true"
-PUID = os.environ.get("PUID", "1000")
-PGID = os.environ.get("PGID", "1000")
 
 def log(msg): print("[INFO] " + msg, flush=True)
 def warn(msg): print("[WARN] " + msg, flush=True)
@@ -143,7 +156,9 @@ def crypt_hash(pw):
         return ""
 
 USERS_FILE = "/data/wpro/users.json"
-KEEP_MARKERS = ("", "__keep__")   # empty or __KEEP__ in the config = keep the existing password
+ADMIN_USERS_FILE = "/data/wpro/admin_users.txt"
+ALL_USERS_FILE = "/data/wpro/all_users.txt"
+KEEP_MARKERS = ("", "__keep__")
 
 def make_fp(pw):
     salt = secrets.token_hex(16)
@@ -162,8 +177,6 @@ try:
 except Exception as e:
     print("[ERROR] cannot read options.json: %s" % e); sys.exit(1)
 
-# /data/options.json is rewritten by the Supervisor on every start, so the real account state
-# (hashes, password changed on the Web UI) lives in our own file: /data/wpro/users.json
 try:
     with open(USERS_FILE, encoding="utf-8") as f:
         stored_list = json.load(f)
@@ -173,22 +186,28 @@ except Exception:
 stored = {str(x.get("username")): x for x in stored_list if isinstance(x, dict)}
 
 users = cfg.get("users") or []
-plain = {}     # name -> plaintext, only for accounts whose password is (re)applied from the config now
+plain = {}
 status = {}
-to_clear = []   # users whose password field in the config gets emptied after applying
+to_clear = []
 out = []
-for u in users:
+for idx, u in enumerate(users):
     name = str(u.get("username", "")).strip()
-    if not name or ":" in name or "\n" in name or len(name) > 32:
+    if not name or ":" in name or "\n" in name or " " in name or len(name) > 32:
         warn("Skipping invalid username %r" % name); continue
+    raw_role = str(u.get("role") or "").strip().lower()
+    if raw_role in ("admin", "user"):
+        role = raw_role
+    else:
+        role = "admin" if idx == 0 else "user"
+
     raw = u.get("password")
     pw = "" if raw is None else str(raw)
     keep = pw.strip().lower() in KEEP_MARKERS
     st = stored.get(name)
     has_st = bool(st and st.get("password_hash"))
-    entry = {"username": name}
+    entry = {"username": name, "role": role}
     for k, v in u.items():
-        if k not in ("username", "password", "password_hash", "crypt_hash", "cfg_fp"):
+        if k not in ("username", "password", "password_hash", "crypt_hash", "cfg_fp", "role"):
             entry[k] = v
     if keep:
         if not has_st:
@@ -197,13 +216,13 @@ for u in users:
         entry["password_hash"] = st["password_hash"]
         entry["crypt_hash"] = st.get("crypt_hash", "")
         status[name] = "kept"
-        log("User %s: KEEP -> existing password kept (config marker)." % name)
+        log("User %s [%s]: KEEP -> existing password kept." % (name, role))
     elif has_st and st.get("cfg_fp") and match_fp(st["cfg_fp"], pw):
         entry["password_hash"] = st["password_hash"]
         entry["crypt_hash"] = st.get("crypt_hash", "")
         entry["cfg_fp"] = st["cfg_fp"]
         status[name] = "unchanged"
-        log("User %s: config password unchanged since the last start -> current password kept (the one you set on the Web UI, if you changed it)." % name)
+        log("User %s [%s]: config password unchanged -> current password kept." % (name, role))
     else:
         entry["password_hash"] = make_hash(pw)
         entry["crypt_hash"] = crypt_hash(pw)
@@ -211,11 +230,10 @@ for u in users:
         plain[name] = pw
         if has_st:
             status[name] = "reset"
-            log("User %s: new password in the config -> password RESET on all protocols." % name)
+            log("User %s [%s]: new password in config -> password RESET." % (name, role))
         else:
             status[name] = "created"
-            log("User %s: account CREATED from the config password." % name)
-    # Xoá trắng ô cấu hình, trừ khi đó vẫn là mật khẩu mặc định ĐANG CÓ HIỆU LỰC (để người dùng còn thấy và đổi nó)
+            log("User %s [%s]: account CREATED from config password." % (name, role))
     if pw.strip() and (pw != "changeme_strong_password" or not check_hash(entry["password_hash"], pw)):
         to_clear.append(name)
     out.append(entry)
@@ -223,12 +241,26 @@ for u in users:
 if not out:
     print("[ERROR] you must define at least one account under 'users' in the add-on configuration"); sys.exit(1)
 
+# Đảm bảo luôn có ít nhất 1 admin
+if not any(e.get("role") == "admin" for e in out):
+    out[0]["role"] = "admin"
+    warn("No user had role 'admin'; promoted first user '%s' to admin." % out[0]["username"])
+
 os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
 tmp = USERS_FILE + ".tmp"
 with open(tmp, "w", encoding="utf-8") as f:
     json.dump(out, f, indent=2)
 os.chmod(tmp, 0o600)
 os.replace(tmp, USERS_FILE)
+
+admin_names = [e["username"] for e in out if e.get("role") == "admin"]
+all_names = [e["username"] for e in out]
+with open(ADMIN_USERS_FILE, "w", encoding="utf-8") as f:
+    f.write(" ".join(admin_names) + "\n")
+os.chmod(ADMIN_USERS_FILE, 0o600)
+with open(ALL_USERS_FILE, "w", encoding="utf-8") as f:
+    f.write(" ".join(all_names) + "\n")
+os.chmod(ALL_USERS_FILE, 0o600)
 
 CLEAR_FILE = "/data/wpro/clear_pw.json"
 try:
@@ -245,18 +277,25 @@ if any(check_hash(e["password_hash"], "changeme_strong_password") for e in out):
 
 for e in out:
     name = e["username"]
+    is_adm = (e.get("role") == "admin")
+    shell = "/bin/bash" if is_adm else "/sbin/nologin"
+    grp = "root" if is_adm else "omnidrive"
     if run(["id", name]).returncode != 0:
-        run(["adduser", "-D", "-H", "-h", ROOT_DIR, "-s", "/bin/bash", "-G", "root", name])
-
-    # SFTP / FTP: system account, recreated at every start from the stored SHA-512 hash
-    if e.get("crypt_hash"):
-        run(["chpasswd", "-e"], "%s:%s\n" % (name, e["crypt_hash"]))
-    elif name in plain:
-        run(["chpasswd"], "%s:%s\n" % (name, str(plain[name])))
+        run(["adduser", "-D", "-H", "-h", ROOT_DIR, "-s", shell, "-G", grp, name])
     else:
-        warn("User %s has no stored system hash: SFTP/FTP login is unavailable until you enter a new password in the add-on configuration." % name)
+        run(["usermod", "-s", shell, "-g", grp, name])
 
-    # SMB: the Samba database is persistent (/data/wpro/samba); only touch the password on create / reset
+    if is_adm:
+        if e.get("crypt_hash"):
+            run(["chpasswd", "-e"], "%s:%s\n" % (name, e["crypt_hash"]))
+        elif name in plain:
+            run(["chpasswd"], "%s:%s\n" % (name, str(plain[name])))
+        else:
+            warn("Admin %s has no stored system hash: SFTP/FTP login unavailable until you set a new password." % name)
+    else:
+        # Khóa mật khẩu hệ thống cho user thường (chỉ dùng WebDAV/Web UI/SMB theo phân quyền)
+        run(["passwd", "-l", name])
+
     if SMB:
         if name in plain:
             run(["smbpasswd", "-a", "-s", name], "%s\n%s\n" % (str(plain[name]), str(plain[name])))
@@ -266,13 +305,15 @@ for e in out:
         else:
             warn("User %s is missing from the Samba database: enter a new password in the add-on configuration to recreate the SMB login." % name)
 
-    log("Provisioned account: %s (%s)" % (name, status.get(name, "?")))
+    log("Provisioned account: %s (role=%s, status=%s)" % (name, e["role"], status.get(name, "?")))
 USEREOF
 
-SMB_ENABLED_RESOLVED="$SMB_ENABLED" ROOT_ACCESS="$ROOT_ACCESS" python3 /usr/local/bin/wpro_users.py || bashio::exit.nok "Account provisioning failed."
+SMB_ENABLED_RESOLVED="$SMB_ENABLED" python3 /usr/local/bin/wpro_users.py || bashio::exit.nok "Account provisioning failed."
 
-# Sau khi áp dụng, xoá trắng ô mật khẩu trong cấu hình add-on (mật khẩu thật chỉ nằm trong add-on).
-# Nếu bước này lỗi thì chỉ cảnh báo: mật khẩu cũ trong cấu hình vẫn KHÔNG bị áp dụng lại ở lần khởi động sau.
+ADMIN_USERS=$(cat /data/wpro/admin_users.txt 2>/dev/null | tr -s ' ' | xargs || true)
+ALL_USERS=$(cat /data/wpro/all_users.txt 2>/dev/null | tr -s ' ' | xargs || true)
+
+# Sau khi áp dụng, xóa trắng ô mật khẩu trong cấu hình add-on
 CLEAR_FILE=/data/wpro/clear_pw.json
 rm -f /data/wpro/cleared_users.json
 if [ -s "$CLEAR_FILE" ] && [ "$(jq 'length' "$CLEAR_FILE" 2>/dev/null || echo 0)" -gt 0 ]; then
@@ -294,7 +335,7 @@ else
     chmod 0775 "$ROOT_DIR" || true
 fi
 
-# 4. Start SMB / Samba Server (Port 445)
+# 4. Start SMB / Samba Server (Port 445) - Áp dụng đúng valid users & read_only
 if bashio::var.true "$SMB_ENABLED"; then
     mkdir -p /var/lib/samba/private /var/log/samba /run/samba
     ROOT_WRITABLE="yes"
@@ -324,14 +365,21 @@ if bashio::var.true "$SMB_ENABLED"; then
    browseable = yes
    writable = ${ROOT_WRITABLE}
    guest ok = no
+   valid users = ${ADMIN_USERS}
 EOF
 
     for (( i=0; i<SHARES_COUNT; i++ )); do
         SHARE_NAME=$(jq -r ".shares[$i].name" "$CONFIG_PATH")
         SHARE_PATH=$(jq -r ".shares[$i].path" "$CONFIG_PATH")
         READ_ONLY=$(jq -r ".shares[$i].read_only" "$CONFIG_PATH")
+        ALLOWED_STR=$(jq -r "(.shares[$i].allowed_users // []) | map(select(. != null and . != \"\")) | join(\" \")" "$CONFIG_PATH")
         WRITABLE="yes"
         [ "$READ_ONLY" = "true" ] && WRITABLE="no"
+        if [ -n "$ALLOWED_STR" ]; then
+            VALID_USERS=$(printf '%s %s\n' "$ADMIN_USERS" "$ALLOWED_STR" | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ' | xargs)
+        else
+            VALID_USERS="$ALL_USERS"
+        fi
         cat <<EOF >> /etc/samba/smb.conf
 
 [${SHARE_NAME}]
@@ -339,20 +387,23 @@ EOF
    browseable = yes
    writable = ${WRITABLE}
    guest ok = no
+   valid users = ${VALID_USERS}
    force user = root
    force group = root
 EOF
     done
     smbd --foreground --no-process-group </dev/null >/dev/null 2>&1 &
+    SMBD_PID=$!
 fi
 
-# 5. Start SFTP / OpenSSH Server (Port 2222)
+# 5. Start SFTP / OpenSSH Server (Port 2222) - Chỉ cho phép tài khoản admin (AllowUsers)
 if bashio::var.true "$SFTP_ENABLED"; then
     ssh-keygen -A >/dev/null 2>&1
     cat <<EOF > /etc/ssh/sshd_config
 Port 2222
 Protocol 2
 PermitRootLogin no
+AllowUsers ${ADMIN_USERS}
 PasswordAuthentication yes
 PubkeyAuthentication yes
 ChallengeResponseAuthentication no
@@ -363,10 +414,15 @@ X11Forwarding no
 ForceCommand internal-sftp -d ${ROOT_DIR}
 EOF
     /usr/sbin/sshd -D -e >/dev/null 2>&1 &
+    SSHD_PID=$!
+    bashio::log.info "SFTP enabled on port 2222 (Admin accounts only: ${ADMIN_USERS})."
 fi
 
-# 6. Start FTP / vsftpd Server
+# 6. Start FTP / vsftpd Server - Sửa lỗi symlink với chroot_local_user=NO & giới hạn chỉ tài khoản admin
 if bashio::var.true "$FTP_ENABLED"; then
+    mkdir -p /etc/vsftpd
+    printf '%s\n' ${ADMIN_USERS} > /etc/vsftpd/allowed_users
+    chmod 600 /etc/vsftpd/allowed_users
     cat <<EOF > /etc/vsftpd/vsftpd.conf
 listen=YES
 listen_ipv6=NO
@@ -376,14 +432,15 @@ local_enable=YES
 write_enable=YES
 local_umask=022
 local_root=${ROOT_DIR}
-chroot_local_user=YES
-allow_writeable_chroot=YES
+chroot_local_user=NO
+userlist_enable=YES
+userlist_deny=NO
+userlist_file=/etc/vsftpd/allowed_users
 pasv_enable=YES
 pasv_min_port=21000
 pasv_max_port=21002
 seccomp_sandbox=NO
 EOF
-    # Passive mode: vsftpd phải báo IP LAN của host (add-on nằm sau NAT của Docker), nếu không client treo khi liệt kê thư mục
     PASV_ADDR=$(bashio::config 'ftp_pasv_address' 2>/dev/null || true)
     [ "$PASV_ADDR" = "null" ] && PASV_ADDR=""
     [ -z "$PASV_ADDR" ] && PASV_ADDR="$LAN_IP"
@@ -394,7 +451,6 @@ EOF
         bashio::log.warning "FTP passive address unknown: set 'ftp_pasv_address' (LAN IP of Home Assistant) or FTP clients may hang when listing folders."
     fi
 
-    # FTPS (explicit TLS): optional (mặc định) | required | off
     FTP_TLS_MODE=$(bashio::config 'ftp_tls' 2>/dev/null || true)
     FTP_TLS_MODE="${FTP_TLS_MODE,,}"
     case "$FTP_TLS_MODE" in optional|required|off) ;; *) FTP_TLS_MODE="optional" ;; esac
@@ -428,7 +484,7 @@ ssl_tlsv1_2=YES
 ssl_ciphers=HIGH
 require_ssl_reuse=NO
 EOF
-            bashio::log.info "FTPS (explicit TLS) enabled, mode: ${FTP_TLS_MODE}."
+            bashio::log.info "FTPS (explicit TLS) enabled, mode: ${FTP_TLS_MODE} (Admin accounts only: ${ADMIN_USERS})."
         elif [ "$FTP_TLS_MODE" = "required" ]; then
             bashio::exit.nok "ftp_tls=required but no TLS certificate could be created."
         else
@@ -438,6 +494,7 @@ EOF
         bashio::log.warning "ftp_tls=off: FTP passwords and files are sent in clear text."
     fi
     vsftpd /etc/vsftpd/vsftpd.conf >/dev/null 2>&1 &
+    VSFTPD_PID=$!
 fi
 
 # 7. SSL
@@ -459,7 +516,6 @@ FANCY_DOT=""
 if ! bashio::var.true "$SHOW_DOTFILES"; then
     DOTFILES_RULE="location ~ /\. { deny all; }"
 else
-    # List dotfiles (.env, .git ...) - the Web UI hides them by default and offers a Show/Hide toggle
     FANCY_DOT="fancyindex_show_dotfiles on;"
 fi
 
@@ -499,7 +555,7 @@ fi
 
 git config --system --add safe.directory '*' || true
 
-# 9. Python API (Full Docker Version)
+# 9. Python API (RBAC Hardened + Share-Boundary Isolation)
 cat << 'PYEOF' > /usr/local/bin/wpro_api.py
 #!/usr/bin/env python3
 import os, sys, json, time, hmac, hashlib, base64, shutil, secrets, tempfile, subprocess, threading, html, urllib.parse
@@ -531,7 +587,6 @@ def get_config():
             cfg = json.load(f)
     except Exception:
         cfg = {}
-    # Accounts (hashes, password changed on the Web UI) are stored in users.json, not in the Supervisor-owned options.json
     try:
         with open(USERS_FILE, "r", encoding="utf-8") as f:
             users = json.load(f)
@@ -539,6 +594,75 @@ def get_config():
     except Exception:
         pass
     return cfg
+
+def get_user_role(username):
+    users = get_config().get("users", [])
+    for idx, u in enumerate(users):
+        if u.get("username") == username:
+            r = str(u.get("role") or "").strip().lower()
+            if r in ("admin", "user"): return r
+            return "admin" if idx == 0 else "user"
+    return "user"
+
+def is_admin(username):
+    return bool(username) and get_user_role(username) == "admin"
+
+def get_share_map():
+    m = {}
+    for s in get_config().get("shares", []):
+        name = str(s.get("name", "")).strip()
+        if not name: continue
+        allowed = [str(x).strip() for x in (s.get("allowed_users") or []) if x and str(x).strip()]
+        m[name] = {
+            "name": name,
+            "path": os.path.realpath(str(s.get("path", ""))),
+            "read_only": bool(s.get("read_only", False)),
+            "allowed_users": allowed,
+        }
+    return m
+
+def user_can_access_share(username, share_name, write=False):
+    smap = get_share_map()
+    info = smap.get(share_name)
+    if not info:
+        return False
+    if write and info["read_only"]:
+        return False
+    if is_admin(username):
+        return True
+    allowed = info["allowed_users"]
+    if not allowed:
+        return True
+    return username in allowed
+
+def user_allowed_shares(username):
+    smap = get_share_map()
+    return [name for name in smap if user_can_access_share(username, name, write=False)]
+
+def safe_resolve(rel_path):
+    clean = urllib.parse.unquote(rel_path or "/").lstrip("/")
+    full = os.path.normpath(os.path.join(ROOT_DIR, clean))
+    if full != ROOT_DIR and not full.startswith(ROOT_DIR + os.sep):
+        raise ValueError("Invalid path")
+    return full
+
+def verify_user_path(username, rel_path, write=False):
+    full = safe_resolve(rel_path)
+    if full == ROOT_DIR:
+        if write:
+            raise PermissionError("Cannot modify root directory")
+        return full
+    rel = full[len(ROOT_DIR):].lstrip(os.sep)
+    share_name = rel.split(os.sep, 1)[0]
+    if not user_can_access_share(username, share_name, write=write):
+        raise PermissionError("Access denied to share '%s'" % share_name)
+    # Ngăn chặn symlink bên trong thư mục chia sẻ trỏ thoát ra ngoài (/data, /etc...)
+    smap = get_share_map()
+    share_real = smap[share_name]["path"]
+    real = os.path.realpath(full)
+    if real != share_real and not real.startswith(share_real + os.sep):
+        raise PermissionError("Path escapes allowed share boundary")
+    return full
 
 PW_CACHE = {}
 PW_CACHE_KEY = secrets.token_bytes(32)
@@ -597,6 +721,7 @@ IS_HA = os.environ.get("WPRO_PLATFORM", "") == "ha"
 CLEARED_FILE = os.path.join(DATA_DIR, "cleared_users.json")
 TERMINAL_ENABLED = os.environ.get("ENABLE_TERMINAL", "true").lower() == "true"
 RUN_AS_ROOT = os.environ.get("ROOT_ACCESS", "false").lower() == "true"
+LOCK_ROOT = os.environ.get("LOCK_ROOT", "true").lower() == "true"
 try:
     RUN_UID, RUN_GID = int(os.environ.get("PUID", "1000")), int(os.environ.get("PGID", "1000"))
 except: RUN_UID, RUN_GID = 1000, 1000
@@ -701,25 +826,29 @@ def verify_session_token(token, ip=None):
     except: pass
     return None, None
 
-def revoke_session(sid):
+def revoke_session(sid, only_user=None):
     with SESS_LOCK:
-        existed = SESSIONS.pop(sid, None) is not None
-        if existed: _sess_save()
-        return existed
+        sess = SESSIONS.get(sid)
+        if not sess: return False
+        if only_user and sess.get("user") != only_user: return False
+        SESSIONS.pop(sid, None)
+        _sess_save()
+        return True
 
-def revoke_other_sessions(keep_sid):
+def revoke_other_sessions(keep_sid, only_user=None):
     with SESS_LOCK:
-        gone = [k for k in SESSIONS if k != keep_sid]
+        gone = [k for k, v in SESSIONS.items() if k != keep_sid and (not only_user or v.get("user") == only_user)]
         for k in gone: SESSIONS.pop(k, None)
         if gone: _sess_save()
         return len(gone)
 
-def list_sessions(current_sid):
+def list_sessions(current_sid, only_user=None):
     now = int(time.time())
     with SESS_LOCK:
         items = []
         for sid, v in SESSIONS.items():
             if v.get("exp", 0) <= now: continue
+            if only_user and v.get("user") != only_user: continue
             items.append({"sid": sid, "user": v.get("user"), "ip": v.get("ip"), "last_ip": v.get("last_ip"),
                           "ua": v.get("ua", ""), "created": v.get("created"), "last_seen": v.get("last_seen"),
                           "exp": v.get("exp"), "current": sid == current_sid,
@@ -783,24 +912,18 @@ def append_audit(user, method, path, status=200, ip="local"):
         with open(AUDIT_FILE, "a", encoding="utf-8") as f: f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except: pass
 
-def safe_resolve(rel_path):
-    clean = urllib.parse.unquote(rel_path or "/").lstrip("/")
-    full = os.path.normpath(os.path.join(ROOT_DIR, clean))
-    if not full.startswith(ROOT_DIR): raise ValueError("Invalid path")
-    return full
-
-def perm_target(rel):
+def perm_target(username, rel):
     import stat
-    full = safe_resolve(str(rel or "").rstrip("/"))
+    full = verify_user_path(username, str(rel or "").rstrip("/"), write=True)
     if full.rstrip("/") == ROOT_DIR.rstrip("/"): raise ValueError("Invalid path")
     st = os.lstat(full)
     if stat.S_ISLNK(st.st_mode):
         raise ValueError("This is a link to a shared folder. Open it and change the items inside instead.")
     return full, st
 
-def perm_info(rel):
+def perm_info(username, rel):
     import stat, pwd, grp
-    full, st = perm_target(rel)
+    full, st = perm_target(username, rel)
     try: owner = pwd.getpwuid(st.st_uid).pw_name
     except KeyError: owner = str(st.st_uid)
     try: group = grp.getgrgid(st.st_gid).gr_name
@@ -809,19 +932,21 @@ def perm_info(rel):
             "mode": "%04o" % stat.S_IMODE(st.st_mode), "symbolic": stat.filemode(st.st_mode)[1:],
             "owner": owner, "group": group, "uid": st.st_uid, "gid": st.st_gid}
 
-def perm_apply(rel, mode_str, recursive, scope, owner, group):
+def perm_apply(username, rel, mode_str, recursive, scope, owner, group):
     import stat, pwd, grp
     mode_str = str(mode_str or "").strip()
     if not (3 <= len(mode_str) <= 4) or any(c not in "01234567" for c in mode_str):
         raise ValueError("Mode must be 3 or 4 octal digits (e.g. 644 or 0755)")
     mode = int(mode_str, 8)
     uid = gid = -1
+    if (owner or group) and not RUN_AS_ROOT:
+        raise PermissionError("Changing owner/group requires 'root_access: true' in add-on configuration.")
     try:
         if owner: uid = int(owner) if str(owner).isdigit() else pwd.getpwnam(str(owner)).pw_uid
         if group: gid = int(group) if str(group).isdigit() else grp.getgrnam(str(group)).gr_gid
     except KeyError:
         raise ValueError("Unknown owner or group name")
-    full, st = perm_target(rel)
+    full, st = perm_target(username, rel)
     targets = [full]
     recursive = bool(recursive) and stat.S_ISDIR(st.st_mode)
     if recursive:
@@ -835,7 +960,7 @@ def perm_apply(rel, mode_str, recursive, scope, owner, group):
             if stat.S_ISLNK(lst.st_mode): continue
             isd = stat.S_ISDIR(lst.st_mode)
             if recursive and ((scope == "files" and isd) or (scope == "dirs" and not isd)): continue
-            if uid != -1 or gid != -1: os.chown(t, uid, gid)   # chown first: it can clear setuid/setgid bits
+            if uid != -1 or gid != -1: os.chown(t, uid, gid)
             os.chmod(t, mode)
             changed += 1
         except OSError:
@@ -862,9 +987,9 @@ def change_user_password(username, new_pw):
     try:
         r = subprocess.run(["openssl", "passwd", "-6", "-stdin"], input=new_pw + "\n", capture_output=True, text=True, timeout=20)
         if r.returncode == 0 and r.stdout.startswith("$6$"): crypt = r.stdout.strip()
-    except FileNotFoundError: pass
     except Exception: pass
-    
+
+    user_is_admin = is_admin(username)
     with CONFIG_LOCK:
         try:
             with open(USERS_FILE, "r", encoding="utf-8") as f: users = json.load(f)
@@ -877,8 +1002,6 @@ def change_user_password(username, new_pw):
         target["password_hash"] = _make_pw_hash(new_pw)
         target["crypt_hash"] = crypt
         target.pop("password", None)
-        # cfg_fp (fingerprint of the last config password) is kept on purpose: the config password is only
-        # re-applied when YOU change it there, so a restart never undoes a password changed on the Web UI.
         tmp = USERS_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f: json.dump(users, f, indent=2)
         os.chmod(tmp, 0o600)
@@ -886,17 +1009,18 @@ def change_user_password(username, new_pw):
     cfg = get_config()
 
     warnings = []
-    if crypt:
-        try:
-            r = subprocess.run(["chpasswd", "-e"], input="%s:%s\n" % (username, crypt), capture_output=True, text=True, timeout=20)
-            if r.returncode != 0: warnings.append("SFTP/FTP password could not be updated")
-        except: warnings.append("SFTP/FTP password could not be updated")
-    else:
-        try:
-            r = subprocess.run(["chpasswd"], input="%s:%s\n" % (username, new_pw), capture_output=True, text=True, timeout=20)
-            if r.returncode != 0: warnings.append("SFTP/FTP password could not be updated (fallback)")
-        except: warnings.append("SFTP/FTP password could not be updated (fallback)")
-        
+    if user_is_admin:
+        if crypt:
+            try:
+                r = subprocess.run(["chpasswd", "-e"], input="%s:%s\n" % (username, crypt), capture_output=True, text=True, timeout=20)
+                if r.returncode != 0: warnings.append("SFTP/FTP password could not be updated")
+            except: warnings.append("SFTP/FTP password could not be updated")
+        else:
+            try:
+                r = subprocess.run(["chpasswd"], input="%s:%s\n" % (username, new_pw), capture_output=True, text=True, timeout=20)
+                if r.returncode != 0: warnings.append("SFTP/FTP password could not be updated (fallback)")
+            except: warnings.append("SFTP/FTP password could not be updated (fallback)")
+
     if cfg.get("smb_enabled", True):
         try:
             r = subprocess.run(["smbpasswd", "-a", "-s", username], input="%s\n%s\n" % (new_pw, new_pw), capture_output=True, text=True, timeout=20)
@@ -905,8 +1029,6 @@ def change_user_password(username, new_pw):
     return True, warnings
 
 def config_password_pending(username):
-    """Home Assistant only: True while the add-on configuration still shows a password for this user,
-    i.e. a restart is needed to tidy it up (the new password itself is already active everywhere)."""
     try:
         with open(CLEARED_FILE, "r", encoding="utf-8") as f:
             if username in json.load(f): return False
@@ -917,8 +1039,6 @@ def config_password_pending(username):
             raw = json.load(f)
         for u in raw.get("users", []):
             if u.get("username") == username:
-                # Only the untouched default password is "pending": restarting then just empties the field.
-                # A different password typed in the configuration would be applied (and override this change) on restart.
                 return str(u.get("password") or "") == "changeme_strong_password"
     except Exception:
         pass
@@ -937,14 +1057,15 @@ def restart_addon_later():
 ZIP_JOBS = {}
 ZIP_LOCK = threading.Lock()
 
-def zip_plan(raw_paths):
-    """Validate a multi-download selection. Returns (parent_dir, [names], total_bytes); raises ValueError(message)."""
+def zip_plan(username, raw_paths):
     if not isinstance(raw_paths, list) or not raw_paths: raise ValueError("Nothing selected")
     if len(raw_paths) > 500: raise ValueError("Too many items selected (max 500)")
     parent, names, total = None, [], 0
     for rp in raw_paths:
         try:
-            full = safe_resolve(str(rp).rstrip("/"))
+            full = verify_user_path(username, str(rp).rstrip("/"), write=False)
+        except PermissionError as e:
+            raise ValueError(str(e))
         except Exception:
             raise ValueError("Invalid path")
         name = os.path.basename(full)
@@ -967,7 +1088,7 @@ def zip_plan(raw_paths):
     return parent, names, total
 
 def zip_job_create(user, raw_paths):
-    plan = zip_plan(raw_paths)
+    plan = zip_plan(user, raw_paths)
     now = time.time()
     with ZIP_LOCK:
         for k in [k for k, v in ZIP_JOBS.items() if v["exp"] < now]: ZIP_JOBS.pop(k, None)
@@ -987,9 +1108,10 @@ class WProHandler(BaseHTTPRequestHandler):
         self.sid = None
         u = self._get_auth_user_real()
         if u: return u
-        # Home Assistant Ingress: Supervisor already authenticated the HA user, nginx marks the request with a per-boot secret.
         if self.is_ingress():
             users = get_config().get("users", [])
+            for item in users:
+                if item.get("role") == "admin": return item.get("username")
             if users: return users[0].get("username")
         return None
 
@@ -1075,7 +1197,7 @@ button:active { transform:scale(.98); }
 
     def serve_zip_selection(self, user, job):
         try:
-            parent, names, total = zip_plan(job["paths"])
+            parent, names, total = zip_plan(user, job["paths"])
         except ValueError as e:
             self.share_gone(400, str(e).encode("utf-8")); return
         rel_parent = parent[len(ROOT_DIR):] or "/"
@@ -1115,7 +1237,18 @@ button:active { transform:scale(.98); }
     def serve_share(self, token, info):
         ip = self.client_ip()
         try:
-            target = os.path.realpath(safe_resolve(info["path"]))
+            owner = info.get("owner") or ""
+            # Xác minh đường dẫn vẫn nằm trong ranh giới share hợp lệ (chống symlink escape)
+            full = safe_resolve(info["path"])
+            rel = full[len(ROOT_DIR):].lstrip(os.sep)
+            share_name = rel.split(os.sep, 1)[0] if rel else ""
+            smap = get_share_map()
+            if share_name not in smap: raise FileNotFoundError()
+            if owner and not user_can_access_share(owner, share_name, write=False): raise PermissionError()
+            target = os.path.realpath(full)
+            share_real = smap[share_name]["path"]
+            if target != share_real and not target.startswith(share_real + os.sep): raise PermissionError()
+
             is_dir = os.path.isdir(target)
             if not (is_dir or os.path.isfile(target)) or not user_can_read(target): raise FileNotFoundError()
             if is_dir:
@@ -1184,30 +1317,67 @@ button:active { transform:scale(.98); }
 
         if route == "/__wpro_api/auth_check":
             user = self.get_auth_user()
-            if user:
+            if not user:
+                self.send_response(401)
+                self.end_headers()
+                return
+            orig_uri = self.headers.get("X-Original-URI", "/")
+            orig_method = self.headers.get("X-Original-Method", "GET").upper()
+            orig_path = urllib.parse.unquote(orig_uri.split("?", 1)[0])
+            is_write = orig_method in ("PUT", "DELETE", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "PATCH")
+            # Cho phép đi qua các đường dẫn nội bộ (sẽ kiểm tra quyền chi tiết bên trong từng endpoint)
+            if orig_path.startswith("/__wpro_api/") or orig_path.startswith("/.fancyindex/") or orig_path.startswith("/s/"):
                 self.send_response(200)
                 self.send_header("X-WPro-User", user)
                 self.end_headers()
-            else:
-                self.send_response(401)
+                return
+            # Kiểm tra quyền thư mục (allowed_users + read_only) trên WebDAV/Web UI
+            stripped = orig_path.lstrip("/")
+            if stripped:
+                share_name = stripped.split("/", 1)[0]
+                if not user_can_access_share(user, share_name, write=is_write):
+                    self.send_response(403)
+                    self.end_headers()
+                    return
+                # Kiểm tra thêm thư mục đích nếu là COPY hoặc MOVE
+                if orig_method in ("COPY", "MOVE"):
+                    dest_hdr = self.headers.get("X-Original-Destination", "")
+                    if dest_hdr:
+                        dest_path = urllib.parse.unquote(urllib.parse.urlparse(dest_hdr).path).lstrip("/")
+                        dest_share = dest_path.split("/", 1)[0] if dest_path else ""
+                        if not dest_share or not user_can_access_share(user, dest_share, write=True):
+                            self.send_response(403)
+                            self.end_headers()
+                            return
+            elif is_write and (LOCK_ROOT or not is_admin(user)):
+                self.send_response(403)
                 self.end_headers()
+                return
+
+            self.send_response(200)
+            self.send_header("X-WPro-User", user)
+            self.end_headers()
             return
 
         if route == "/__wpro_api/protocols":
+            user = self.get_auth_user()
+            if not user:
+                self.send_json({"error": "Unauthorized"}, 401); return
             cfg = get_config()
-            users = cfg.get("users", [])
-            first_user = users[0].get("username", "admin") if users else "admin"
-            shares = [s.get("name") for s in cfg.get("shares", [])]
+            adm = is_admin(user)
             self.send_json({
-                "webdav": True, "smb": bool(cfg.get("smb_enabled", True)), "sftp": bool(cfg.get("sftp_enabled", True)),
-                "ftp": bool(cfg.get("ftp_enabled", True)), "default_user": first_user, "shares": shares,
-                "terminal": TERMINAL_ENABLED, "run_as_root": RUN_AS_ROOT,
+                "webdav": True, "smb": bool(cfg.get("smb_enabled", True)),
+                "sftp": bool(cfg.get("sftp_enabled", True)) and adm,
+                "ftp": bool(cfg.get("ftp_enabled", True)) and adm,
+                "default_user": user, "role": "admin" if adm else "user",
+                "shares": user_allowed_shares(user),
+                "terminal": TERMINAL_ENABLED and adm, "run_as_root": RUN_AS_ROOT and adm,
                 "platform": "ha", "lan_ip": os.environ.get("LAN_IP", ""), "public_url": os.environ.get("PUBLIC_URL", ""),
                 "smb_port": int(os.environ.get("SMB_PORT", "445") or 445), "sftp_port": int(os.environ.get("SFTP_PORT", "2222") or 2222),
                 "ftp_port": int(os.environ.get("FTP_PORT", "2121") or 2121), "ext_port": int(os.environ.get("EXT_PORT", "8090") or 8090)
             })
             return
-            
+
         if route.startswith("/s/") or route == "/__wpro_api/share_dl":
             token = route.split("/s/")[1].split("/")[0] if route.startswith("/s/") else (qs.get("token", [""])[0])
             info = load_shares().get(token)
@@ -1224,16 +1394,21 @@ button:active { transform:scale(.98); }
             self.serve_zip_selection(user, job); return
 
         if route == "/__wpro_api/sessions":
-            if not self.get_auth_user(): self.send_json({"error": "Unauthorized"}, 401); return
-            self.send_json({"sessions": list_sessions(self.sid)}); return
+            user = self.get_auth_user()
+            if not user: self.send_json({"error": "Unauthorized"}, 401); return
+            only_u = None if is_admin(user) else user
+            self.send_json({"sessions": list_sessions(self.sid, only_user=only_u)}); return
 
         if route == "/__wpro_api/disk":
+            user = self.get_auth_user()
+            if not user: self.send_json({"error": "Unauthorized"}, 401); return
             try:
                 disk_ref = "/host_root" if os.path.exists("/host_root") else ROOT_DIR
                 total, used, free = shutil.disk_usage(disk_ref)
+                allowed_set = set(user_allowed_shares(user))
                 folders = []
                 for name in sorted(os.listdir(ROOT_DIR)):
-                    if name == "host_system": continue
+                    if name == "host_system" or name not in allowed_set: continue
                     fpath = os.path.join(ROOT_DIR, name)
                     if os.path.isdir(fpath):
                         real_p = os.path.realpath(fpath)
@@ -1243,14 +1418,19 @@ button:active { transform:scale(.98); }
             return
 
         if route == "/__wpro_api/perm_info":
-            try: self.send_json(perm_info(qs.get("path", ["/"])[0]))
-            except (ValueError, OSError) as e: self.send_json({"ok": False, "error": str(e)}, 400)
+            user = self.get_auth_user()
+            if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
+            if not is_admin(user): self.send_json({"ok": False, "error": "Admin privileges required"}, 403); return
+            try: self.send_json(perm_info(user, qs.get("path", ["/"])[0]))
+            except (ValueError, PermissionError, OSError) as e: self.send_json({"ok": False, "error": str(e)}, 400)
             return
 
         if route == "/__wpro_api/git_status":
+            user = self.get_auth_user()
+            if not user: self.send_json({"is_git": False, "statuses": {}}, 401); return
             rel = qs.get("path", ["/"])[0]
             try:
-                target = os.path.realpath(safe_resolve(rel))
+                target = os.path.realpath(verify_user_path(user, rel, write=False))
                 if not os.path.isdir(target): target = os.path.dirname(target)
                 top = subprocess.check_output(["git", "-C", target, "rev-parse", "--show-toplevel"], stderr=subprocess.DEVNULL, timeout=4).decode().strip()
                 branch = subprocess.check_output(["git", "-C", target, "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL, timeout=4).decode().strip()
@@ -1273,12 +1453,21 @@ button:active { transform:scale(.98); }
             return
 
         if route == "/__wpro_api/shares":
+            user = self.get_auth_user()
+            if not user: self.send_json({"error": "Unauthorized"}, 401); return
+            adm = is_admin(user)
             shares = load_shares()
-            items = [{"token": k, **{kk: vv for kk, vv in v.items() if kk not in ("pw_hash", "pw_salt")}, "has_password": bool(v.get("pw_hash"))} for k, v in shares.items()]
+            items = []
+            for k, v in shares.items():
+                if not adm and v.get("owner") != user: continue
+                items.append({"token": k, **{kk: vv for kk, vv in v.items() if kk not in ("pw_hash", "pw_salt")}, "has_password": bool(v.get("pw_hash"))})
             items.sort(key=lambda x: x.get("created", 0), reverse=True)
             self.send_json({"shares": items}); return
 
         if route == "/__wpro_api/audit":
+            user = self.get_auth_user()
+            if not user: self.send_json({"error": "Unauthorized"}, 401); return
+            adm = is_admin(user)
             limit = int(qs.get("limit", ["150"])[0])
             logs = []
             try:
@@ -1289,6 +1478,7 @@ button:active { transform:scale(.98); }
                         if not ln: continue
                         try:
                             obj = json.loads(ln)
+                            if not adm and obj.get("user") != user: continue
                             p_str = obj.get("path", ""); m_str = obj.get("method", "")
                             if p_str.startswith("/.fancyindex") or p_str.startswith("/__wpro_api"): continue
                             if m_str == "GET" and p_str.endswith("/"): continue
@@ -1323,7 +1513,7 @@ button:active { transform:scale(.98); }
                 secure = "; Secure" if is_https else ""
                 cookie_val = f"wpro_sess={tok}; Path=/; Max-Age={ttl}; HttpOnly; SameSite=Lax{secure}"
                 append_audit(uname, "WEB_LOGIN", "/", 200, ip)
-                self.send_json({"ok": True, "user": uname}, 200, {"Set-Cookie": cookie_val})
+                self.send_json({"ok": True, "user": uname, "role": get_user_role(uname)}, 200, {"Set-Cookie": cookie_val})
             else:
                 login_failed(lock_key); time.sleep(0.4)
                 append_audit(uname or "unknown", "LOGIN_FAIL", "/", 401, ip)
@@ -1337,42 +1527,44 @@ button:active { transform:scale(.98); }
             except: pass
             self.send_json({"ok": True}, 200, {"Set-Cookie": "wpro_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"}); return
 
+        # Mọi route phía dưới đều bắt buộc xác thực
+        user = self.get_auth_user()
+        if not user:
+            self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
+        ip = self.client_ip()
+        adm = is_admin(user)
+
         if route == "/__wpro_api/change_password":
-            user = self.get_auth_user()
-            if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
-            if self.sid is None and self.is_ingress():
+            target_user = user
+            if self.sid is None and self.is_ingress() and adm:
                 want = str(body.get("user", "")).strip()
-                if want and user_exists(want): user = want
-            ip = self.client_ip()
+                if want and user_exists(want): target_user = want
             old_pw, new_pw = str(body.get("old", "")), str(body.get("new", ""))
-            key = "chpw|" + ip + "|" + user.lower()
+            key = "chpw|" + ip + "|" + target_user.lower()
             if login_locked(key): self.send_json({"ok": False, "error": "Too many wrong attempts."}, 429); return
-            if not verify_credentials(user, old_pw):
-                login_failed(key); time.sleep(0.4); append_audit(user, "PASSWORD_CHANGE_FAIL", "wrong current password", 403, ip)
+            if not verify_credentials(target_user, old_pw):
+                login_failed(key); time.sleep(0.4); append_audit(target_user, "PASSWORD_CHANGE_FAIL", "wrong current password", 403, ip)
                 self.send_json({"ok": False, "error": "Current password is wrong" + (". If you just typed a new password in the add-on configuration, restart the add-on first; until then the previous password is still the active one." if IS_HA else "")}, 403); return
             login_ok(key)
             if len(new_pw) < 8 or len(new_pw) > 128 or any(ord(c) < 32 for c in new_pw):
                 self.send_json({"ok": False, "error": "New password must be 8-128 characters"}, 400); return
             if new_pw == old_pw: self.send_json({"ok": False, "error": "New password must be different"}, 400); return
-            ok, warnings = change_user_password(user, new_pw)
+            ok, warnings = change_user_password(target_user, new_pw)
             if not ok: self.send_json({"ok": False, "error": "Could not change the password"}, 500); return
-            n = revoke_other_sessions(self.sid)
-            append_audit(user, "PASSWORD_CHANGE", "other devices signed out: " + str(n), 200, ip)
-            env_override = bool(os.environ.get("OMNI_PASS") or os.environ.get("OMNI_PASS_FILE")) and os.environ.get("OMNI_USER", "") == user
-            self.send_json({"ok": True, "revoked": n, "env_override": env_override, "warnings": warnings, "needs_restart": bool(IS_HA and config_password_pending(user))}); return
+            n = revoke_other_sessions(self.sid, only_user=target_user)
+            append_audit(target_user, "PASSWORD_CHANGE", "other devices signed out: " + str(n), 200, ip)
+            env_override = bool(os.environ.get("OMNI_PASS") or os.environ.get("OMNI_PASS_FILE")) and os.environ.get("OMNI_USER", "") == target_user
+            self.send_json({"ok": True, "revoked": n, "env_override": env_override, "warnings": warnings, "needs_restart": bool(IS_HA and config_password_pending(target_user))}); return
 
         if route == "/__wpro_api/restart_addon":
-            user = self.get_auth_user()
-            if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
+            if not adm: self.send_json({"ok": False, "error": "Admin privileges required"}, 403); return
             if not IS_HA: self.send_json({"ok": False, "error": "Not available on this platform"}, 400); return
-            append_audit(user, "ADDON_RESTART", "requested from the Web UI", 200, self.client_ip())
+            append_audit(user, "ADDON_RESTART", "requested from the Web UI", 200, ip)
             self.send_json({"ok": True})
             restart_addon_later()
             return
 
         if route == "/__wpro_api/zip_prepare":
-            user = self.get_auth_user()
-            if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
             try:
                 tok, plan = zip_job_create(user, body.get("paths"))
             except ValueError as e:
@@ -1380,28 +1572,26 @@ button:active { transform:scale(.98); }
             self.send_json({"ok": True, "token": tok, "items": len(plan[1]), "bytes": plan[2]}); return
 
         if route == "/__wpro_api/session_ack":
-            user = self.get_auth_user()
-            if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
             with SESS_LOCK:
                 n = 0
                 for k, v in SESSIONS.items():
+                    if not adm and v.get("user") != user: continue
                     if (body.get("all") or k == str(body.get("sid", ""))) and v.get("new") and not v.get("ack"):
                         v["ack"] = True; n += 1
                 if n: _sess_save()
             self.send_json({"ok": True, "acked": n}); return
 
         if route == "/__wpro_api/session_revoke":
-            user = self.get_auth_user()
-            if not user: self.send_json({"ok": False, "error": "Unauthorized"}, 401); return
-            ip = self.client_ip()
             if body.get("rotate"):
+                if not adm: self.send_json({"ok": False, "error": "Admin privileges required"}, 403); return
                 n = rotate_secret(); append_audit(user, "SESSION_ROTATE", "signing key rotated, " + str(n) + " session(s) ended", 200, ip)
                 self.send_json({"ok": True, "revoked": n, "self": True}, 200, {"Set-Cookie": "wpro_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"}); return
             if body.get("all_others"):
-                n = revoke_other_sessions(self.sid); append_audit(user, "SESSION_REVOKE", "all other devices (" + str(n) + ")", 200, ip)
+                n = revoke_other_sessions(self.sid, only_user=(None if adm else user))
+                append_audit(user, "SESSION_REVOKE", "all other devices (" + str(n) + ")", 200, ip)
                 self.send_json({"ok": True, "revoked": n}); return
             sid = str(body.get("sid", ""))
-            if revoke_session(sid):
+            if revoke_session(sid, only_user=(None if adm else user)):
                 append_audit(user, "SESSION_REVOKE", "device " + sid[:6], 200, ip)
                 extra = {"Set-Cookie": "wpro_sess=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"} if sid == self.sid else None
                 self.send_json({"ok": True, "revoked": 1, "self": sid == self.sid}, 200, extra)
@@ -1409,6 +1599,7 @@ button:active { transform:scale(.98); }
             return
 
         if route == "/__wpro_api/snapshot":
+            if not adm: self.send_json({"ok": False, "error": "Admin privileges required"}, 403); return
             target_mode = body.get("target", "config")
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_dir = os.path.realpath(os.path.join(ROOT_DIR, "backup"))
@@ -1426,7 +1617,7 @@ button:active { transform:scale(.98); }
                     subprocess.run(cmd, cwd=storage_dir, check=False, timeout=120, **run_as_kwargs())
                 elif target_mode == "current":
                     cwd_rel = body.get("cwd", "/")
-                    current_dir = os.path.realpath(safe_resolve(cwd_rel))
+                    current_dir = os.path.realpath(verify_user_path(user, cwd_rel, write=False))
                     if not os.path.isdir(current_dir): raise Exception("Current folder is not valid.")
                     zip_name = f"backup_current_{stamp}.zip"; zip_path = os.path.join(backup_dir, zip_name)
                     cmd = ["zip", "-r", "-q", zip_path, ".", "-x", "backup/*", "*.db*", "*.log*"]
@@ -1437,7 +1628,7 @@ button:active { transform:scale(.98); }
                     subprocess.run(cmd, cwd=cfg_dir, check=False, timeout=120, **run_as_kwargs())
 
                 size_kb = round(os.path.getsize(zip_path) / 1024, 1) if os.path.exists(zip_path) else 0
-                append_audit("admin", "SNAPSHOT", f"/backup/{zip_name}", 200)
+                append_audit(user, "SNAPSHOT", f"/backup/{zip_name}", 200, ip)
                 self.send_json({"ok": True, "filename": zip_name, "path": f"/backup/{zip_name}", "size_kb": size_kb})
             except Exception as e: self.send_json({"ok": False, "error": str(e)}, 500)
             return
@@ -1447,8 +1638,11 @@ button:active { transform:scale(.98); }
             shares = load_shares()
             if action == "revoke":
                 tok = body.get("token", "")
+                existing = shares.get(tok)
+                if existing and not adm and existing.get("owner") != user:
+                    self.send_json({"ok": False, "error": "Cannot revoke another user's share"}, 403); return
                 shares.pop(tok, None); save_shares(shares)
-                append_audit("admin", "SHARE_REVOKE", tok, 200)
+                append_audit(user, "SHARE_REVOKE", tok, 200, ip)
                 self.send_json({"ok": True}); return
 
             rel_path = body.get("path", "")
@@ -1459,50 +1653,54 @@ button:active { transform:scale(.98); }
             password = str(body.get("password", "") or "")
             if len(password) > 128: self.send_json({"ok": False, "error": "Password is too long"}, 400); return
             try:
-                full = safe_resolve(rel_path)
-                if not os.path.exists(full): self.send_json({"ok": False, "error": "Target path does not exist"}, 400); return
+                full = verify_user_path(user, rel_path, write=False)
+                if full == ROOT_DIR or not os.path.exists(full): self.send_json({"ok": False, "error": "Target path does not exist"}, 400); return
                 is_dir = os.path.isdir(full)
                 base_name = os.path.basename(full.rstrip("/")) or "root"
                 display_name = (base_name + ".zip") if is_dir else base_name
                 token = secrets.token_urlsafe(10)
                 now = int(time.time())
-                entry = {"path": rel_path, "name": display_name, "is_dir": is_dir, "created": now, "exp": now + ttl, "max_uses": max_uses, "uses": 0}
+                entry = {"path": rel_path, "name": display_name, "is_dir": is_dir, "owner": user, "created": now, "exp": now + ttl, "max_uses": max_uses, "uses": 0}
                 if password: entry["pw_salt"], entry["pw_hash"] = hash_share_pw(password)
                 with SHARE_LOCK:
                     shares = load_shares(); shares[token] = entry; save_shares(shares)
-                append_audit("admin", "SHARE_CREATE", rel_path, 200)
+                append_audit(user, "SHARE_CREATE", rel_path, 200, ip)
                 self.send_json({"ok": True, "token": token, "exp": now + ttl, "name": display_name, "is_dir": is_dir, "max_uses": max_uses, "has_password": bool(password)})
+            except PermissionError as e: self.send_json({"ok": False, "error": str(e)}, 403)
             except Exception as e: self.send_json({"ok": False, "error": str(e)}, 500)
             return
 
         if route == "/__wpro_api/audit_clear":
+            if not adm: self.send_json({"ok": False, "error": "Admin privileges required"}, 403); return
             try:
                 open(AUDIT_FILE, "w").close()
-                append_audit("admin", "AUDIT_CLEAR", "/", 200)
+                append_audit(user, "AUDIT_CLEAR", "/", 200, ip)
                 self.send_json({"ok": True})
             except Exception as e: self.send_json({"ok": False, "error": str(e)}, 500)
             return
 
         if route == "/__wpro_api/perm_set":
+            if not adm: self.send_json({"ok": False, "error": "Admin privileges required"}, 403); return
             p_rel = body.get("path", "")
             try:
-                res = perm_apply(p_rel, body.get("mode"), body.get("recursive"), body.get("scope", "all"), str(body.get("owner", "") or "").strip(), str(body.get("group", "") or "").strip())
-                append_audit("admin", "CHMOD " + res["mode"] + (" -R" if body.get("recursive") else ""), p_rel, 200)
+                res = perm_apply(user, p_rel, body.get("mode"), body.get("recursive"), body.get("scope", "all"), str(body.get("owner", "") or "").strip(), str(body.get("group", "") or "").strip())
+                append_audit(user, "CHMOD " + res["mode"] + (" -R" if body.get("recursive") else ""), p_rel, 200, ip)
                 self.send_json(res)
-            except (ValueError, OSError) as e:
+            except (ValueError, PermissionError, OSError) as e:
                 self.send_json({"ok": False, "error": str(e)}, 400)
             return
 
         if route == "/__wpro_api/exec":
+            if not adm: self.send_json({"output": "Admin privileges required.\n", "code": 403}, 403); return
             if not TERMINAL_ENABLED: self.send_json({"output": "Web Terminal is disabled.\n", "code": 403}, 403); return
             cmd_str = body.get("cmd", "").strip()
             cwd_rel = body.get("cwd", "/")
             if not cmd_str: self.send_json({"output": ""}); return
             try:
-                cwd_full = os.path.realpath(safe_resolve(cwd_rel))
+                cwd_full = os.path.realpath(verify_user_path(user, cwd_rel, write=False))
                 if not os.path.isdir(cwd_full): cwd_full = ROOT_DIR
                 proc = subprocess.run(cmd_str, shell=True, cwd=cwd_full, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=25, text=True, env=child_env(), **run_as_kwargs())
-                append_audit("admin", "TERM_CMD", cmd_str[:80], proc.returncode)
+                append_audit(user, "TERM_CMD", cmd_str[:80], proc.returncode, ip)
                 self.send_json({"output": proc.stdout, "code": proc.returncode})
             except subprocess.TimeoutExpired: self.send_json({"output": "Command timed out after 25s.\n", "code": 124})
             except Exception as e: self.send_json({"output": f"Error: {e}\n", "code": 1})
@@ -1514,18 +1712,17 @@ if __name__ == "__main__":
     server = ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), WProHandler)
     server.serve_forever()
 PYEOF
-chmod +x /usr/local/bin/wpro_api.py
+chmod 700 /usr/local/bin/wpro_api.py
 
 python3 /usr/local/bin/wpro_api.py "${API_PORT}" &
-bashio::log.info "Started OmniDrive Pro API & Hybrid Auth Engine on 127.0.0.1:${API_PORT}"
+API_PID=$!
+bashio::log.info "Started OmniDrive Pro API & RBAC Auth Engine on 127.0.0.1:${API_PORT}"
 
-# 10. Nginx Configuration
-# Ingress: chỉ tin Supervisor (172.30.32.2) để lấy IP thật của client từ X-Forwarded-For
+# 10. Nginx Configuration (Chặn giả mạo X-WPro-Ingress trên cổng 8090 + Bảo vệ nginx.conf 0600)
 REAL_IP_CONF_INGRESS="
         set_real_ip_from 172.30.32.2;
         real_ip_header X-Forwarded-For;
         real_ip_recursive on;"
-# Cổng 8090 (WebDAV / Cloudflare Tunnel / reverse proxy): chỉ tin các proxy khai báo trong 'trusted_proxies'
 REAL_IP_CONF=""
 if [ "${TRUSTED_PROXIES,,}" != "none" ]; then
     IFS=',' read -ra _TP <<< "$TRUSTED_PROXIES"
@@ -1571,7 +1768,7 @@ http {
 
     sendfile on; tcp_nopush on; tcp_nodelay on; keepalive_timeout 65; server_tokens off; etag off;
     absolute_redirect off; port_in_redirect off;
-    
+
     client_max_body_size ${MAX_UPLOAD};
     client_body_temp_path /var/lib/nginx/tmp/client_body;
 
@@ -1582,15 +1779,12 @@ http {
     server {
         listen 8099;
         ${REAL_IP_CONF_INGRESS}
-        # allow/deny dùng \$remote_addr (đã bị real_ip đổi thành IP client) nên gây 403.
-        # Dùng \$realip_remote_addr = địa chỉ kết nối gốc (Supervisor) để kiểm tra,
-        # đồng thời vẫn giữ được IP thật của client trong \$remote_addr / X-Real-IP.
         if (\$realip_remote_addr != "172.30.32.2") { return 403; }
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
         location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
         location ^~ /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
         location ^~ /__wpro_api/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress "${INGRESS_TOKEN}"; proxy_read_timeout 600s; access_log off; }
-        location ^~ /s/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; }
+        location ^~ /s/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; }
         location / {
             root ${ROOT_DIR};
             index __omnidrive_no_index__;
@@ -1613,14 +1807,18 @@ ${ROOT_LOCK_RULES}
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
         location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
         location ^~ /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
-        location = /__wpro_api/login { limit_req zone=dav_auth_limit burst=15 nodelay; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; access_log off; }
-        location = /__wpro_api/logout { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; access_log off; }
+        location = /__wpro_api/login { limit_req zone=dav_auth_limit burst=15 nodelay; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; access_log off; }
+        location = /__wpro_api/logout { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-WPro-Ingress ""; access_log off; }
         location = /__wpro_auth_check {
             internal;
             proxy_pass http://127.0.0.1:${API_PORT}/__wpro_api/auth_check;
             proxy_pass_request_body off;
             proxy_set_header Content-Length "";
             proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-WPro-Ingress "";
+            proxy_set_header X-Original-URI \$request_uri;
+            proxy_set_header X-Original-Method \$request_method;
+            proxy_set_header X-Original-Destination \$http_destination;
             proxy_set_header Cookie \$http_cookie;
             proxy_set_header Authorization \$http_authorization;
         }
@@ -1629,8 +1827,8 @@ ${ROOT_LOCK_RULES}
             if (\$is_browser_client = 1) { return 302 /.fancyindex/login.html?rd=\$request_uri; }
             return 401 "Authentication required";
         }
-        location ^~ /s/ { limit_req zone=share_limit burst=15 nodelay; limit_req_status 429; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; }
-        location ^~ /__wpro_api/ { auth_request /__wpro_auth_check; error_page 401 = @login_or_basic; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_read_timeout 600s; access_log off; }
+        location ^~ /s/ { limit_req zone=share_limit burst=15 nodelay; limit_req_status 429; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; }
+        location ^~ /__wpro_api/ { auth_request /__wpro_auth_check; error_page 401 = @login_or_basic; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; proxy_read_timeout 600s; access_log off; }
         ${DOTFILES_RULE}
         location / {
             limit_req zone=dav_auth_limit burst=40 nodelay;
@@ -1650,8 +1848,9 @@ ${ROOT_LOCK_RULES}
     }
 }
 EOF
+chmod 600 "$NGINX_CONF"
 
-# 12. Validate & Start
+# 12. Validate & Start (với trap cleanup hỗ trợ dừng êm toàn bộ dịch vụ nền)
 bashio::log.info "Checking Nginx configuration syntax..."
 if ! nginx -t 2>&1; then
     bashio::log.error "Invalid Nginx configuration, see details above."
@@ -1659,4 +1858,6 @@ if ! nginx -t 2>&1; then
 fi
 
 bashio::log.info "OmniDrive Pro v${ADDON_VERSION} is ready on port ${WEBDAV_PORT} and Ingress!"
-exec nginx -g "daemon off;"
+nginx -g "daemon off;" &
+NGINX_PID=$!
+wait "${NGINX_PID}"
