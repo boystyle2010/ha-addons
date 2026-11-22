@@ -7,6 +7,7 @@ ARG TARGETARCH
 ARG BUILD_ARCH
 ARG TAILSCALE_VERSION
 
+# Tải Tailscale và kiểm tra SHA-256 chính thức (file .sha256 cạnh mỗi gói): sai hash -> dừng build
 RUN apk add --no-cache \
     ca-certificates \
     iptables \
@@ -26,8 +27,15 @@ RUN apk add --no-cache \
        esac \
     && TS_VER="${TAILSCALE_VERSION#v}" \
     && echo "Downloading Tailscale v${TS_VER} for architecture: ${TS_ARCH}" \
-    && curl -sfL "https://pkgs.tailscale.com/stable/tailscale_${TS_VER}_${TS_ARCH}.tgz" \
-       | tar -xzf - -C /tmp \
+    && TGZ="tailscale_${TS_VER}_${TS_ARCH}.tgz" \
+    && curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/${TGZ}" "https://pkgs.tailscale.com/stable/${TGZ}" \
+    && EXPECTED="$( (curl -fsSL --retry 3 "https://pkgs.tailscale.com/stable/${TGZ}.sha256" || true) | awk '{print $1; exit}')" \
+    && if [ "${#EXPECTED}" -eq 64 ]; then \
+           echo "${EXPECTED}  /tmp/${TGZ}" | sha256sum -c - ; \
+       else \
+           echo "WARNING: official SHA-256 for ${TGZ} unavailable, checksum NOT verified" ; \
+       fi \
+    && tar -xzf "/tmp/${TGZ}" -C /tmp \
     && mv "/tmp/tailscale_${TS_VER}_${TS_ARCH}/tailscale" /usr/bin/tailscale \
     && mv "/tmp/tailscale_${TS_VER}_${TS_ARCH}/tailscaled" /usr/bin/tailscaled \
     && chmod a+x /usr/bin/tailscale /usr/bin/tailscaled \

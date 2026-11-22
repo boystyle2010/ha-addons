@@ -51,6 +51,9 @@ configuration:
   nginx_proxy_manager:
     name: Use Nginx Proxy Manager (local mode)
     description: "Sends unlisted hostnames to the official Nginx Proxy Manager add-on. Overrides the catch-all service."
+  overwrite_dns:
+    name: Overwrite existing DNS records (local mode)
+    description: "Off (recommended): an existing DNS record with the same name is left untouched and a warning is logged. On: it is replaced so it points to this tunnel."
   custom_flags:
     name: Custom cloudflared Flags
     description: "Extra command-line flags for cloudflared, one per item, for example --region=us. Do not repeat options that already have their own setting."

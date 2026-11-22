@@ -34,6 +34,7 @@ options:
   additional_hosts: []
   catch_all_service: "http_status:404"
   nginx_proxy_manager: false
+  overwrite_dns: false
   custom_flags: []
 schema:
   tunnel_token: "password?"
@@ -53,5 +54,6 @@ schema:
       http_host_header: "str?"
   catch_all_service: "str?"
   nginx_proxy_manager: "bool?"
+  overwrite_dns: "bool?"
   custom_flags:
     - "str"

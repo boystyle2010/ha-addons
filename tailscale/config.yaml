@@ -37,10 +37,9 @@ options:
   login_server: "https://controlplane.tailscale.com"
   accept_dns: false
   accept_routes: false
-  advertise_exit_node: true
+  advertise_exit_node: false
   advertise_connector: false
-  advertise_routes:
-    - "192.168.68.0/24"
+  advertise_routes: []
   advertise_tags: []
   exit_node: ""
   always_use_derp: false

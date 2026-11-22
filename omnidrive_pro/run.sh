@@ -37,6 +37,29 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGINT
 
+# Chạy một dịch vụ nền và tự khởi động lại nếu nó bị dừng/crash (watchdog của Supervisor chỉ kiểm tra cổng 8090).
+# Cách dùng: supervise "<tên>" <quiet:0|1> lệnh [tham số...]   -> PID của vòng giám sát nằm trong $SUPERVISE_PID
+supervise() {
+    local name="$1" quiet="$2"; shift 2
+    (
+        child=""
+        trap '[ -n "$child" ] && kill -TERM "$child" 2>/dev/null; wait 2>/dev/null; exit 0' TERM INT
+        delay=2
+        while true; do
+            started=$(date +%s)
+            if [ "$quiet" = "1" ]; then "$@" </dev/null >/dev/null 2>&1 & else "$@" </dev/null & fi
+            child=$!
+            rc=0; wait "$child" || rc=$?
+            child=""
+            # Crash ngay sau khi khởi động -> tăng dần thời gian chờ (tối đa 60s) để không spam log
+            if [ $(( $(date +%s) - started )) -lt 30 ]; then delay=$(( delay * 2 )); [ "$delay" -gt 60 ] && delay=60; else delay=2; fi
+            bashio::log.warning "${name} stopped (exit code ${rc}); restarting in ${delay}s..."
+            sleep "$delay" & wait $!
+        done
+    ) &
+    SUPERVISE_PID=$!
+}
+
 # 1. Read configuration from Home Assistant UI
 UNIFIED_ROOT=$(bashio::config 'unified_root')
 SMB_ENABLED=$(bashio::config 'smb_enabled')
@@ -128,12 +151,22 @@ fi
 
 cat << 'USEREOF' > /usr/local/bin/wpro_users.py
 #!/usr/bin/env python3
-import os, sys, json, hmac, hashlib, secrets, subprocess
+import os, sys, json, hmac, hashlib, secrets, subprocess, re, pwd
 
 CFG = "/data/options.json"
 ROOT_DIR = "/var/webdav_root"
 ITER = 600000
 SMB = os.environ.get("SMB_ENABLED_RESOLVED", "true") == "true"
+
+NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.@-]{0,31}$")
+
+def is_system_account(name):
+    # root, nginx, sshd, nobody... (UID < 1000 hoặc >= 60000) không bao giờ được dùng làm tài khoản OmniDrive
+    try:
+        uid = pwd.getpwnam(name).pw_uid
+        return uid < 1000 or uid >= 60000   # 65534 = nobody (dùng để chạy git an toàn)
+    except KeyError:
+        return False
 
 def log(msg): print("[INFO] " + msg, flush=True)
 def warn(msg): print("[WARN] " + msg, flush=True)
@@ -201,8 +234,10 @@ to_clear = []
 out = []
 for idx, u in enumerate(users):
     name = str(u.get("username", "")).strip()
-    if not name or ":" in name or "\n" in name or " " in name or len(name) > 32:
-        warn("Skipping invalid username %r" % name); continue
+    if not NAME_RE.match(name) or name.isdigit():
+        warn("Skipping invalid username %r (letters, digits, '_', '.', '-', '@', max 32 characters; must not start with '-' or '@' or be only digits)." % name); continue
+    if is_system_account(name):
+        warn("Skipping username %r: it is a reserved system account of the container (e.g. root, nginx, sshd). Choose another name." % name); continue
     raw_role = str(u.get("role") or "").strip().lower()
     if raw_role in ("admin", "user"):
         role = raw_role
@@ -406,8 +441,8 @@ EOF
    force group = root
 EOF
     done
-    smbd --foreground --no-process-group </dev/null >/dev/null 2>&1 &
-    SMBD_PID=$!
+    supervise "Samba (smbd)" 1 smbd --foreground --no-process-group
+    SMBD_PID=$SUPERVISE_PID
 fi
 
 # 5. Start SFTP / OpenSSH Server (Port 2222) - Chỉ cho phép tài khoản admin (AllowUsers)
@@ -427,8 +462,8 @@ AllowTcpForwarding no
 X11Forwarding no
 ForceCommand internal-sftp -d ${ROOT_DIR}
 EOF
-    /usr/sbin/sshd -D -e >/dev/null 2>&1 &
-    SSHD_PID=$!
+    supervise "SFTP (sshd)" 1 /usr/sbin/sshd -D -e
+    SSHD_PID=$SUPERVISE_PID
     bashio::log.info "SFTP enabled on port 2222 (Admin accounts only: ${ADMIN_USERS})."
 fi
 
@@ -507,8 +542,8 @@ EOF
     else
         bashio::log.warning "ftp_tls=off: FTP passwords and files are sent in clear text."
     fi
-    vsftpd /etc/vsftpd/vsftpd.conf >/dev/null 2>&1 &
-    VSFTPD_PID=$!
+    supervise "FTP (vsftpd)" 1 vsftpd /etc/vsftpd/vsftpd.conf
+    VSFTPD_PID=$SUPERVISE_PID
 fi
 
 # 7. SSL
@@ -1762,8 +1797,8 @@ if __name__ == "__main__":
 PYEOF
 chmod 700 /usr/local/bin/wpro_api.py
 
-python3 /usr/local/bin/wpro_api.py "${API_PORT}" &
-API_PID=$!
+supervise "OmniDrive API" 0 python3 /usr/local/bin/wpro_api.py "${API_PORT}"
+API_PID=$SUPERVISE_PID
 bashio::log.info "Started OmniDrive Pro API & RBAC Auth Engine on 127.0.0.1:${API_PORT}"
 
 # 10. Nginx Configuration (Chặn giả mạo X-WPro-Ingress trên cổng 8090 + Bảo vệ nginx.conf 0600)

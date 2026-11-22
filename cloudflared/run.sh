@@ -69,15 +69,42 @@ fi
 
 if bashio::config.has_value 'tunnel_token'; then
     bashio::log.info "Operating Mode: Remote Managed Tunnel (Zero Trust Token)"
-    ARGS+=("run" "--token" "${TOKEN}")
+    # Token qua biến môi trường thay vì dòng lệnh (không lộ trong danh sách tiến trình 'ps')
+    export TUNNEL_TOKEN="${TOKEN}"
+    ARGS+=("run")
 else
     bashio::log.info "Operating Mode: Local Configuration (managed by this add-on)"
-    CF_DIR="/share/cloudflared"
+    # Chứng chỉ đăng nhập Cloudflare (toàn quyền DNS/tunnel của tài khoản) và credentials được giữ trong /data,
+    # thư mục riêng của add-on, KHÔNG để trong /share (mọi add-on khác và người dùng Samba/WebDAV đều đọc được).
+    CF_DIR="/data/cloudflared"
     CF_HOME="${CF_DIR}/home"                       # cloudflared keeps its login certificate in $HOME/.cloudflared
     CERT_FILE="${CF_HOME}/.cloudflared/cert.pem"
     CRED_FILE="${CF_DIR}/credentials.json"
     CONFIG_FILE="${CF_DIR}/config.yml"
-    mkdir -p "${CF_DIR}" "${CF_HOME}"
+    mkdir -p "${CF_DIR}" "${CF_HOME}/.cloudflared"
+    chmod 700 "${CF_DIR}" "${CF_HOME}" "${CF_HOME}/.cloudflared"
+
+    # Chuyển dữ liệu cũ (hoặc credentials bạn tự đặt vào) từ /share/cloudflared sang /data/cloudflared
+    OLD_DIR="/share/cloudflared"
+    if [ -f "${OLD_DIR}/credentials.json" ]; then
+        if [ ! -f "${CRED_FILE}" ]; then
+            mv "${OLD_DIR}/credentials.json" "${CRED_FILE}"
+            bashio::log.notice "Moved ${OLD_DIR}/credentials.json to the add-on's private storage."
+        else
+            bashio::log.warning "${OLD_DIR}/credentials.json is ignored: the add-on already has a tunnel. Delete that file (it is readable by other add-ons)."
+        fi
+    fi
+    if [ -f "${OLD_DIR}/home/.cloudflared/cert.pem" ] && [ ! -f "${CERT_FILE}" ]; then
+        mv "${OLD_DIR}/home/.cloudflared/cert.pem" "${CERT_FILE}"
+        bashio::log.notice "Moved the Cloudflare login certificate out of ${OLD_DIR} to the add-on's private storage."
+    fi
+    if [ -d "${OLD_DIR}" ]; then
+        # Xóa phần còn lại (file JSON của tunnel, config.yml cũ) có chứa bí mật; giữ thư mục nếu người dùng còn file khác
+        rm -f "${OLD_DIR}/config.yml" "${OLD_DIR}"/home/.cloudflared/*.json 2>/dev/null || true
+        rmdir "${OLD_DIR}/home/.cloudflared" "${OLD_DIR}/home" "${OLD_DIR}" 2>/dev/null || true
+    fi
+    [ -f "${CRED_FILE}" ] && chmod 600 "${CRED_FILE}"
+    [ -f "${CERT_FILE}" ] && chmod 600 "${CERT_FILE}"
 
     EXT_HOST=$(bashio::config 'external_hostname')
     [ "${EXT_HOST}" = "null" ] && EXT_HOST=""
@@ -160,12 +187,19 @@ else
         echo "  - service: ${CATCH_ALL}" >> "${CONFIG_FILE}"
 
         # Step 3: point each hostname at the tunnel (needs the login certificate from step 1).
+        # An existing DNS record that points somewhere else is only replaced when overwrite_dns is enabled.
+        DNS_FLAGS=()
+        if bashio::config.true 'overwrite_dns'; then
+            DNS_FLAGS+=("--overwrite-dns")
+            bashio::log.warning "overwrite_dns is enabled: existing DNS records with the same names will be replaced."
+        fi
         if [ -f "${CERT_FILE}" ]; then
             for H in "${DNS_HOSTS[@]}"; do
-                if HOME="${CF_HOME}" cloudflared tunnel route dns --overwrite-dns "${TUNNEL_ID}" "${H}" >/dev/null 2>&1; then
+                if DNS_OUT=$(HOME="${CF_HOME}" cloudflared tunnel route dns "${DNS_FLAGS[@]}" "${TUNNEL_ID}" "${H}" 2>&1); then
                     bashio::log.info "DNS record ready: ${H}"
                 else
-                    bashio::log.warning "Could not set the DNS record for ${H}. Create a CNAME to ${TUNNEL_ID}.cfargotunnel.com yourself."
+                    bashio::log.warning "Could not set the DNS record for ${H}: $(printf '%s' "${DNS_OUT}" | tail -n 1)"
+                    bashio::log.warning "If a record with this name already exists, delete it in Cloudflare, enable overwrite_dns, or point it yourself (CNAME to ${TUNNEL_ID}.cfargotunnel.com)."
                 fi
             done
         else

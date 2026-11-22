@@ -21,8 +21,16 @@ RUN ARCH_CHECK="${TARGETARCH:-${BUILD_ARCH}}" && \
         *) echo "Unsupported architecture: ${ARCH_CHECK}" && exit 1 ;; \
     esac && \
     echo "Downloading Cloudflared v${CLOUDFLARED_VERSION} for architecture: ${CF_ARCH} (Host: ${ARCH_CHECK})" && \
-    curl -fL "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${CF_ARCH}" \
+    BIN="cloudflared-linux-${CF_ARCH}" && \
+    curl -fL --retry 5 --retry-delay 3 "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/${BIN}" \
     -o /usr/bin/cloudflared && \
+    EXPECTED="$( (curl -fsSL --retry 3 "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${CLOUDFLARED_VERSION}" || true) \
+        | jq -r '.body // ""' 2>/dev/null | tr -d '\r' | awk -v b="${BIN}:" '$1 == b {print $2; exit}')" && \
+    if [ "${#EXPECTED}" -eq 64 ]; then \
+        echo "${EXPECTED}  /usr/bin/cloudflared" | sha256sum -c - ; \
+    else \
+        echo "WARNING: SHA-256 for ${BIN} not found in the release notes, checksum NOT verified" ; \
+    fi && \
     chmod +x /usr/bin/cloudflared
 
 # Copy script khởi chạy và làm sạch định dạng dòng

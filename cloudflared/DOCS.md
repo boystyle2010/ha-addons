@@ -45,12 +45,12 @@ Use this mode when you prefer to keep the routes in the add-on options. The add-
 4. **First start only:** the log shows a Cloudflare login URL. Open it in a browser, log in and choose your domain. You have 10 minutes.
 5. The add-on creates the tunnel (named by `tunnel_name`), writes the routing file and creates a DNS record for every hostname.
 
-On later starts nothing needs to be repeated: the add-on reuses the tunnel and regenerates `/share/cloudflared/config.yml` from your options.
+On later starts nothing needs to be repeated: the add-on reuses the tunnel and regenerates `/data/cloudflared/config.yml` (private to the add-on) from your options.
 
 ```yaml
 # generated file (example)
 tunnel: <tunnel id>
-credentials-file: /share/cloudflared/credentials.json
+credentials-file: /data/cloudflared/credentials.json
 ingress:
   - hostname: "ha.example.com"
     service: http://homeassistant:8123
@@ -60,11 +60,11 @@ ingress:
 
 Good to know:
 
-- DNS records are created with Cloudflare's "overwrite" option. **An existing DNS record with the same name is replaced.**
+- An existing DNS record with the same name is **not** replaced by default: the log shows a warning and you decide (delete it in Cloudflare, or enable `overwrite_dns`).
 - If you only want to expose other services, leave `external_hostname` empty and fill `additional_hosts`.
 - If the login is not completed, the add-on stops with a message; restart it to get a new login URL.
-- The login certificate is kept in `/share/cloudflared/home/.cloudflared/cert.pem`. It lets the add-on manage DNS for your domain, and `/share` is visible to other add-ons. If you do not need automatic DNS updates after the first setup, delete that file; the tunnel keeps working and you manage DNS yourself.
-- Already have a tunnel? Copy its credentials file to `/share/cloudflared/credentials.json` and the add-on will use it without asking you to log in.
+- The login certificate (it can manage DNS and tunnels for your whole Cloudflare account) and the tunnel credentials are kept in the add-on's private storage (`/data/cloudflared`), not in `/share`, so other add-ons and file-sharing users cannot read them. Files left in `/share/cloudflared` by older versions are moved there automatically on the next start.
+- Already have a tunnel? Copy its credentials file to `/share/cloudflared/credentials.json`; on the next start the add-on moves it to its private storage and uses it without asking you to log in.
 
 ---
 
@@ -87,6 +87,7 @@ Good to know:
 | `additional_hosts` | `[]` | Local mode only. Extra hostnames routed to other services. |
 | `catch_all_service` | `http_status:404` | Local mode only. What happens to hostnames that are not listed above. The default answers `404`, so only the hostnames you configured work. Set a URL such as `http://192.168.1.10` to forward them instead. |
 | `nginx_proxy_manager` | `false` | Local mode only. Sends unlisted hostnames to the official Nginx Proxy Manager add-on (overrides `catch_all_service`). |
+| `overwrite_dns` | `false` | Local mode only. Replace an existing DNS record with the same name so it points to this tunnel. Off by default so a record you created by hand is never overwritten silently. |
 | `custom_flags` | `[]` | Extra command-line flags passed to `cloudflared`. |
 
 ### `additional_hosts`
@@ -135,8 +136,8 @@ Do not repeat options that already have their own setting here (`--protocol`, `-
 cloudflared tunnel --no-autoupdate --protocol <protocol> --loglevel <log_level>
   --edge-ip-version <auto|4|6> --retries <retries> --grace-period <grace_period>
   --metrics <address> [--post-quantum] [custom_flags...]
-  run --token <token>          # remote mode
-  --config /share/cloudflared/config.yml run   # local mode
+  run                          # remote mode (token passed as TUNNEL_TOKEN, not on the command line)
+  --config /data/cloudflared/config.yml run    # local mode
 ```
 
 ---
@@ -160,7 +161,8 @@ http:
 
 | Path | Access | Purpose |
 | :--- | :--- | :--- |
-| `/share/cloudflared/` | read/write | Local mode: `config.yml`, `credentials.json` and the login certificate (see above) |
+| `/data/cloudflared/` | private | Local mode: `config.yml`, `credentials.json` and the login certificate (see above) |
+| `/share/cloudflared/` | read/write | Only used to import a `credentials.json` you copy there (moved to `/data` on start) |
 | `/ssl` | read-only | Available for certificates if you need them in `custom_flags` |
 | `2000/tcp` | optional | Metrics port you can publish in the Network section (see `metrics_port`) |
 

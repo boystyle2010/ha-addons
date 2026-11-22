@@ -51,6 +51,9 @@ configuration:
   nginx_proxy_manager:
     name: Dùng Nginx Proxy Manager (chế độ cục bộ)
     description: "Chuyển các tên miền chưa khai báo sang add-on Nginx Proxy Manager chính thức. Ghi đè dịch vụ mặc định."
+  overwrite_dns:
+    name: Ghi đè bản ghi DNS đã có (chế độ cục bộ)
+    description: "Tắt (khuyên dùng): bản ghi DNS trùng tên đã tồn tại được giữ nguyên và log sẽ cảnh báo. Bật: bản ghi đó bị thay để trỏ về tunnel này."
   custom_flags:
     name: Cờ cloudflared tuỳ chỉnh
     description: "Các cờ dòng lệnh bổ sung cho cloudflared, mỗi mục một cờ, ví dụ --region=us. Không lặp lại các tuỳ chọn đã có cài đặt riêng."

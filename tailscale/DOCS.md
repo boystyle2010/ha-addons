@@ -37,9 +37,9 @@ cannot use the same network interface, and the second one fails with
 | Login server | Tailscale default | Control server. Change only for self-hosted setups such as Headscale |
 | Accept DNS | off | Use your tailnet DNS settings on this device |
 | Accept routes | off | Accept subnet routes from other devices |
-| Advertise as an exit node | on | Offer this device as an exit node |
+| Advertise as an exit node | off | Offer this device as an exit node (turn on only if you want other devices to send their internet traffic through Home Assistant) |
 | Advertise as an app connector | off | Act as an app connector |
-| Advertise subnet routes | 192.168.68.0/24 | Local subnets to share with your tailnet |
+| Advertise subnet routes | none | Local subnets to share with your tailnet, for example `192.168.1.0/24` |
 | Advertise tags | none | ACL tags, each starting with `tag:` |
 | Use an exit node | empty | Tailscale IP of an exit node to use |
 | Always use DERP connection | off | Force relayed traffic, for troubleshooting only |
@@ -98,6 +98,14 @@ only works on ports 443, 8443 and 10000.
 
 Be careful with Funnel: it exposes your Home Assistant login page to the
 whole internet. Use strong passwords and two-factor authentication.
+
+## Taildrive and folder access
+
+Taildrive can share Home Assistant folders (`config`, `addons`, `addon_configs`, `backup`, `media`, `share`, `ssl`) with your tailnet. Home Assistant only lets an add-on reach the folders it declares, so this add-on declares all of them, even though every Taildrive share is **off** by default. Nothing is shared until you turn a share on in the configuration.
+
+Who may read or write a share is decided by your Tailscale access rules (the `tailscale.com/cap/drive` grant). Give `ro` (read-only) access unless a device really needs to change files, especially for `config`, `addons` and `addon_configs`: write access there means control of Home Assistant.
+
+Taildrop files (when `taildrop` is on) are saved in `/share/taildrop`.
 
 ## Health monitor
 
