@@ -8,7 +8,7 @@ ARG BUILD_ARCH
 ARG TAILSCALE_VERSION
 
 # Tải Tailscale và kiểm tra SHA-256 chính thức (file .sha256 cạnh mỗi gói): sai hash -> dừng build
-RUN apk add --no-cache \
+RUN apk upgrade --no-cache && apk add --no-cache \
     ca-certificates \
     iptables \
     ip6tables \

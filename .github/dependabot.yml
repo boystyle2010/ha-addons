@@ -1,9 +1,0 @@
-# Giữ các GitHub Action (đã ghim theo commit SHA) luôn được cập nhật bản vá bảo mật
-version: 2
-updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "ci"

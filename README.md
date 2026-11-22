@@ -86,6 +86,26 @@ The GitHub Actions pipeline in this repository runs fully automatically under th
 - **Patch version bump (`3.0.0` ➔ `3.0.1`):** When configuration, scripts, translations, or the internal UI of the repository are updated.
 - **Zero-Broken-Build & Visual Dashboard:** Every update is verified with a full Docker build (`docker build`) and a visual report is published to the GitHub Actions Summary before the release commit is pushed to the `main` branch.
 
+### 🤖 Automatic maintenance (no pull requests)
+
+Everything below runs on a schedule and commits straight to `main`:
+
+| What | When | How it stays safe |
+| :--- | :--- | :--- |
+| Home Assistant base image, Alpine, Cloudflared, Tailscale, nginx | every 6 h / daily | Each workflow builds both architectures before releasing |
+| **Alpine security patches** for OmniDrive (Samba, OpenSSH, vsftpd, OpenSSL, Python…) | daily | A fingerprint of the package versions changes → image rebuilt with `apk upgrade`, patch release |
+| **Web UI libraries** of OmniDrive (`omnidrive_pro/vendor-fetch.sh`: Ace, marked, DOMPurify, js-yaml, JSZip, pdf.js, xterm.js) | daily | New version is checksum-verified against npm, then a headless-browser test opens the real UI (editor, YAML linter, PDF, ZIP, Markdown, terminal). If the newest major fails, the newest version of the same major is tried; if that fails too, nothing changes |
+| **GitHub Actions** used by the workflows (pinned by commit SHA) | weekly (Monday) | Only updated when the new release runs on Node.js 24+ and still has every input/output the workflows use |
+
+**One-time setup for GitHub Actions updates.** GitHub does not allow the built-in token to edit files in `.github/workflows/`, so this one job needs a token of its own:
+
+1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Repository access: **Only select repositories** → `ha-addons`.
+3. Permissions: **Contents: Read and write** and **Workflows: Read and write**. Pick an expiration date you will remember to renew.
+4. In this repository: **Settings → Secrets and variables → Actions → New repository secret**, name `WORKFLOW_TOKEN`, paste the token.
+
+Without the secret the weekly job still checks and reports new versions in its summary, but does not commit them.
+
 ---
 
 ## 🛠️ Installation Guide for Home Assistant
