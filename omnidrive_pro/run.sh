@@ -53,9 +53,18 @@ ROOT_ACCESS=$(bashio::config 'root_access')
 ENABLE_TERMINAL=$(bashio::config 'enable_terminal')
 LOCK_ROOT=$(bashio::config 'lock_root')
 TRUSTED_PROXIES=$(bashio::config 'trusted_proxies' 2>/dev/null || true)
-if [ -z "$TRUSTED_PROXIES" ] || [ "$TRUSTED_PROXIES" = "null" ]; then TRUSTED_PROXIES="172.16.0.0/12,127.0.0.0/8"; fi
+if [ -z "$TRUSTED_PROXIES" ] || [ "$TRUSTED_PROXIES" = "null" ]; then TRUSTED_PROXIES="172.30.33.0/24,127.0.0.1"; fi
+# Giá trị mặc định cũ (172.16.0.0/12) tin cả gateway Docker -> client LAN có thể giả mạo X-Forwarded-For
+if [ "${TRUSTED_PROXIES// /}" = "172.16.0.0/12,127.0.0.0/8" ]; then
+    TRUSTED_PROXIES="172.30.33.0/24,127.0.0.1"
+    bashio::log.warning "trusted_proxies still had the old, too broad default (172.16.0.0/12). Using ${TRUSTED_PROXIES} (Home Assistant add-ons such as Cloudflared / NPM) instead. Set it explicitly to override."
+fi
 
 export ROOT_ACCESS ENABLE_TERMINAL LOCK_ROOT
+
+# Không cho tiến trình không phải root (Web Terminal) đọc token Supervisor hay mật khẩu trong options.json
+chmod -R go-rwx /run/s6/container_environment 2>/dev/null || true
+chmod 600 "$CONFIG_PATH" 2>/dev/null || true
 
 # Thông tin hiển thị trong "Connect Hub" (footer.html đọc qua /__wpro_api/protocols)
 LAN_IP=$(bashio::config 'lan_ip' 2>/dev/null || true)
@@ -241,6 +250,14 @@ for idx, u in enumerate(users):
 if not out:
     print("[ERROR] you must define at least one account under 'users' in the add-on configuration"); sys.exit(1)
 
+# Từ chối khởi động khi còn mật khẩu mặc định (đã công khai trong tài liệu)
+default_users = [e["username"] for e in out if check_hash(e["password_hash"], "changeme_strong_password")]
+if default_users:
+    print("[ERROR] Account(s) %s still use the DEFAULT password 'changeme_strong_password'. "
+          "For your safety OmniDrive Pro will not start with it: open the add-on Configuration tab, "
+          "enter a new password for these users and restart the add-on." % ", ".join(default_users), flush=True)
+    sys.exit(3)
+
 # Đảm bảo luôn có ít nhất 1 admin
 if not any(e.get("role") == "admin" for e in out):
     out[0]["role"] = "admin"
@@ -271,9 +288,6 @@ try:
         os.remove(CLEAR_FILE)
 except Exception:
     pass
-
-if any(check_hash(e["password_hash"], "changeme_strong_password") for e in out):
-    warn("A user still has the DEFAULT password 'changeme_strong_password'. Change it (Web UI > Change Password, or enter a new one in the add-on configuration) now!")
 
 for e in out:
     name = e["username"]
@@ -308,7 +322,7 @@ for e in out:
     log("Provisioned account: %s (role=%s, status=%s)" % (name, e["role"], status.get(name, "?")))
 USEREOF
 
-SMB_ENABLED_RESOLVED="$SMB_ENABLED" python3 /usr/local/bin/wpro_users.py || bashio::exit.nok "Account provisioning failed."
+SMB_ENABLED_RESOLVED="$SMB_ENABLED" python3 /usr/local/bin/wpro_users.py || bashio::exit.nok "Account provisioning failed (see the error above)."
 
 ADMIN_USERS=$(cat /data/wpro/admin_users.txt 2>/dev/null | tr -s ' ' | xargs || true)
 ALL_USERS=$(cat /data/wpro/all_users.txt 2>/dev/null | tr -s ' ' | xargs || true)
@@ -558,7 +572,7 @@ git config --system --add safe.directory '*' || true
 # 9. Python API (RBAC Hardened + Share-Boundary Isolation)
 cat << 'PYEOF' > /usr/local/bin/wpro_api.py
 #!/usr/bin/env python3
-import os, sys, json, time, hmac, hashlib, base64, shutil, secrets, tempfile, subprocess, threading, html, urllib.parse
+import os, sys, json, time, hmac, hashlib, base64, shutil, secrets, tempfile, subprocess, threading, html, urllib.parse, posixpath
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from datetime import datetime
@@ -639,6 +653,12 @@ def user_allowed_shares(username):
     smap = get_share_map()
     return [name for name in smap if user_can_access_share(username, name, write=False)]
 
+def norm_req_path(raw):
+    # Chuẩn hóa đường dẫn y như Nginx (decode %XX, gộp '//', xử lý '.' và '..') để kiểm tra quyền
+    # trên đúng đường dẫn mà Nginx sẽ phục vụ (chống bypass kiểu /media/../config/...)
+    p = urllib.parse.unquote(str(raw or "/").split("?", 1)[0].split("#", 1)[0])
+    return posixpath.normpath("/" + p.lstrip("/"))
+
 def safe_resolve(rel_path):
     clean = urllib.parse.unquote(rel_path or "/").lstrip("/")
     full = os.path.normpath(os.path.join(ROOT_DIR, clean))
@@ -670,7 +690,14 @@ PW_CACHE_TTL = 300
 PW_CACHE_LOCK = threading.Lock()
 _DUMMY_HASH = "pbkdf2_sha512$600000$" + "00" * 16 + "$" + "00" * 64
 
+PBKDF2_SEM = threading.BoundedSemaphore(2)
+
 def _pbkdf2_check(stored, password):
+    # Giới hạn số phép băm chạy đồng thời: tránh làm treo CPU khi bị dò mật khẩu hàng loạt
+    with PBKDF2_SEM:
+        return _pbkdf2_check_raw(stored, password)
+
+def _pbkdf2_check_raw(stored, password):
     try:
         algo, it, salt, h = stored.split("$")
         if algo not in ("pbkdf2_sha256", "pbkdf2_sha512"): return False
@@ -730,8 +757,10 @@ def run_as_kwargs():
     if RUN_AS_ROOT: return {}
     return {"user": RUN_UID, "group": RUN_GID, "extra_groups": []}
 
+SECRET_ENV = ("SUPERVISOR_TOKEN", "HASSIO_TOKEN", "INGRESS_TOKEN")
+
 def child_env():
-    env = dict(os.environ)
+    env = {k: v for k, v in os.environ.items() if k not in SECRET_ENV}
     if not RUN_AS_ROOT: env["HOME"] = "/tmp"
     return env
 
@@ -967,6 +996,17 @@ def perm_apply(username, rel, mode_str, recursive, scope, owner, group):
             failed += 1
     return {"ok": True, "changed": changed, "failed": failed, "mode": "%04o" % mode}
 
+GIT_HARDEN = ["git", "-c", "safe.directory=*", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+              "-c", "core.untrackedCache=false", "--no-optional-locks"]
+
+def git_out(args, timeout):
+    # Không bao giờ chạy git bằng root trên thư mục người dùng kiểm soát: .git/config độc hại
+    # (core.fsmonitor, filter.*.clean...) có thể thực thi lệnh. Chạy bằng 'nobody', tắt hook/fsmonitor.
+    env = {"PATH": os.environ.get("PATH", "/usr/sbin:/usr/bin:/sbin:/bin"), "HOME": "/tmp",
+           "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+    return subprocess.check_output(GIT_HARDEN + args, stderr=subprocess.DEVNULL, timeout=timeout, env=env, cwd="/tmp",
+                                   user=65534, group=65534, extra_groups=[]).decode()
+
 def dir_size_du(path):
     try: return int(subprocess.check_output(["du", "-sk", path], stderr=subprocess.DEVNULL, timeout=8).decode().split()[0]) * 1024
     except: return 0
@@ -1096,6 +1136,8 @@ def zip_job_create(user, raw_paths):
         ZIP_JOBS[tok] = {"user": user, "paths": raw_paths, "exp": now + 120}
     return tok, plan
 
+MAX_JSON_BODY = 1024 * 1024
+
 class WProHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args): return
     def client_ip(self): return self.headers.get("X-Real-IP", self.client_address[0])
@@ -1215,7 +1257,7 @@ button:active { transform:scale(.98); }
         try:
             if not RUN_AS_ROOT: os.chown(tmpdir, RUN_UID, RUN_GID)
             tmp_zip = os.path.join(tmpdir, "selection.zip")
-            subprocess.run(["zip", "-r", "-q", "-1", tmp_zip] + ["./" + n for n in names], cwd=parent, check=False, timeout=900, **run_as_kwargs())
+            subprocess.run(["zip", "-r", "-y", "-q", "-1", tmp_zip] + ["./" + n for n in names], cwd=parent, check=False, timeout=900, **run_as_kwargs())
             if not os.path.exists(tmp_zip):
                 self.share_gone(500, b"Could not create the zip file."); return
             zname = ((os.path.basename(parent) or "files") + "_" + str(len(names)) + "_items.zip")
@@ -1263,7 +1305,7 @@ button:active { transform:scale(.98); }
                 try:
                     if not RUN_AS_ROOT: os.chown(tmpdir, RUN_UID, RUN_GID)
                     tmp_zip = os.path.join(tmpdir, "share.zip")
-                    subprocess.run(["zip", "-r", "-q", tmp_zip, ".", "-x", "*.db*", "*.log*"], cwd=target, check=False, timeout=90, **run_as_kwargs())
+                    subprocess.run(["zip", "-r", "-y", "-q", tmp_zip, ".", "-x", "*.db*", "*.log*"], cwd=target, check=False, timeout=90, **run_as_kwargs())
                     fsize = os.path.getsize(tmp_zip)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/zip")
@@ -1306,9 +1348,11 @@ button:active { transform:scale(.98); }
         self.serve_share(token, info)
 
     def read_json_body(self):
-        length = int(self.headers.get("Content-Length", "0"))
+        length = int(self.headers.get("Content-Length", "0") or 0)
         if length <= 0: return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
+        if length > MAX_JSON_BODY: raise ValueError("Request body too large")
+        data = json.loads(self.rfile.read(length).decode("utf-8"))
+        return data if isinstance(data, dict) else {}
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -1323,10 +1367,10 @@ button:active { transform:scale(.98); }
                 return
             orig_uri = self.headers.get("X-Original-URI", "/")
             orig_method = self.headers.get("X-Original-Method", "GET").upper()
-            orig_path = urllib.parse.unquote(orig_uri.split("?", 1)[0])
+            orig_path = norm_req_path(orig_uri)
             is_write = orig_method in ("PUT", "DELETE", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK", "PATCH")
             # Cho phép đi qua các đường dẫn nội bộ (sẽ kiểm tra quyền chi tiết bên trong từng endpoint)
-            if orig_path.startswith("/__wpro_api/") or orig_path.startswith("/.fancyindex/") or orig_path.startswith("/s/"):
+            if any(orig_path == pre or orig_path.startswith(pre + "/") for pre in ("/__wpro_api", "/.fancyindex", "/s")):
                 self.send_response(200)
                 self.send_header("X-WPro-User", user)
                 self.end_headers()
@@ -1343,7 +1387,7 @@ button:active { transform:scale(.98); }
                 if orig_method in ("COPY", "MOVE"):
                     dest_hdr = self.headers.get("X-Original-Destination", "")
                     if dest_hdr:
-                        dest_path = urllib.parse.unquote(urllib.parse.urlparse(dest_hdr).path).lstrip("/")
+                        dest_path = norm_req_path(urllib.parse.urlparse(dest_hdr).path).lstrip("/")
                         dest_share = dest_path.split("/", 1)[0] if dest_path else ""
                         if not dest_share or not user_can_access_share(user, dest_share, write=True):
                             self.send_response(403)
@@ -1432,9 +1476,9 @@ button:active { transform:scale(.98); }
             try:
                 target = os.path.realpath(verify_user_path(user, rel, write=False))
                 if not os.path.isdir(target): target = os.path.dirname(target)
-                top = subprocess.check_output(["git", "-C", target, "rev-parse", "--show-toplevel"], stderr=subprocess.DEVNULL, timeout=4).decode().strip()
-                branch = subprocess.check_output(["git", "-C", target, "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL, timeout=4).decode().strip()
-                porcelain = subprocess.check_output(["git", "-C", target, "status", "--porcelain", "-uall"], stderr=subprocess.DEVNULL, timeout=5).decode()
+                top = git_out(["-C", target, "rev-parse", "--show-toplevel"], 4).strip()
+                branch = git_out(["-C", target, "rev-parse", "--abbrev-ref", "HEAD"], 4).strip()
+                porcelain = git_out(["-C", target, "status", "--porcelain", "-uall", "--ignore-submodules=all"], 5)
                 rel_from_top = os.path.relpath(target, top)
                 prefix = "" if rel_from_top == "." else rel_from_top.rstrip("/") + "/"
                 statuses = {}
@@ -1494,7 +1538,11 @@ button:active { transform:scale(.98); }
         route = parsed.path
         if route.startswith("/s/"): self.handle_share_post(route); return
         if self.headers.get("X-WPro-CSRF") != "1": self.send_json({"ok": False, "error": "Missing CSRF header"}, 403); return
-        body = self.read_json_body()
+        try:
+            body = self.read_json_body()
+        except Exception:
+            self.close_connection = True
+            self.send_json({"ok": False, "error": "Invalid or too large request body"}, 413); return
 
         if route == "/__wpro_api/login":
             uname = body.get("username", "").strip()
@@ -1608,23 +1656,23 @@ button:active { transform:scale(.98); }
             try:
                 if target_mode == "automations" and os.path.exists(cfg_dir):
                     zip_name = f"quick_automations_{stamp}.zip"; zip_path = os.path.join(backup_dir, zip_name)
-                    cmd = ["zip", "-r", "-q", zip_path, "automations.yaml", "scripts.yaml", "scenes.yaml", "configuration.yaml", "automations", "packages"]
+                    cmd = ["zip", "-r", "-y", "-q", zip_path, "automations.yaml", "scripts.yaml", "scenes.yaml", "configuration.yaml", "automations", "packages"]
                     subprocess.run(cmd, cwd=cfg_dir, check=False, timeout=60, **run_as_kwargs())
                 elif target_mode == "storage":
                     zip_name = f"backup_storage_{stamp}.zip"; zip_path = os.path.join(backup_dir, zip_name)
                     storage_dir = os.path.realpath(os.path.join(ROOT_DIR, "storage"))
-                    cmd = ["zip", "-r", "-q", zip_path, ".", "-x", "backup/*", "*.db*", "*.log*"]
+                    cmd = ["zip", "-r", "-y", "-q", zip_path, ".", "-x", "backup/*", "*.db*", "*.log*"]
                     subprocess.run(cmd, cwd=storage_dir, check=False, timeout=120, **run_as_kwargs())
                 elif target_mode == "current":
                     cwd_rel = body.get("cwd", "/")
                     current_dir = os.path.realpath(verify_user_path(user, cwd_rel, write=False))
                     if not os.path.isdir(current_dir): raise Exception("Current folder is not valid.")
                     zip_name = f"backup_current_{stamp}.zip"; zip_path = os.path.join(backup_dir, zip_name)
-                    cmd = ["zip", "-r", "-q", zip_path, ".", "-x", "backup/*", "*.db*", "*.log*"]
+                    cmd = ["zip", "-r", "-y", "-q", zip_path, ".", "-x", "backup/*", "*.db*", "*.log*"]
                     subprocess.run(cmd, cwd=current_dir, check=False, timeout=120, **run_as_kwargs())
                 else:
                     zip_name = f"quick_snapshot_{stamp}.zip"; zip_path = os.path.join(backup_dir, zip_name)
-                    cmd = ["zip", "-r", "-q", zip_path, ".", "-x", "backup/*", "*.db*", "*.log*"]
+                    cmd = ["zip", "-r", "-y", "-q", zip_path, ".", "-x", "backup/*", "*.db*", "*.log*"]
                     subprocess.run(cmd, cwd=cfg_dir, check=False, timeout=120, **run_as_kwargs())
 
                 size_kb = round(os.path.getsize(zip_path) / 1024, 1) if os.path.exists(zip_path) else 0
@@ -1761,6 +1809,9 @@ http {
     map \$is_browser_client \$dav_www_auth { 1 ""; 0 'Basic realm="OmniDrive Pro WebDAV"'; }
 
     log_format wpro_audit escape=json '{"time":"\$time_iso8601","user":"\$upstream_http_x_wpro_user","ip":"\$remote_addr","method":"\$request_method","path":"\$uri","status":\$status}';
+    # File người dùng tải lên có thể chứa script (HTML/SVG/XML/JS): bắt buộc tải về thay vì hiển thị trên cùng origin với giao diện
+    map \$uri \$wpro_force_dl { default ""; "~*\.(html?|xht|xhtml|shtml|svgz?|xml|xsl|xslt|js|mjs)\$" "attachment"; }
+
     map \$request_method \$is_mutating_or_dl { default 0; PUT 1; DELETE 1; MKCOL 1; COPY 1; MOVE 1; GET 1; }
 
     access_log /dev/stdout;
@@ -1783,11 +1834,14 @@ http {
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
         location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
         location ^~ /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
-        location ^~ /__wpro_api/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress "${INGRESS_TOKEN}"; proxy_read_timeout 600s; access_log off; }
-        location ^~ /s/ { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; }
+        location ^~ /__wpro_api/ { client_max_body_size 1m; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress "${INGRESS_TOKEN}"; proxy_read_timeout 600s; access_log off; }
+        location ^~ /s/ { client_max_body_size 16k; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; }
         location / {
             root ${ROOT_DIR};
             index __omnidrive_no_index__;
+            add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Content-Disposition \$wpro_force_dl always;
             ${INDEX_CONFIG}
 ${ROOT_LOCK_RULES}
             dav_methods PUT DELETE MKCOL COPY MOVE;
@@ -1807,8 +1861,8 @@ ${ROOT_LOCK_RULES}
         add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
         location ^~ /.fancyindex/vendor/ { alias /usr/share/nginx/fancyindex/vendor/; access_log off; gzip on; gzip_types application/javascript text/css; gzip_min_length 1024; add_header Cache-Control "public, max-age=604800" always; }
         location ^~ /.fancyindex/ { alias /usr/share/nginx/fancyindex/; access_log off; }
-        location = /__wpro_api/login { limit_req zone=dav_auth_limit burst=15 nodelay; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; access_log off; }
-        location = /__wpro_api/logout { proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-WPro-Ingress ""; access_log off; }
+        location = /__wpro_api/login { client_max_body_size 16k; limit_req zone=dav_auth_limit burst=15 nodelay; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; access_log off; }
+        location = /__wpro_api/logout { client_max_body_size 16k; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; access_log off; }
         location = /__wpro_auth_check {
             internal;
             proxy_pass http://127.0.0.1:${API_PORT}/__wpro_api/auth_check;
@@ -1827,8 +1881,8 @@ ${ROOT_LOCK_RULES}
             if (\$is_browser_client = 1) { return 302 /.fancyindex/login.html?rd=\$request_uri; }
             return 401 "Authentication required";
         }
-        location ^~ /s/ { limit_req zone=share_limit burst=15 nodelay; limit_req_status 429; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; }
-        location ^~ /__wpro_api/ { auth_request /__wpro_auth_check; error_page 401 = @login_or_basic; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; proxy_read_timeout 600s; access_log off; }
+        location ^~ /s/ { client_max_body_size 16k; limit_req zone=share_limit burst=15 nodelay; limit_req_status 429; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; }
+        location ^~ /__wpro_api/ { client_max_body_size 1m; auth_request /__wpro_auth_check; error_page 401 = @login_or_basic; proxy_pass http://127.0.0.1:${API_PORT}; proxy_set_header Host \$host; proxy_set_header X-Real-IP \$remote_addr; proxy_set_header X-WPro-Ingress ""; proxy_read_timeout 600s; access_log off; }
         ${DOTFILES_RULE}
         location / {
             limit_req zone=dav_auth_limit burst=40 nodelay;
@@ -1836,6 +1890,9 @@ ${ROOT_LOCK_RULES}
             error_page 401 = @login_or_basic;
             root ${ROOT_DIR};
             index __omnidrive_no_index__;
+            add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Content-Disposition \$wpro_force_dl always;
             ${INDEX_CONFIG}
 ${ROOT_LOCK_RULES}
             dav_methods PUT DELETE MKCOL COPY MOVE;

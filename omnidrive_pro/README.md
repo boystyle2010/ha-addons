@@ -19,7 +19,7 @@ This add-on tracks official Alpine Linux and Nginx upstream releases and updates
 
 ## ⚠️ Read before you start
 
-> 1. **Change the default password.** The default password is public (`changeme_strong_password`). Anyone who guesses it gets access to your HA configuration files and terminal. Change it in the **Add-on Configuration** tab.
+> 1. **Change the default password.** The default password is public (`changeme_strong_password`). Anyone who guesses it gets access to your HA configuration files and terminal. Change it in the **Add-on Configuration** tab — the add-on will not start until you do.
 > 2. **Root Access and Web Terminal are powerful.** By default, `root_access` is `false` and `enable_terminal` is `true`. If you enable `root_access`, file operations run as root. If you use the Web Terminal, you can execute root commands inside the container. Ensure your Home Assistant instance is not exposed directly to the internet without strong authentication (e.g., use Cloudflare Zero Trust or a VPN).
 > 3. **Check ports.** This add-on requires ports `8090`, `445`, `2222`, `2121`, and `21000-21002`. If Samba (`445`) is already used by another add-on or the host, change the port mapping.
 > 4. **How passwords work.** Change your password in the Web UI (**Security → Change Password**): it applies at once to every protocol, no restart needed. In the Add-on **Configuration** tab the password box is **empty = keep the current password** (the add-on empties it for you after applying). Type a password there only to create a user or to **reset** a password, then restart the add-on. If a password is still visible in that box, it has not been replaced yet. Details in `DOCS.md`.

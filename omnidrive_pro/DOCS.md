@@ -96,7 +96,7 @@ The second action bar in the Web UI provides five dedicated system administratio
 | `public_url` | `""` | WebDAV address shown in the Connect Hub (e.g. `https://drive.example.com`). Empty = the address you are browsing from. |
 | `ftp_pasv_address` | `""` | LAN IP announced to FTP clients in passive mode. Empty = the detected LAN IP. A wrong value makes FTP clients hang when listing folders. |
 | `ftp_tls` | `optional` | `optional` = FTPS when the client asks, plain FTP still works. `required` = plain FTP refused. `off` = no encryption. The certificate is generated automatically (or taken from `/ssl`). |
-| `trusted_proxies` | `172.16.0.0/12,127.0.0.0/8` | Reverse proxies / Cloudflare Tunnel allowed to tell the add-on the real client IP (audit log, rate limits, login lockout). `none` disables it. |
+| `trusted_proxies` | `172.30.33.0/24,127.0.0.1` | Reverse proxies / Cloudflare Tunnel allowed to tell the add-on the real client IP (audit log, rate limits, login lockout). `none` disables it. |
 | `share_zip_max_mb` | `2048` | Largest folder (MB) that can be downloaded as a zip through a share link. |
 | `users` | `[...]` | List of `{ username, password }` accounts shared by all protocols. Password box: empty = keep, typed = create/reset (see section 4). |
 | `shares` | `[...]` | List of mapped Home Assistant directories (`config`, `addon_configs`, `addons`, `backup`, `media`, `share`, `ssl`). |
@@ -105,7 +105,7 @@ The second action bar in the Web UI provides five dedicated system administratio
 
 ## 🔑 4. Password Management in Home Assistant
 
-1. **First start.** The default account is `admin` with the password `changeme_strong_password`. Set your own password in the **Configuration** tab before the first start, or change it later in the Web UI. The password is never stored as plain text: the Web UI and WebDAV use a salted PBKDF2-HMAC-SHA512 hash (600,000 iterations), and the SFTP/FTP system accounts use a SHA-512 hash generated with OpenSSL (`openssl passwd -6`). SMB keeps the NT hash required by Samba. The add-on stores them itself; every protocol (Web UI, WebDAV, SMB, SFTP, FTP) uses it.
+1. **First start.** The default account is `admin` with the password `changeme_strong_password`. Set your own password in the **Configuration** tab before the first start: **the add-on refuses to start while any account still uses this default password** (the log names the accounts). The password is never stored as plain text: the Web UI and WebDAV use a salted PBKDF2-HMAC-SHA512 hash (600,000 iterations), and the SFTP/FTP system accounts use a SHA-512 hash generated with OpenSSL (`openssl passwd -6`). SMB keeps the NT hash required by Samba. The add-on stores them itself; every protocol (Web UI, WebDAV, SMB, SFTP, FTP) uses it.
 2. **Change it in the Web UI (recommended).** **Security → Change Password** takes effect immediately on all protocols. No restart is needed. Your other signed-in devices are signed out.
 3. **The password box in the Configuration tab.** It follows one simple rule:
    - **Empty = keep the current password.** After applying a password, the add-on empties the box by itself. An empty box is the normal state, so you do not need to put anything there.

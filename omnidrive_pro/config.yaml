@@ -59,7 +59,7 @@ options:
   public_url: ""
   ftp_pasv_address: ""
   ftp_tls: "optional"
-  trusted_proxies: "172.16.0.0/12,127.0.0.0/8"
+  trusted_proxies: "172.30.33.0/24,127.0.0.1"
   share_zip_max_mb: 2048
   users:
     - username: "admin"
