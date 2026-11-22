@@ -598,7 +598,7 @@ jobs:
 
       - name: Build and Push aarch64 (arm64) Package for HASS
         if: steps.apply_step.outputs.should_release == 'true'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: cloudflared
           file: cloudflared/Dockerfile
@@ -618,7 +618,7 @@ jobs:
 
       - name: Build and Push amd64 Package for HASS
         if: steps.apply_step.outputs.should_release == 'true'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: cloudflared
           file: cloudflared/Dockerfile
