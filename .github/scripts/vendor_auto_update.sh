@@ -63,8 +63,12 @@ else
     # Báo các bản major chưa dùng được (để biết, không làm gì thêm)
     PENDING="$(cp "$WORK/orig.sh" "$WORK/probe.sh" && python3 "$HERE/update_vendor.py" plan --policy latest --file "$WORK/probe.sh" 2>/dev/null \
         | python3 -c 'import json,sys; print(", ".join("%s %s" % (c["package"], c["to"]) for c in json.load(sys.stdin) if c["major"]))' 2>/dev/null)"
-    [ -n "$PENDING" ] && echo "ℹ️ Newer major versions exist but did not pass the build/UI test, kept current: ${PENDING}"
-    echo "Front-end libraries: no compatible update."
+    if [ "$rc" = 2 ]; then
+        echo "✅ Front-end libraries: all already at their latest version."
+    else
+        [ -n "$PENDING" ] && echo "ℹ️ Newer major versions exist but did not pass the build/UI test, kept current: ${PENDING}"
+        echo "⚠️ Front-end libraries: an update exists but did not pass the build/UI test; kept the current versions."
+    fi
     echo "vendor_changed=false" >> "$OUT"
 fi
 rm -rf "$WORK"
