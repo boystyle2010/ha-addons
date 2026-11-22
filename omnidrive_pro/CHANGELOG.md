@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.0.1
+_Released: 2026-11-22_
+
+### 📦 Component & Version Matrix
+- **Add-on Release:** Bumped from `v2.0.0` ➡️ **`v2.0.1`**
+- **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64) *(Pre-built GHCR Package)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Nginx Engine:** `1.30.7-r0`
+- **Protocol Stack:** `Samba 4.23.8-r0` • `OpenSSH 10.3_p1-r2` • `vsftpd 3.0.5-r3` • `Python 3.14.10-r1`
+
+### 🔐 Package Integrity (GHCR Multi-Arch)
+- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:2.0.1` (`sha256:f13346873644adda972aa2f1ebeb4958037cbb4a39c4ddd60b6dc529faa277bf`)
+- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:2.0.1` (`sha256:fdd237da6a71e1d2d8706df0d7c068f6c3214dacb6713bac4735cb72a7827f4b`)
+
+### 🚀 What's Changed
+- **Update:** fix(omnidrive_pro): security hardening (share ACL bypass, git RCE, XSS, DoS)
+
+---
+
 ## 2.0.0
 _Released: 2026-11-19_
 
