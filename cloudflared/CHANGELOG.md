@@ -1,10 +1,10 @@
 # Changelog
 
-## 1.1.3
-_Released: 2026-11-18_
+## 1.1.4
+_Released: 2026-11-22_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** Bumped from `v1.1.2` ➡️ **`v1.1.3`**
+- **Add-on Release:** Bumped from `v1.1.3` ➡️ **`v1.1.4`**
 - **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64)
 - **Cloudflared Engine:** `2026.11.1` *(arm64 & amd64 binaries verified)*
 - **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
