@@ -42,10 +42,18 @@ def build_site(vendor, site):
     os.makedirs(media)
     make_pdf(os.path.join(media, "doc.pdf"))
     open(os.path.join(media, "conf.yaml"), "w").write("a: 1\nb: [1, 2\n")
+    # YAML hợp lệ kiểu Home Assistant (YAML 1.1): trình kiểm tra phải báo "Valid"
+    open(os.path.join(media, "ha.yaml"), "w").write(
+        "homeassistant:\n  packages: !include_dir_named packages\n"
+        "sensor: !include sensors.yaml\napi_key: !secret api_key\n"
+        "base: &base\n  platform: template\nlight:\n  - <<: *base\n    name: Phòng khách\n"
+        "automation:\n  - trigger:\n      - platform: state\n        entity_id: !input motion\n        to: \"on\"\n"
+        "    condition: \"{{ states('sun.sun') == 'below_horizon' }}\"\n"
+        "flags: !!set {a, b}\nenabled: yes\nmode: 0755\n")
     with zipfile.ZipFile(os.path.join(media, "arch.zip"), "w") as z:
         z.writestr("inner/file.txt", "x")
     rows = "".join('<tr><td class="link"><a href="%s" title="%s">%s</a></td><td class="size">1 KiB</td>'
-                   '<td class="date">2026-01-01</td></tr>' % (n, n, n) for n in ("doc.pdf", "conf.yaml", "arch.zip"))
+                   '<td class="date">2026-01-01</td></tr>' % (n, n, n) for n in ("doc.pdf", "conf.yaml", "ha.yaml", "arch.zip"))
     page = (open(os.path.join(FANCY, "header.html")).read()
             + '<table id="list"><thead><tr><th>n</th></tr></thead><tbody>'
             + '<tr><td class="link"><a href="../">Parent</a></td></tr>' + rows + "</tbody></table>"

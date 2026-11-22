@@ -20,10 +20,20 @@ fetch() { # <id> <url> <sha256>
 fetch ace    "$REG/ace-builds/-/ace-builds-1.45.2.tgz"   5260354a14533fa8e94572597b1ff53025b1bb0a9b2e25d50ecf2a01e57aa9e0
 fetch marked "$REG/marked/-/marked-18.2.1.tgz"           d66c5213fc203466186060105b01f51896764ba64b3797d2620d02e28e34b8ca
 fetch purify "$REG/dompurify/-/dompurify-3.5.0.tgz"      faa5f2bfe2814384b83d6edb4ed66812fbfdb2a654b4d59edd4b12304058ec20
-fetch yaml   "$REG/js-yaml/-/js-yaml-4.3.2.tgz"          c7b241d2224cf9253ff53854aa4cee87da91bd889c4d0fa3a3ffd1041ecee5b1
+fetch yaml   "$REG/js-yaml/-/js-yaml-5.5.0.tgz"          23cb2e121ad69acd15fc786b7a9265a81eeeaa9f684ee73e717d6ecdbd8b0c90
 fetch jszip  "$REG/jszip/-/jszip-3.10.2.tgz"             4ee15dcb3f5433b736a41d091bcad37facee4a4aa96f9e21194789da886ac226
 fetch pdfjs  "$REG/pdfjs-dist/-/pdfjs-dist-6.5.438.tgz"  7461aefcd27c4ef0dd76f9ca5760f09466eb6b3f934432670c12132e7b3d6faa
 fetch xterm  "$REG/@xterm/xterm/-/xterm-6.0.0.tgz"       908e66e04af6c8dc6b00dd3b54de088e2e81e5ed866284fd6c2fb3c2d1c7a3f6
+
+# Chép file đầu tiên tồn tại trong danh sách: các thư viện đôi khi đổi chỗ bản build giữa các phiên bản lớn
+cp_first() { # <dest> <src1> [src2...]
+    dst="$1"; shift
+    for src in "$@"; do
+        if [ -f "$src" ]; then cp "$src" "$dst"; return 0; fi
+    done
+    echo "vendor-fetch: none of these files exist: $*" >&2
+    return 1
+}
 
 mkdir -p "$DEST/ace" "$DEST/pdfjs/wasm"
 
@@ -32,12 +42,13 @@ ACE="$TMP/ace/package/src-min-noconflict"
 cp "$ACE/ace.js" "$ACE/ext-searchbox.js" "$ACE/theme-one_dark.js" "$DEST/ace/"
 cp "$ACE"/mode-*.js "$DEST/ace/"
 
-cp "$TMP/marked/package/lib/marked.umd.js"        "$DEST/marked.min.js"
-cp "$TMP/purify/package/dist/purify.min.js"       "$DEST/purify.min.js"
-cp "$TMP/yaml/package/dist/js-yaml.min.js"        "$DEST/js-yaml.min.js"
-cp "$TMP/jszip/package/dist/jszip.min.js"         "$DEST/jszip.min.js"
-cp "$TMP/xterm/package/lib/xterm.js"              "$DEST/xterm.min.js"
-cp "$TMP/xterm/package/css/xterm.css"             "$DEST/xterm.min.css"
+# Bản UMD (gắn biến toàn cục window.marked, DOMPurify, jsyaml, JSZip, Terminal)
+cp_first "$DEST/marked.min.js"  "$TMP/marked/package/lib/marked.umd.js" "$TMP/marked/package/marked.min.js"
+cp_first "$DEST/purify.min.js"  "$TMP/purify/package/dist/purify.min.js"
+cp_first "$DEST/js-yaml.min.js" "$TMP/yaml/package/dist/browser/js-yaml.umd.min.js" "$TMP/yaml/package/dist/js-yaml.min.js"
+cp_first "$DEST/jszip.min.js"   "$TMP/jszip/package/dist/jszip.min.js"
+cp_first "$DEST/xterm.min.js"   "$TMP/xterm/package/lib/xterm.js"
+cp_first "$DEST/xterm.min.css"  "$TMP/xterm/package/css/xterm.css"
 
 # pdf.js (ES module, nạp bằng import() khi mở PDF). Đổi đuôi .mjs -> .js để Nginx trả đúng MIME JavaScript.
 PDF="$TMP/pdfjs/package"

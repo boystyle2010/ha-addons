@@ -1035,8 +1035,10 @@
       return true;
     }
     try {
-      var src = getEditorContent().replace(/![a-zA-Z0-9_]+\s+/g, '');
-      jsyaml.loadAll(src);
+      // Bỏ các tag riêng của Home Assistant (!include, !secret, !input...) nhưng giữ tag chuẩn YAML (!!set, !!binary...)
+      var src = getEditorContent().replace(/(^|[^!])![a-zA-Z_][a-zA-Z0-9_]*(?=[ \t\r\n]|$)/gm, '$1');
+      // Home Assistant đọc YAML theo chuẩn 1.1 (PyYAML): dùng schema YAML 1.1 (js-yaml 5+), bản cũ dùng mặc định
+      jsyaml.loadAll(src, { schema: jsyaml.YAML11_SCHEMA || jsyaml.DEFAULT_SCHEMA });
       yamlAlert.className = 'yaml-alert show yaml-ok';
       yamlAlert.textContent = '✓ Valid Home Assistant YAML syntax';
       if (aceEditor) aceEditor.session.clearAnnotations();

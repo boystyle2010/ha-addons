@@ -41,6 +41,11 @@ for (const url of process.argv.slice(2)) {
     'YAML linter reports the syntax error');
 
   await page.reload(); await page.waitForTimeout(800);
+  await page.click('tr[data-n="ha.yaml"]', { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(1500);
+  check(await ev(page, () => /Valid Home Assistant YAML/.test((document.querySelector('.yaml-alert') || {}).textContent || '')),
+    'YAML linter accepts valid Home Assistant YAML (!include, !secret, anchors, !!set, YAML 1.1)');
+
+  await page.reload(); await page.waitForTimeout(800);
   await page.click('tr[data-n="arch.zip"]', { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(1500);
   check(await ev(page, () => ((document.querySelector('.arch-list') || {}).innerText || '').includes('inner/file.txt')), 'zip preview lists entries');
 
