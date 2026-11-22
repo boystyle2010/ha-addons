@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.0.3
+_Released: 2026-11-22_
+
+### 📦 Component & Version Matrix
+- **Add-on Release:** Bumped from `v2.0.2` ➡️ **`v2.0.3`**
+- **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64) *(Pre-built GHCR Package)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Nginx Engine:** `1.30.7-r0`
+- **Protocol Stack:** `Samba 4.23.8-r0` • `OpenSSH 10.3_p1-r2` • `vsftpd 3.0.5-r3` • `Python 3.14.10-r1`
+
+### 🔐 Package Integrity (GHCR Multi-Arch)
+- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:2.0.3` (`sha256:e42ada4bd3a923e2c63cdec9d14a0d32b2cc56f0c62d1698dd782e01e4d163cf`)
+- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:2.0.3` (`sha256:60adb319c8e2962031e3cbcd8c39dc743e502c50a0ab07f2c1979feaed7bd52c`)
+
+### 🚀 What's Changed
+- **Update:** ci: Node 24 actions, automatic security & library updates without pull requests
+- **Security:** Rebuilt on the latest Alpine `3.24` security updates (Samba `4.23.8-r0`, OpenSSH, vsftpd, OpenSSL, Python `3.14.10-r1`).
+
+---
+
 ## 2.0.2
 _Released: 2026-11-22_
 

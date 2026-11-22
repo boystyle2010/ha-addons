@@ -6,7 +6,7 @@ FROM ghcr.io/home-assistant/base:3.24
 ARG NGINX_VERSION=1.30.7-r0
 # Dấu vân tay phiên bản các gói Alpine quan trọng (Samba, OpenSSH, vsftpd, OpenSSL...). Workflow cập nhật giá trị
 # này mỗi khi Alpine phát hành bản vá -> lớp cài gói bên dưới được build lại với 'apk upgrade'.
-ARG APK_FINGERPRINT=none
+ARG APK_FINGERPRINT=ed6b4aa399e9de33
 
 # Install Nginx + WebDAV/FancyIndex, Python3, Git, Zip, plus Samba (SMB), OpenSSH (SFTP) & vsftpd (FTP)
 RUN echo "Target nginx package: ${NGINX_VERSION} | packages: ${APK_FINGERPRINT}" \
