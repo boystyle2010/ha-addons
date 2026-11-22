@@ -29,7 +29,7 @@ RUN apk add --no-cache \
     && echo "Downloading Tailscale v${TS_VER} for architecture: ${TS_ARCH}" \
     && TGZ="tailscale_${TS_VER}_${TS_ARCH}.tgz" \
     && curl -fsSL --retry 5 --retry-delay 3 -o "/tmp/${TGZ}" "https://pkgs.tailscale.com/stable/${TGZ}" \
-    && EXPECTED="$( (curl -fsSL --retry 3 "https://pkgs.tailscale.com/stable/${TGZ}.sha256" || true) | awk '{print $1; exit}')" \
+    && EXPECTED="$( (curl -fsSL --retry 3 "https://pkgs.tailscale.com/stable/${TGZ}.sha256" || true) | awk 'NR == 1 {print $1}')" \
     && if [ "${#EXPECTED}" -eq 64 ]; then \
            echo "${EXPECTED}  /tmp/${TGZ}" | sha256sum -c - ; \
        else \

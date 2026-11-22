@@ -21,7 +21,7 @@ RUN echo "Target nginx package: ${NGINX_VERSION}" && apk update && apk add --no-
     vsftpd \
     shadow \
     openssl \
-    && echo "Installed: $(apk info -v nginx 2>/dev/null | head -n1)"
+    && echo "Installed: $(nginx -v 2>&1)"
 
 # Create working directories for Nginx, Multi-Protocol daemons & Pro API
 RUN mkdir -p \

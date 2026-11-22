@@ -25,7 +25,7 @@ RUN ARCH_CHECK="${TARGETARCH:-${BUILD_ARCH}}" && \
     curl -fL --retry 5 --retry-delay 3 "https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/${BIN}" \
     -o /usr/bin/cloudflared && \
     EXPECTED="$( (curl -fsSL --retry 3 "https://api.github.com/repos/cloudflare/cloudflared/releases/tags/${CLOUDFLARED_VERSION}" || true) \
-        | jq -r '.body // ""' 2>/dev/null | tr -d '\r' | awk -v b="${BIN}:" '$1 == b {print $2; exit}')" && \
+        | jq -r '.body // ""' 2>/dev/null | tr -d '\r' | awk -v b="${BIN}:" '$1 == b && !f {print $2; f=1}')" && \
     if [ "${#EXPECTED}" -eq 64 ]; then \
         echo "${EXPECTED}  /usr/bin/cloudflared" | sha256sum -c - ; \
     else \
