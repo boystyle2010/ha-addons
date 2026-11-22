@@ -11,8 +11,8 @@ _Released: 2026-11-22_
 - **Protocol Stack:** `Samba 4.23.8-r0` • `OpenSSH 10.3_p1-r2` • `vsftpd 3.0.5-r3` • `Python 3.14.10-r1`
 
 ### 🔐 Package Integrity (GHCR Multi-Arch)
-- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:2.0.1` (`sha256:f13346873644adda972aa2f1ebeb4958037cbb4a39c4ddd60b6dc529faa277bf`)
-- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:2.0.1` (`sha256:fdd237da6a71e1d2d8706df0d7c068f6c3214dacb6713bac4735cb72a7827f4b`)
+- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:2.0.1` (`sha256:f8232fbaf2f148427f2a80c8be6ed0bed0d7d92ee291c9ba9596ac3aca8fe72f`)
+- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:2.0.1` (`sha256:6fe3767a4732e088a130cb9b330d617d8177f1d460f5f9559087c7516aa9e461`)
 
 ### 🚀 What's Changed
 - **Update:** fix(omnidrive_pro): security hardening (share ACL bypass, git RCE, XSS, DoS)
