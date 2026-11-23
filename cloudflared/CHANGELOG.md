@@ -1,13 +1,35 @@
 # Changelog
 
-## 1.1.4
-_Released: 2026-11-22_
+## 1.1.5
+_Released: 2026-11-23_
 
 ### 📦 Component & Version Matrix
-- **Add-on Release:** Bumped from `v1.1.3` ➡️ **`v1.1.4`**
+- **Add-on Release:** Bumped from `v1.1.4` ➡️ **`v1.1.5`**
 - **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64)
-- **Cloudflared Engine:** `2026.11.1` *(arm64 & amd64 binaries verified)*
+- **Cloudflared Engine:** Updated from `2026.11.1` ➡️ **`2026.11.2`** *(arm64 & amd64 binaries verified)*
 - **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Official Links:** [GitHub Release 2026.11.2](https://github.com/cloudflare/cloudflared/releases/tag/2026.11.2) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
+
+### 🔐 Binary Integrity (Multi-Arch: aarch64 & amd64)
+- **ARM64 (`aarch64`):** `cloudflared-linux-arm64`
+  - **SHA256:** `04a7b7f08bce85d56b26ffe1fdbfbb21a074495a363d16f0783c40e25b5c5281`
+- **AMD64 (`x86_64`):** `cloudflared-linux-amd64`
+  - **SHA256:** `56f13335143ec0e22772963290683a84a04114a35ec64cbc794a4d39ff9bb8cf`
+
+### 🚀 What's Changed in Cloudflared 2026.11.2
+- Release 2026.11.2
+- chore: Update Google Distroless image digests
+- TUN-11396: Bump golang.org/x/net and golang.org/x/crypto
+- TUN-11362: Read the whole protocol version of a tunnel stream
+
+---
+
+## Cloudflared 2026.11.1
+_Released: 2026-11-17_
+
+### 📦 Component & Version Matrix
+- **Cloudflared Engine:** `2026.11.1` *(arm64 & amd64 binaries verified)*
+- **Alpine Base Image:** `Alpine 3.24`
 - **Official Links:** [GitHub Release 2026.11.1](https://github.com/cloudflare/cloudflared/releases/tag/2026.11.1) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
 
 ### 🔐 Binary Integrity (Multi-Arch: aarch64 & amd64)
@@ -66,32 +88,6 @@ _Released: 2026-10-30_
 - Release 2026.10.7
 - TUN-11058: Fix regression on max concurrent streams over http2 introduced by go1.27
 - TUN-10904: Stop advertising legacy default features to the edge
-
----
-
-## Cloudflared 2026.10.6
-_Released: 2026-10-29_
-
-### 📦 Component & Version Matrix
-- **Cloudflared Engine:** `2026.10.6` *(arm64 & amd64 binaries verified)*
-- **Alpine Base Image:** `Alpine 3.24`
-- **Official Links:** [GitHub Release 2026.10.6](https://github.com/cloudflare/cloudflared/releases/tag/2026.10.6) • [Cloudflared Changelog](https://github.com/cloudflare/cloudflared/blob/master/CHANGES.md)
-
-### 🔐 Binary Integrity (Multi-Arch: aarch64 & amd64)
-- **ARM64 (`aarch64`):** `cloudflared-linux-arm64`
-  - **SHA256:** `0ae0e179475b2c77651a718d2b376e0151f4fca5954702a84f02843a4d5fcac0`
-- **AMD64 (`x86_64`):** `cloudflared-linux-amd64`
-  - **SHA256:** `1d356dac769d0dbf62ebe588c4034824bbff98d5790c2f844cc99e0e2f57462d`
-
-### 🚀 What's Changed in Cloudflared 2026.10.6
-- Release 2026.10.6
-- TUN-11051: Disable autoupdate in container images via NO_AUTOUPDATE
-- TUN-11048: Randomize and enable the cloudflared update timer
-- VULN-184686: Bump github.com/go-jose/go-jose/v4 to v4.1.6
-- TUN-11048: Keep package-manager marker across RPM upgrades
-- Remove unnecessary comment
-- ci: enable in-build container scanning
-- TUN-11018: Align prechecks with regular cloudflare connection
 
 ---
 
