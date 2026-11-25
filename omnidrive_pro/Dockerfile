@@ -3,10 +3,10 @@ FROM ghcr.io/home-assistant/base:3.24
 
 # Phiên bản nginx mà workflow đã kiểm tra trên Alpine. Không ghim cứng trong apk (Alpine xóa bản -rN cũ khỏi kho,
 # ghim sẽ làm hỏng build), nhưng dùng ARG trong RUN để làm mới cache khi đổi và in ra bản thực sự được cài.
-ARG NGINX_VERSION=1.30.7-r0
+ARG NGINX_VERSION=1.30.8-r0
 # Dấu vân tay phiên bản các gói Alpine quan trọng (Samba, OpenSSH, vsftpd, OpenSSL...). Workflow cập nhật giá trị
 # này mỗi khi Alpine phát hành bản vá -> lớp cài gói bên dưới được build lại với 'apk upgrade'.
-ARG APK_FINGERPRINT=d4cf421b5a0721d9
+ARG APK_FINGERPRINT=c61200beaaa30395
 
 # Install Nginx + WebDAV/FancyIndex, Python3, Git, Zip, plus Samba (SMB), OpenSSH (SFTP) & vsftpd (FTP)
 RUN echo "Target nginx package: ${NGINX_VERSION} | packages: ${APK_FINGERPRINT}" \
