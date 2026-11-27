@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.0.1
+_Released: 2026-11-27_
+
+### 📦 Component & Version Matrix
+- **Add-on Release:** Bumped from `v3.0.0` ➡️ **`v3.0.1`**
+- **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64) *(Pre-built GHCR Package)*
+- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
+- **Nginx Engine:** `1.30.8-r0`
+- **Protocol Stack:** `Samba 4.23.8-r0` • `OpenSSH 10.3_p1-r2` • `vsftpd 3.0.5-r3` • `Python 3.14.10-r2`
+
+### 🔐 Package Integrity (GHCR Multi-Arch)
+- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:3.0.1` (`sha256:979a9536fb179643deb731831ddf9bd471c164cdf5e85619672f571a0fb63144`)
+- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:3.0.1` (`sha256:3de170c7a4258243449ab7c15470cba0673cce71ef8b65dcc4f4d68e24d56614`)
+
+### 🚀 What's Changed
+- **Security & Core Engine:** Hardened RBAC (`admin`/`user`), enforced `allowed_users`/`read_only` isolation, blocked `X-WPro-Ingress` spoofing, and added graceful service shutdown.
+
+---
+
 ## 3.0.0
 _Released: 2026-11-25_
 
@@ -76,22 +95,3 @@ _Released: 2026-11-22_
 ### 🚀 What's Changed
 - **Update:** ci: Node 24 actions, automatic security & library updates without pull requests
 - **Security:** Rebuilt on the latest Alpine `3.24` security updates (Samba `4.23.8-r0`, OpenSSH, vsftpd, OpenSSL, Python `3.14.10-r1`).
-
----
-
-## 2.0.2
-_Released: 2026-11-22_
-
-### 📦 Component & Version Matrix
-- **Add-on Release:** Bumped from `v2.0.1` ➡️ **`v2.0.2`**
-- **Supported Architectures:** `aarch64` (ARM64) & `amd64` (x86_64) *(Pre-built GHCR Package)*
-- **Alpine Base Image:** `Alpine 3.24` *(Home Assistant official base)*
-- **Nginx Engine:** `1.30.7-r0`
-- **Protocol Stack:** `Samba 4.23.8-r0` • `OpenSSH 10.3_p1-r2` • `vsftpd 3.0.5-r3` • `Python 3.14.10-r1`
-
-### 🔐 Package Integrity (GHCR Multi-Arch)
-- **ARM64 (`aarch64`):** `ghcr.io/boystyle2010/omnidrive_pro-aarch64:2.0.2` (`sha256:43cc110dcc67403377da8fb6629f081af9028d0d722f11cc062e79e04ff5f31b`)
-- **AMD64 (`x86_64`):** `ghcr.io/boystyle2010/omnidrive_pro-amd64:2.0.2` (`sha256:d58aa9d95eb3a6f56b8322ef2efaa31a8eb9e006a36a3fcf3e3f2923dd67efff`)
-
-### 🚀 What's Changed
-- **Update:** fix: self-hosted Web UI libraries, auto-restart services, private Cloudflared credentials, safer Tailscale defaults

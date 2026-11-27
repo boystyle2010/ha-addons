@@ -1,5 +1,5 @@
 name: "OmniDrive Pro (Multi-Protocol Storage)"
-version: "3.0.0"
+version: "3.0.1"
 slug: "omnidrive_pro"
 image: "ghcr.io/boystyle2010/omnidrive_pro-{arch}"
 description: "All-in-one Multi-Protocol Storage Hub (WebDAV, SMB/Samba, SFTP, FTP), Cloud IDE, Web Terminal, Disk Analytics & Share Links for Home Assistant."
